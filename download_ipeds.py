@@ -71,8 +71,8 @@ SURVEY_DEFINITIONS: dict[str, list[str]] = {
     '12MonthEnrollment': ['E12', 'E1D'],
     'Finance': ['F'],
     'StudentFinancialAid': ['SFA'],
-    'GraduationRates': ['GR', 'GRS', 'PE'],
-    'HumanResources': ['HR', 'S', 'SAL', 'EAP'],
+    'GraduationRates': ['GR', 'GRS', 'PE'],  # GRS/PE are historical
+    'HumanResources': ['HR', 'S', 'SAL', 'EAP'],  # S, SAL, EAP are historical
     'OutcomeMeasures': ['OM'],
     'Admissions': ['ADM'],
     'AcademicLibraries': ['AL'],
@@ -162,7 +162,7 @@ def parse_year_links(soup: BeautifulSoup, year: int) -> dict:
         if entry_type == 'dict':
             ext_priority = DICT_EXTENSION_PRIORITY.get(ext, 0)
         else:
-            ext_priority = 0
+            ext_priority = 1 if ext == '.zip' else 0
 
         results.setdefault(survey, {'data': None, 'dict': None})
         existing = results[survey][entry_type]
