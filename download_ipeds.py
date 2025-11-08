@@ -88,18 +88,32 @@ def get_survey_prefixes_for_year(
     survey_name: str, survey_prefixes: list[str], year: int
 ) -> list[str]:
     """Return all possible filename prefixes for a survey in the given year."""
+
     year_full = f"{year:04d}"
     year_short = f"{year % 100:02d}"
+    prev_year_full = f"{max(year - 1, 0):04d}"
+    prev_year_short = f"{(year - 1) % 100:02d}"
+    next_year_short = f"{(year + 1) % 100:02d}"
 
     configured_prefixes = survey_prefixes or [survey_name]
 
-    prefixes: list[str] = []
+    tokens = {
+        year_full,
+        year_short,
+        prev_year_full,
+        prev_year_short,
+        f"{prev_year_short}{year_short}",
+        f"{year_short}{next_year_short}",
+    }
+
+    prefixes: set[str] = set()
     for prefix in configured_prefixes:
         prefix_upper = prefix.upper()
-        prefixes.append(f"{prefix_upper}{year_full}")
-        prefixes.append(f"{prefix_upper}{year_short}")
+        for token in tokens:
+            prefixes.add(f"{prefix_upper}{token}")
+            prefixes.add(f"{prefix_upper}_{token}")
 
-    return prefixes
+    return sorted(prefixes, key=len, reverse=True)
 
 
 def fetch_year_page(session: requests.Session, year: int) -> BeautifulSoup | None:
