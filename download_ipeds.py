@@ -1,5 +1,5 @@
 """
-IPEDS "Power User" Data Downloader Script
+IPEDS "Power User" Data Downloader Script (v3 - Robust Naming)
 
 PURPOSE:
 This script automates the download and extraction of IPEDS "Complete Data Files"
@@ -60,10 +60,39 @@ USER_AGENT = (
 )
 HEADERS = {'User-Agent': USER_AGENT}
 
+HISTORICAL_SURVEY_MAP: dict[str, list[str]] = {
+    'HD': ['HD'],
+    'IC': ['IC'],
+    'EF': ['EF'],
+    'F': ['F'],
+    'C': ['C'],
+    'GR': ['GR'],
+    'SFA': ['SFA'],
+    'OM': ['OM'],
+    'HR': ['HR', 'S', 'SAL', 'EAP'],
+    'ADM': ['ADM'],
+    'E12': ['E12'],
+}
+
 
 def ensure_directory(path: str) -> None:
     """Create a directory if it does not already exist."""
     os.makedirs(path, exist_ok=True)
+
+
+def get_survey_prefixes_for_year(survey: str, year: int) -> list[str]:
+    """Return all possible filename prefixes for a survey in the given year."""
+    year_full = f"{year:04d}"
+    year_short = f"{year % 100:02d}"
+    configured_prefixes = HISTORICAL_SURVEY_MAP.get(survey, [survey])
+
+    prefixes: list[str] = []
+    for prefix in configured_prefixes:
+        prefix_upper = prefix.upper()
+        prefixes.append(f"{prefix_upper}{year_full}")
+        prefixes.append(f"{prefix_upper}{year_short}")
+
+    return prefixes
 
 
 def fetch_year_page(session: requests.Session, year: int) -> BeautifulSoup | None:
@@ -86,6 +115,11 @@ def parse_year_links(soup: BeautifulSoup, year: int) -> dict:
         print(f"WARNING: No download links found for {year}.")
         return results
 
+    prefix_map = {
+        survey_code: get_survey_prefixes_for_year(survey_code, year)
+        for survey_code in SURVEYS_TO_DOWNLOAD
+    }
+
     for link in links:
         href = link['href']
         full_url = urljoin(BASE_URL, href)
@@ -97,17 +131,17 @@ def parse_year_links(soup: BeautifulSoup, year: int) -> dict:
             continue
 
         filename_upper = filename.upper()
-        survey = next(
-            (
-                s
-                for s in SURVEYS_TO_DOWNLOAD
-                if filename_upper.startswith(f"{s}{year}")
-            ),
-            None,
-        )
-        if not survey:
+
+        survey_match = None
+        for survey_code, prefixes in prefix_map.items():
+            if any(filename_upper.startswith(prefix) for prefix in prefixes):
+                survey_match = survey_code
+                break
+
+        if survey_match is None:
             continue
 
+        survey = survey_match
         entry_type = 'dict' if '_DICT' in filename_upper else 'data'
         is_revision = '_RV' in filename_upper
         revision_priority = 1 if is_revision else 0
