@@ -1,5 +1,5 @@
 """
-IPEDS "Power User" Data Downloader Script (v4 - Robust Prefix Sort)
+IPEDS "Power User" Data Downloader Script (v5 - Multithreaded & Prefix-Sort Fix)
 
 PURPOSE:
 This script automates the download and extraction of IPEDS "Complete Data Files"
@@ -44,6 +44,7 @@ using this script.
 import os
 import time
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -59,6 +60,7 @@ USER_AGENT = (
     'Chrome/123.0.0.0 Safari/537.36'
 )
 HEADERS = {'User-Agent': USER_AGENT}
+MAX_WORKERS = 5
 DICT_EXTENSION_PRIORITY = {'.zip': 2, '.xlsx': 1, '.xls': 0}
 
 HISTORICAL_SURVEY_MAP: dict[str, list[str]] = {
@@ -208,60 +210,60 @@ def unzip_and_remove(zip_path: str, extract_to: str) -> None:
         print(f"ERROR: Unable to process {zip_path}: {exc}")
 
 
-def process_year(session: requests.Session, year: int) -> None:
+def process_year(year: int) -> None:
     """Process downloads for a single year, handling all configured surveys."""
     print(f"\n>>> Processing Year {year}...")
-    soup = fetch_year_page(session, year)
-    if soup is None:
-        return
+    with requests.Session() as session:
+        session.headers.update(HEADERS)
+        soup = fetch_year_page(session, year)
+        if soup is None:
+            return
 
-    year_links = parse_year_links(soup, year)
-    year_dir = os.path.join(DOWNLOAD_DIR, str(year))
-    ensure_directory(year_dir)
+        year_links = parse_year_links(soup, year)
+        year_dir = os.path.join(DOWNLOAD_DIR, str(year))
+        ensure_directory(year_dir)
 
-    for survey in SURVEYS_TO_DOWNLOAD:
-        survey_links = year_links.get(survey, {})
+        for survey in SURVEYS_TO_DOWNLOAD:
+            survey_links = year_links.get(survey, {})
 
-        data_entry = survey_links.get('data') if survey_links else None
-        dict_entry = survey_links.get('dict') if survey_links else None
+            data_entry = survey_links.get('data') if survey_links else None
+            dict_entry = survey_links.get('dict') if survey_links else None
 
-        if data_entry is None:
-            print(f"WARNING: Data file for survey {survey} not found for {year}.")
-        else:
-            filename = data_entry['filename']
-            if data_entry['is_revision']:
-                print(f"Downloading {filename}... (Prioritizing revised file)")
+            if data_entry is None:
+                print(f"WARNING: Data file for survey {survey} not found for {year}.")
             else:
-                print(f"Downloading {filename}...")
-            destination = os.path.join(year_dir, filename)
-            if download_file(session, data_entry['url'], destination):
-                if destination.lower().endswith('.zip'):
-                    print(f"Unzipping {filename}...")
-                    unzip_and_remove(destination, year_dir)
-                time.sleep(1)
+                filename = data_entry['filename']
+                if data_entry['is_revision']:
+                    print(f"Downloading {filename}... (Prioritizing revised file)")
+                else:
+                    print(f"Downloading {filename}...")
+                destination = os.path.join(year_dir, filename)
+                if download_file(session, data_entry['url'], destination):
+                    if destination.lower().endswith('.zip'):
+                        print(f"Unzipping {filename}...")
+                        unzip_and_remove(destination, year_dir)
+                    time.sleep(1)
 
-        if dict_entry is None:
-            print(f"WARNING: Dictionary for survey {survey} not found for {year}.")
-        else:
-            filename = dict_entry['filename']
-            if dict_entry['is_revision']:
-                print(f"Downloading {filename}... (Prioritizing revised file)")
+            if dict_entry is None:
+                print(f"WARNING: Dictionary for survey {survey} not found for {year}.")
             else:
-                print(f"Downloading {filename}...")
-            destination = os.path.join(year_dir, filename)
-            if download_file(session, dict_entry['url'], destination):
-                if destination.lower().endswith('.zip'):
-                    print(f"Unzipping {filename}...")
-                    unzip_and_remove(destination, year_dir)
-                time.sleep(1)
+                filename = dict_entry['filename']
+                if dict_entry['is_revision']:
+                    print(f"Downloading {filename}... (Prioritizing revised file)")
+                else:
+                    print(f"Downloading {filename}...")
+                destination = os.path.join(year_dir, filename)
+                if download_file(session, dict_entry['url'], destination):
+                    if destination.lower().endswith('.zip'):
+                        print(f"Unzipping {filename}...")
+                        unzip_and_remove(destination, year_dir)
+                    time.sleep(1)
 
 
 def main() -> None:
     ensure_directory(DOWNLOAD_DIR)
-    with requests.Session() as session:
-        session.headers.update(HEADERS)
-        for year in YEARS_TO_DOWNLOAD:
-            process_year(session, year)
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        list(executor.map(process_year, YEARS_TO_DOWNLOAD))
 
 
 if __name__ == '__main__':
