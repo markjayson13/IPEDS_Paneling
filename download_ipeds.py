@@ -53,6 +53,12 @@ DOWNLOAD_DIR = '/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectiona
 YEARS_TO_DOWNLOAD = range(2004, 2025)
 SURVEYS_TO_DOWNLOAD = ['HD', 'IC', 'EF', 'F', 'C', 'GR', 'SFA', 'OM', 'HR', 'ADM', 'E12']
 BASE_URL = 'https://nces.ed.gov/ipeds/datacenter/'
+USER_AGENT = (
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5) '
+    'AppleWebKit/537.36 (KHTML, like Gecko) '
+    'Chrome/123.0.0.0 Safari/537.36'
+)
+HEADERS = {'User-Agent': USER_AGENT}
 
 
 def ensure_directory(path: str) -> None:
@@ -64,7 +70,7 @@ def fetch_year_page(session: requests.Session, year: int) -> BeautifulSoup | Non
     """Retrieve and parse the HTML page listing files for a given year."""
     url = urljoin(BASE_URL, f'DataFiles.aspx?year={year}')
     try:
-        response = session.get(url, timeout=60)
+        response = session.get(url, timeout=60, headers=HEADERS)
         response.raise_for_status()
     except requests.RequestException as exc:
         print(f"ERROR: Unable to fetch file list for {year}: {exc}")
@@ -75,22 +81,30 @@ def fetch_year_page(session: requests.Session, year: int) -> BeautifulSoup | Non
 def parse_year_links(soup: BeautifulSoup, year: int) -> dict:
     """Parse the year's HTML and choose the appropriate data and dictionary links."""
     results: dict[str, dict[str, dict]] = {}
-    table = soup.find('table', id='tblDataFiles')
-    if not table:
-        print(f"WARNING: No data table found for {year}.")
+    links = soup.find_all('a', href=True)
+    if not links:
+        print(f"WARNING: No download links found for {year}.")
         return results
 
-    links = table.find_all('a', href=True)
     for link in links:
         href = link['href']
         full_url = urljoin(BASE_URL, href)
+        if '/ipeds/datacenter/data/' not in full_url.lower():
+            continue
         parsed = urlparse(full_url)
         filename = os.path.basename(parsed.path)
         if not filename:
             continue
 
         filename_upper = filename.upper()
-        survey = next((s for s in SURVEYS_TO_DOWNLOAD if filename_upper.startswith(f"{s}{year}")), None)
+        survey = next(
+            (
+                s
+                for s in SURVEYS_TO_DOWNLOAD
+                if filename_upper.startswith(f"{s}{year}")
+            ),
+            None,
+        )
         if not survey:
             continue
 
@@ -122,7 +136,12 @@ def parse_year_links(soup: BeautifulSoup, year: int) -> dict:
 def download_file(session: requests.Session, url: str, destination: str) -> bool:
     """Download a file from the provided URL to the destination path."""
     try:
-        with session.get(url, stream=True, timeout=120) as response:
+        with session.get(
+            url,
+            stream=True,
+            timeout=120,
+            headers=HEADERS,
+        ) as response:
             response.raise_for_status()
             with open(destination, 'wb') as file_obj:
                 for chunk in response.iter_content(chunk_size=8192):
@@ -200,6 +219,7 @@ def process_year(session: requests.Session, year: int) -> None:
 def main() -> None:
     ensure_directory(DOWNLOAD_DIR)
     with requests.Session() as session:
+        session.headers.update(HEADERS)
         for year in YEARS_TO_DOWNLOAD:
             process_year(session, year)
 
