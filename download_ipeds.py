@@ -1,5 +1,5 @@
 """
-IPEDS "Power User" Data Downloader Script (v5 - Multithreaded & Prefix-Sort Fix)
+IPEDS "Power User" Data Downloader Script (v6 - Multithreaded, Comprehensive & Sorted)
 
 PURPOSE:
 This script automates the download and extraction of IPEDS "Complete Data Files"
@@ -52,7 +52,6 @@ from bs4 import BeautifulSoup
 
 DOWNLOAD_DIR = '/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas'
 YEARS_TO_DOWNLOAD = range(2004, 2025)
-SURVEYS_TO_DOWNLOAD = ['HD', 'IC', 'EF', 'F', 'C', 'GR', 'SFA', 'OM', 'HR', 'ADM', 'E12']
 BASE_URL = 'https://nces.ed.gov/ipeds/datacenter/'
 USER_AGENT = (
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5) '
@@ -62,19 +61,21 @@ USER_AGENT = (
 HEADERS = {'User-Agent': USER_AGENT}
 MAX_WORKERS = 5
 DICT_EXTENSION_PRIORITY = {'.zip': 2, '.xlsx': 1, '.xls': 0}
-
-HISTORICAL_SURVEY_MAP: dict[str, list[str]] = {
-    'HD': ['HD'],
-    'IC': ['IC'],
-    'EF': ['EF'],
-    'F': ['F'],
-    'C': ['C'],
-    'GR': ['GR'],
-    'SFA': ['SFA'],
-    'OM': ['OM'],
-    'HR': ['HR', 'S', 'SAL', 'EAP'],
-    'ADM': ['ADM'],
-    'E12': ['E12'],
+# This comprehensive map defines a "research name" (key) and
+# all its known historical file prefixes (values).
+SURVEY_DEFINITIONS: dict[str, list[str]] = {
+    'Directory': ['HD'],
+    'InstitutionalCharacteristics': ['IC'],
+    'Completions': ['C'],
+    'FallEnrollment': ['EF', 'EFIA', 'EFIB', 'EFIC', 'EFID'],
+    '12MonthEnrollment': ['E12', 'E1D'],
+    'Finance': ['F'],
+    'StudentFinancialAid': ['SFA'],
+    'GraduationRates': ['GR', 'GRS', 'PE'],  # GRS/PE are historical
+    'HumanResources': ['HR', 'S', 'SAL', 'EAP'],  # S, SAL, EAP are historical
+    'OutcomeMeasures': ['OM'],
+    'Admissions': ['ADM'],
+    'AcademicLibraries': ['AL'],
 }
 
 
@@ -83,19 +84,32 @@ def ensure_directory(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
-def get_survey_prefixes_for_year(survey: str, year: int) -> list[str]:
-    """Return all possible filename prefixes for a survey in the given year."""
-    year_full = f"{year:04d}"
-    year_short = f"{year % 100:02d}"
-    configured_prefixes = HISTORICAL_SURVEY_MAP.get(survey, [survey])
+def get_survey_prefixes_for_year(
+    survey_name: str, survey_prefixes: list[str], year: int
+) -> list[str]:
+    """Return canonical filename prefixes for the survey.
 
-    prefixes: list[str] = []
+    Filenames on the IPEDS site historically begin with a short survey code
+    (e.g., ``E12`` or ``SFA``) followed by optional punctuation, academic-year
+    tokens, or calendar-year suffixes.  Rather than try to enumerate every
+    possible year-specific variation, which has proven brittle as the naming
+    scheme evolves, we treat the base codes themselves as the matching keys and
+    rely on longest-prefix ordering to disambiguate overlaps such as ``S`` vs
+    ``SFA``.  To give slightly higher precedence to filenames that include an
+    underscore or hyphen immediately after the code, we include those variants
+    as explicit entries as well.
+    """
+
+    configured_prefixes = survey_prefixes or [survey_name]
+
+    prefixes: set[str] = set()
     for prefix in configured_prefixes:
         prefix_upper = prefix.upper()
-        prefixes.append(f"{prefix_upper}{year_full}")
-        prefixes.append(f"{prefix_upper}{year_short}")
+        prefixes.add(prefix_upper)
+        prefixes.add(f"{prefix_upper}_")
+        prefixes.add(f"{prefix_upper}-")
 
-    return prefixes
+    return sorted(prefixes, key=len, reverse=True)
 
 
 def fetch_year_page(session: requests.Session, year: int) -> BeautifulSoup | None:
@@ -119,9 +133,9 @@ def parse_year_links(soup: BeautifulSoup, year: int) -> dict:
         return results
 
     prefix_map: dict[str, str] = {}
-    for survey_code in SURVEYS_TO_DOWNLOAD:
-        for prefix in get_survey_prefixes_for_year(survey_code, year):
-            prefix_map[prefix] = survey_code
+    for survey_name, survey_prefixes in SURVEY_DEFINITIONS.items():
+        for prefix in get_survey_prefixes_for_year(survey_name, survey_prefixes, year):
+            prefix_map[prefix] = survey_name
 
     prefixes = list(prefix_map.keys())
     # Sort by length so that longer, more specific prefixes (e.g., SFA2004)
@@ -158,7 +172,7 @@ def parse_year_links(soup: BeautifulSoup, year: int) -> dict:
         if entry_type == 'dict':
             ext_priority = DICT_EXTENSION_PRIORITY.get(ext, 0)
         else:
-            ext_priority = 0
+            ext_priority = 1 if ext == '.zip' else 0
 
         results.setdefault(survey, {'data': None, 'dict': None})
         existing = results[survey][entry_type]
@@ -223,14 +237,16 @@ def process_year(year: int) -> None:
         year_dir = os.path.join(DOWNLOAD_DIR, str(year))
         ensure_directory(year_dir)
 
-        for survey in SURVEYS_TO_DOWNLOAD:
-            survey_links = year_links.get(survey, {})
+        for survey_name in SURVEY_DEFINITIONS.keys():
+            survey_links = year_links.get(survey_name, {})
 
             data_entry = survey_links.get('data') if survey_links else None
             dict_entry = survey_links.get('dict') if survey_links else None
 
             if data_entry is None:
-                print(f"WARNING: Data file for survey {survey} not found for {year}.")
+                print(
+                    f"WARNING: Data file for survey {survey_name} not found for {year}."
+                )
             else:
                 filename = data_entry['filename']
                 if data_entry['is_revision']:
@@ -245,7 +261,9 @@ def process_year(year: int) -> None:
                     time.sleep(1)
 
             if dict_entry is None:
-                print(f"WARNING: Dictionary for survey {survey} not found for {year}.")
+                print(
+                    f"WARNING: Dictionary for survey {survey_name} not found for {year}."
+                )
             else:
                 filename = dict_entry['filename']
                 if dict_entry['is_revision']:
