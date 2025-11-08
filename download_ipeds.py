@@ -1,5 +1,5 @@
 """
-IPEDS "Power User" Data Downloader Script (v5 - Multithreaded, Comprehensive & Sorted)
+IPEDS "Power User" Data Downloader Script (v6 - Multithreaded, Comprehensive & Sorted)
 
 PURPOSE:
 This script automates the download and extraction of IPEDS "Complete Data Files"
