@@ -42,6 +42,7 @@ using this script.
 """
 
 import os
+import re
 import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -143,6 +144,10 @@ def parse_year_links(soup: BeautifulSoup, year: int) -> dict:
     # file (e.g., S2004).
     prefixes.sort(key=len, reverse=True)
 
+    prefix_patterns: dict[str, re.Pattern[str]] = {
+        prefix: re.compile(rf'(?:^|[^A-Z0-9]){re.escape(prefix)}') for prefix in prefixes
+    }
+
     for link in links:
         href = link['href']
         full_url = urljoin(BASE_URL, href)
@@ -157,7 +162,7 @@ def parse_year_links(soup: BeautifulSoup, year: int) -> dict:
 
         survey_match = None
         for prefix in prefixes:
-            if filename_upper.startswith(prefix):
+            if prefix_patterns[prefix].search(filename_upper):
                 survey_match = prefix_map[prefix]
                 break
 
