@@ -59,6 +59,7 @@ USER_AGENT = (
     'Chrome/123.0.0.0 Safari/537.36'
 )
 HEADERS = {'User-Agent': USER_AGENT}
+DICT_EXTENSION_PRIORITY = {'.zip': 2, '.xlsx': 1, '.xls': 0}
 
 HISTORICAL_SURVEY_MAP: dict[str, list[str]] = {
     'HD': ['HD'],
@@ -121,6 +122,9 @@ def parse_year_links(soup: BeautifulSoup, year: int) -> dict:
             prefix_map[prefix] = survey_code
 
     prefixes = list(prefix_map.keys())
+    # Sort by length so that longer, more specific prefixes (e.g., SFA2004)
+    # are evaluated before shorter ones that could otherwise capture the same
+    # file (e.g., S2004).
     prefixes.sort(key=len, reverse=True)
 
     for link in links:
@@ -150,8 +154,7 @@ def parse_year_links(soup: BeautifulSoup, year: int) -> dict:
         revision_priority = 1 if is_revision else 0
         ext = os.path.splitext(filename)[1].lower()
         if entry_type == 'dict':
-            ext_priority_map = {'.zip': 2, '.xlsx': 1, '.xls': 0}
-            ext_priority = ext_priority_map.get(ext, 0)
+            ext_priority = DICT_EXTENSION_PRIORITY.get(ext, 0)
         else:
             ext_priority = 0
 
