@@ -1,9 +1,5 @@
 """
-<<<<<<< ours
-IPEDS "Power User" Data Downloader Script (v3 - Robust Naming)
-=======
 IPEDS "Power User" Data Downloader Script (v4 - Robust Prefix Sort)
->>>>>>> theirs
 
 PURPOSE:
 This script automates the download and extraction of IPEDS "Complete Data Files"
@@ -119,12 +115,6 @@ def parse_year_links(soup: BeautifulSoup, year: int) -> dict:
         print(f"WARNING: No download links found for {year}.")
         return results
 
-<<<<<<< ours
-    prefix_map = {
-        survey_code: get_survey_prefixes_for_year(survey_code, year)
-        for survey_code in SURVEYS_TO_DOWNLOAD
-    }
-=======
     prefix_map: dict[str, str] = {}
     for survey_code in SURVEYS_TO_DOWNLOAD:
         for prefix in get_survey_prefixes_for_year(survey_code, year):
@@ -132,7 +122,6 @@ def parse_year_links(soup: BeautifulSoup, year: int) -> dict:
 
     prefixes = list(prefix_map.keys())
     prefixes.sort(key=len, reverse=True)
->>>>>>> theirs
 
     for link in links:
         href = link['href']
@@ -147,15 +136,9 @@ def parse_year_links(soup: BeautifulSoup, year: int) -> dict:
         filename_upper = filename.upper()
 
         survey_match = None
-<<<<<<< ours
-        for survey_code, prefixes in prefix_map.items():
-            if any(filename_upper.startswith(prefix) for prefix in prefixes):
-                survey_match = survey_code
-=======
         for prefix in prefixes:
             if filename_upper.startswith(prefix):
                 survey_match = prefix_map[prefix]
->>>>>>> theirs
                 break
 
         if survey_match is None:
