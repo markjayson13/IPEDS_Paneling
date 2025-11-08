@@ -41,6 +41,7 @@ your final panel dataset depends on the analysis you perform *after*
 using this script.
 """
 
+import csv
 import os
 import re
 import time
@@ -48,6 +49,9 @@ import zipfile
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse
+
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 import requests
 from bs4 import BeautifulSoup
@@ -61,7 +65,7 @@ USER_AGENT = (
     'Chrome/123.0.0.0 Safari/537.36'
 )
 HEADERS = {'User-Agent': USER_AGENT}
-MAX_WORKERS = 5
+MAX_WORKERS = int(os.getenv('IPEDSDL_WORKERS', '3'))
 DOWNLOAD_ACCESS_DATABASE = False
 DICT_EXTENSION_PRIORITY = {'.zip': 2, '.xlsx': 1, '.xls': 0}
 # This comprehensive map defines a "research name" (key) and
@@ -84,6 +88,7 @@ SURVEY_DEFINITIONS: dict[str, list[str]] = {
 # Matches the uniquely named 12-Month Enrollment files (e.g., EFFY2004_RV.csv).
 EFFY_SPECIAL_PATTERN = re.compile(r'EFFY[-_]?(\d{4})', re.IGNORECASE)
 FINANCE_FORM_PATTERN = re.compile(r'(?:^|[_-])(F[123][A-Z0-9]+)')
+HUMAN_RESOURCES_S_PATTERN = re.compile(r'(?:^|[_-])S(?:19|20)\d{2}')
 
 
 def ensure_directory(path: str) -> None:
@@ -119,6 +124,17 @@ def get_survey_prefixes_for_year(
     return sorted(prefixes, key=len, reverse=True)
 
 
+def build_prefix_pattern(prefix: str) -> re.Pattern[str]:
+    """Return a regex that matches the prefix at token boundaries."""
+    prefix_core = prefix.rstrip('_-') or prefix
+    boundary = r'(?:^|[_-])'
+    if prefix_core == 'C':
+        trailing = r'(?=\d{4})'
+    else:
+        trailing = r'(?=[A-Z0-9])'
+    return re.compile(rf'{boundary}{re.escape(prefix_core)}{trailing}')
+
+
 def fetch_year_page(session: requests.Session, year: int) -> BeautifulSoup | None:
     """Retrieve and parse the HTML page listing files for a given year."""
     url = urljoin(BASE_URL, f'DataFiles.aspx?year={year}')
@@ -135,10 +151,7 @@ def parse_year_links(
     soup: BeautifulSoup, year: int
 ) -> tuple[dict[str, dict[str, dict[str, list[dict]]]], list[dict]]:
     """Parse the year's HTML and choose the data/dictionary links plus Access DB."""
-    links = soup.find_all('a', href=True)
-    if not links:
-        print(f"WARNING: No download links found for {year}.")
-        return {}, []
+    found_link = False
 
     prefix_map: dict[str, tuple[str, str]] = {}
     for survey_name, survey_prefixes in SURVEY_DEFINITIONS.items():
@@ -153,7 +166,7 @@ def parse_year_links(
     prefixes.sort(key=len, reverse=True)
 
     prefix_patterns: dict[str, re.Pattern[str]] = {
-        prefix: re.compile(rf'(?:^|[^A-Z0-9]){re.escape(prefix)}') for prefix in prefixes
+        prefix: build_prefix_pattern(prefix) for prefix in prefixes
     }
 
     def refine_matched_prefix(
@@ -166,11 +179,21 @@ def parse_year_links(
                 return form_match.group(1)
         return base_prefix
 
+    def is_valid_generic_prefix(
+        survey_name: str, base_prefix: str, filename_upper: str
+    ) -> bool:
+        """Filter overly broad prefixes such as 'S' and 'C'."""
+        if survey_name == 'HumanResources' and base_prefix == 'S':
+            return bool(HUMAN_RESOURCES_S_PATTERN.search(filename_upper))
+        return True
+
     def identify_survey(filename_upper: str) -> tuple[str, str] | None:
         """Return the matching survey and refined prefix (if applicable)."""
         for prefix in prefixes:
             if prefix_patterns[prefix].search(filename_upper):
                 survey_name, base_prefix = prefix_map[prefix]
+                if not is_valid_generic_prefix(survey_name, base_prefix, filename_upper):
+                    continue
                 refined = refine_matched_prefix(survey_name, filename_upper, base_prefix)
                 return survey_name, refined
 
@@ -180,75 +203,105 @@ def parse_year_links(
         return None
 
     survey_results: defaultdict[
-        str, defaultdict[str, dict[str, list[dict]]]
-    ] = defaultdict(lambda: defaultdict(lambda: {'data': [], 'dict': []}))
+        str, defaultdict[str, dict[str, dict[str, dict]]]
+    ] = defaultdict(lambda: defaultdict(lambda: {'_best_data': {}, '_best_dict': {}}))
     access_entries: list[dict] = []
 
-    for row_idx, link in [
-        (idx, anchor)
-        for idx, row in enumerate(soup.find_all('tr'))
-        for anchor in row.find_all('a', href=True)
-    ]:
-        row_id = f'row-{row_idx}'
-        link_text = (link.get_text() or '').strip().lower()
-        href = link['href']
-        full_url = urljoin(BASE_URL, href)
-        if '/ipeds/datacenter/data/' not in full_url.lower():
-            continue
-        if 'access' in link_text and 'database' in link_text:
+    for row_idx, row in enumerate(soup.find_all('tr')):
+        row_text_lower = (row.get_text(separator=' ', strip=True) or '').lower()
+        for link in row.find_all('a', href=True):
+            found_link = True
+            row_id = f'row-{row_idx}'
+            link_text = (link.get_text() or '').strip().lower()
+            href = link['href']
+            full_url = urljoin(BASE_URL, href)
+            if '/ipeds/datacenter/data/' not in full_url.lower():
+                continue
+            if 'access' in link_text and 'database' in link_text:
+                parsed = urlparse(full_url)
+                filename = os.path.basename(parsed.path)
+                if not filename:
+                    continue
+                is_revision = '_RV' in filename.upper()
+                ext = os.path.splitext(filename)[1].lower()
+                ext_priority = 1 if ext == '.zip' else 0
+                access_entries.append(
+                    {
+                        'priority': (1 if is_revision else 0, ext_priority),
+                        'url': full_url,
+                        'filename': filename,
+                        'is_revision': is_revision,
+                        'release': 'revised' if is_revision else '',
+                    }
+                )
+                continue
             parsed = urlparse(full_url)
             filename = os.path.basename(parsed.path)
             if not filename:
                 continue
-            is_revision = '_RV' in filename.upper()
-            ext = os.path.splitext(filename)[1].lower()
-            ext_priority = 1 if ext == '.zip' else 0
-            access_entries.append(
-                {
-                    'priority': (1 if is_revision else 0, ext_priority),
-                    'url': full_url,
-                    'filename': filename,
-                    'is_revision': is_revision,
-                }
+
+            filename_upper = filename.upper()
+
+            survey_match = identify_survey(filename_upper)
+            if survey_match is None:
+                continue
+
+            survey, matched_prefix = survey_match
+            entry_type = (
+                'dict'
+                if ('_DICT' in filename_upper or 'dictionary' in link_text)
+                else 'data'
             )
-            continue
-        parsed = urlparse(full_url)
-        filename = os.path.basename(parsed.path)
-        if not filename:
-            continue
+            is_revision = '_RV' in filename_upper
+            revision_priority = 1 if is_revision else 0
+            ext = os.path.splitext(filename)[1].lower()
+            if entry_type == 'dict':
+                ext_priority = DICT_EXTENSION_PRIORITY.get(ext, 0)
+            else:
+                ext_priority = 1 if ext == '.zip' else 0
 
-        filename_upper = filename.upper()
+            release = 'revised' if 'revised' in row_text_lower else ''
+            if not release and 'provisional' in row_text_lower:
+                release = 'provisional'
 
-        survey_match = identify_survey(filename_upper)
-        if survey_match is None:
-            continue
+            candidate = {
+                'priority': (revision_priority, ext_priority),
+                'url': full_url,
+                'filename': filename,
+                'is_revision': is_revision,
+                'row_id': row_id,
+                'release': release,
+            }
 
-        survey, matched_prefix = survey_match
-        entry_type = (
-            'dict' if ('_DICT' in filename_upper or 'dictionary' in link_text) else 'data'
-        )
-        is_revision = '_RV' in filename_upper
-        revision_priority = 1 if is_revision else 0
-        ext = os.path.splitext(filename)[1].lower()
-        if entry_type == 'dict':
-            ext_priority = DICT_EXTENSION_PRIORITY.get(ext, 0)
-        else:
-            ext_priority = 1 if ext == '.zip' else 0
+            bucket = survey_results[survey][matched_prefix]
+            best_key = '_best_dict' if entry_type == 'dict' else '_best_data'
+            best_by_row = bucket[best_key]
+            existing = best_by_row.get(row_id)
+            if (existing is None) or (candidate['priority'] > existing['priority']):
+                best_by_row[row_id] = candidate
 
-        candidate = {
-            'priority': (revision_priority, ext_priority),
-            'url': full_url,
-            'filename': filename,
-            'is_revision': is_revision,
-            'row_id': row_id,
-        }
+    if not found_link:
+        print(f"WARNING: No download links found for {year}.")
+        return {}, []
 
-        survey_results[survey][matched_prefix][entry_type].append(candidate)
-
-    # Convert defaultdicts into standard dicts for downstream processing
     final_results: dict[str, dict[str, dict[str, list[dict]]]] = {}
     for survey, prefix_map in survey_results.items():
-        final_results[survey] = {prefix: entries for prefix, entries in prefix_map.items()}
+        final_results[survey] = {}
+        for prefix, entries in prefix_map.items():
+            data_candidates = sorted(
+                entries.get('_best_data', {}).values(),
+                key=lambda entry: entry['priority'],
+                reverse=True,
+            )
+            dict_candidates = sorted(
+                entries.get('_best_dict', {}).values(),
+                key=lambda entry: entry['priority'],
+                reverse=True,
+            )
+            final_results[survey][prefix] = {
+                'data': data_candidates,
+                'dict': dict_candidates,
+            }
 
     return final_results, access_entries
 
@@ -274,13 +327,13 @@ def download_file(
             ) as response:
                 response.raise_for_status()
                 with open(destination, 'wb') as file_obj:
-                    for chunk in response.iter_content(chunk_size=8192):
+                    for chunk in response.iter_content(chunk_size=65536):
                         if chunk:
                             file_obj.write(chunk)
             return True
         except requests.HTTPError as exc:
             status_code = exc.response.status_code if exc.response else None
-            retriable = status_code in {403, 429, 503}
+            retriable = status_code in {403, 429, 500, 502, 503, 504}
             if not retriable or attempt == max_attempts:
                 print(f"ERROR: Failed to download {url}: {exc}")
                 break
@@ -300,7 +353,7 @@ def download_file(
     return False
 
 
-def unzip_and_remove(zip_path: str, extract_to: str) -> None:
+def unzip_and_remove(zip_path: str, extract_to: str, *, context: str = '') -> None:
     """Extract a zip file to the target directory and delete the original archive."""
     base_name = os.path.splitext(os.path.basename(zip_path))[0]
     target_dir = os.path.join(extract_to, base_name)
@@ -309,6 +362,12 @@ def unzip_and_remove(zip_path: str, extract_to: str) -> None:
         with zipfile.ZipFile(zip_path, 'r') as archive:
             archive.extractall(target_dir)
         os.remove(zip_path)
+        extracted_items = os.listdir(target_dir)
+        if not extracted_items:
+            print(
+                f"WARNING: No files extracted from {context or os.path.basename(zip_path)} "
+                f"into {os.path.relpath(target_dir, extract_to)}"
+            )
         print(
             f"Unzipped {os.path.basename(zip_path)} into "
             f"{os.path.relpath(target_dir, extract_to)} and removed archive"
@@ -351,21 +410,65 @@ def download_access_database(
     if download_file(session, best_entry['url'], destination):
         if destination.lower().endswith('.zip'):
             print(f"Unzipping {best_entry['filename']}...")
-            unzip_and_remove(destination, year_dir)
+            unzip_and_remove(destination, year_dir, context=best_entry['filename'])
         time.sleep(1)
+
+
+def write_year_manifest(year_dir: str, year: int, rows: list[dict]) -> None:
+    """Persist a manifest describing the year's downloaded files."""
+    if not rows:
+        return
+    manifest_path = os.path.join(year_dir, f'{year}_manifest.csv')
+    fieldnames = [
+        'year',
+        'survey',
+        'prefix',
+        'filename',
+        'url',
+        'is_revision',
+        'has_dictionary',
+        'dictionary_filename',
+        'release',
+    ]
+    try:
+        with open(manifest_path, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        print(f"Wrote manifest with {len(rows)} rows to {manifest_path}")
+    except OSError as exc:
+        print(f"WARNING: Unable to write manifest for {year}: {exc}")
+
 
 def process_year(year: int) -> None:
     """Process downloads for a single year, handling all configured surveys."""
     print(f"\n>>> Processing Year {year}...")
     with requests.Session() as session:
         session.headers.update(HEADERS)
+        retries = Retry(
+            total=5,
+            backoff_factor=0.5,
+            status_forcelist=[403, 429, 500, 502, 503, 504],
+            allowed_methods=['GET'],
+            respect_retry_after_header=True,
+        )
+        adapter = HTTPAdapter(max_retries=retries, pool_maxsize=MAX_WORKERS)
+        session.mount('https://', adapter)
+        session.mount('http://', adapter)
         soup = fetch_year_page(session, year)
         if soup is None:
             return
 
         survey_links, access_entries = parse_year_links(soup, year)
+        try:
+            soup.decompose()
+        except Exception:
+            pass
+        del soup
+
         year_dir = os.path.join(DOWNLOAD_DIR, str(year))
         ensure_directory(year_dir)
+        year_manifest: list[dict] = []
 
         for survey_name in SURVEY_DEFINITIONS.keys():
             prefix_groups = survey_links.get(survey_name, {})
@@ -405,10 +508,23 @@ def process_year(year: int) -> None:
                     if download_file(session, data_entry['url'], destination):
                         if destination.lower().endswith('.zip'):
                             print(f"Unzipping {filename}...")
-                            unzip_and_remove(destination, year_dir)
+                            unzip_and_remove(destination, year_dir, context=filename)
                         time.sleep(1)
 
                     dict_entry = find_dictionary_for_data(dict_entries, data_entry)
+                    manifest_record = {
+                        'year': year,
+                        'survey': survey_name,
+                        'prefix': prefix_label,
+                        'filename': filename,
+                        'url': data_entry['url'],
+                        'is_revision': data_entry['is_revision'],
+                        'has_dictionary': bool(dict_entry),
+                        'dictionary_filename': dict_entry['filename'] if dict_entry else '',
+                        'release': data_entry.get('release', ''),
+                    }
+                    year_manifest.append(manifest_record)
+
                     if dict_entry is None:
                         print(
                             f"WARNING: Matching dictionary not found for "
@@ -433,12 +549,14 @@ def process_year(year: int) -> None:
                     if download_file(session, dict_entry['url'], dict_destination):
                         if dict_destination.lower().endswith('.zip'):
                             print(f"Unzipping {dict_filename}...")
-                            unzip_and_remove(dict_destination, year_dir)
+                            unzip_and_remove(dict_destination, year_dir, context=dict_filename)
                         time.sleep(1)
                     downloaded_dicts.add(dict_filename)
 
         if DOWNLOAD_ACCESS_DATABASE:
             download_access_database(session, year, year_dir, access_entries)
+
+        write_year_manifest(year_dir, year, year_manifest)
 
 
 def main() -> None:

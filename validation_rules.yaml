@@ -1,0 +1,21 @@
+nonnegatives:
+  - target_vars: [totrev_all, tuition_rev, enr_ug_all, fte_fall]
+    description: "Financials and headcounts must be >= 0"
+
+balances:
+  - total: totrev_all
+    parts: [tuition_rev]
+    tolerance: 0.02
+    description: "Tuition is a component of total revenues; ensure totals exceed or equal tuition"
+
+growth_caps:
+  - target_var: enr_ug_all
+    max_abs_pct: 0.25
+    description: "Undergraduate headcount should not jump >25% year-over-year without review"
+  - target_var: totrev_all
+    max_abs_pct: 0.35
+    description: "Total revenue outliers above 35% YoY require manual validation"
+
+release_policy:
+  allow_mixed_release: false
+  description: "Warn if provisional and revised releases are mixed within the same panel slice"
