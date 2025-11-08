@@ -97,7 +97,7 @@ def get_survey_prefixes_for_year(
 
     configured_prefixes = survey_prefixes or [survey_name]
 
-    tokens = {
+    base_year_tokens = {
         year_full,
         year_short,
         prev_year_full,
@@ -105,6 +105,13 @@ def get_survey_prefixes_for_year(
         f"{prev_year_short}{year_short}",
         f"{year_short}{next_year_short}",
     }
+    academic_year_tokens = {
+        f"AY{year_full}",
+        f"AY{year_short}",
+        f"AY{prev_year_short}{year_short}",
+        f"AY{year_short}{next_year_short}",
+    }
+    tokens = base_year_tokens | academic_year_tokens
 
     prefixes: set[str] = set()
     for prefix in configured_prefixes:
@@ -112,6 +119,7 @@ def get_survey_prefixes_for_year(
         for token in tokens:
             prefixes.add(f"{prefix_upper}{token}")
             prefixes.add(f"{prefix_upper}_{token}")
+            prefixes.add(f"{prefix_upper}-{token}")
 
     return sorted(prefixes, key=len, reverse=True)
 
