@@ -87,39 +87,27 @@ def ensure_directory(path: str) -> None:
 def get_survey_prefixes_for_year(
     survey_name: str, survey_prefixes: list[str], year: int
 ) -> list[str]:
-    """Return all possible filename prefixes for a survey in the given year."""
+    """Return canonical filename prefixes for the survey.
 
-    year_full = f"{year:04d}"
-    year_short = f"{year % 100:02d}"
-    prev_year_full = f"{max(year - 1, 0):04d}"
-    prev_year_short = f"{(year - 1) % 100:02d}"
-    next_year_short = f"{(year + 1) % 100:02d}"
+    Filenames on the IPEDS site historically begin with a short survey code
+    (e.g., ``E12`` or ``SFA``) followed by optional punctuation, academic-year
+    tokens, or calendar-year suffixes.  Rather than try to enumerate every
+    possible year-specific variation, which has proven brittle as the naming
+    scheme evolves, we treat the base codes themselves as the matching keys and
+    rely on longest-prefix ordering to disambiguate overlaps such as ``S`` vs
+    ``SFA``.  To give slightly higher precedence to filenames that include an
+    underscore or hyphen immediately after the code, we include those variants
+    as explicit entries as well.
+    """
 
     configured_prefixes = survey_prefixes or [survey_name]
-
-    base_year_tokens = {
-        year_full,
-        year_short,
-        prev_year_full,
-        prev_year_short,
-        f"{prev_year_short}{year_short}",
-        f"{year_short}{next_year_short}",
-    }
-    academic_year_tokens = {
-        f"AY{year_full}",
-        f"AY{year_short}",
-        f"AY{prev_year_short}{year_short}",
-        f"AY{year_short}{next_year_short}",
-    }
-    tokens = base_year_tokens | academic_year_tokens
 
     prefixes: set[str] = set()
     for prefix in configured_prefixes:
         prefix_upper = prefix.upper()
-        for token in tokens:
-            prefixes.add(f"{prefix_upper}{token}")
-            prefixes.add(f"{prefix_upper}_{token}")
-            prefixes.add(f"{prefix_upper}-{token}")
+        prefixes.add(prefix_upper)
+        prefixes.add(f"{prefix_upper}_")
+        prefixes.add(f"{prefix_upper}-")
 
     return sorted(prefixes, key=len, reverse=True)
 
