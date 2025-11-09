@@ -88,6 +88,10 @@ OUTPUT_COLUMNS = [
 ]
 
 
+def _to_lower(s: Optional[str]) -> str:
+    return (s or "").strip().lower()
+
+
 def report_duplicate_modules() -> None:
     repo_root = Path(__file__).resolve().parent
     targets = {
@@ -140,6 +144,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument("--rules", type=Path, default=Path("validation_rules.yaml"), help="Validation rules YAML path")
     parser.add_argument("--strict-release", action="store_true", help="Error if mixed provisional/revised releases")
+    parser.add_argument("--strict-coverage", action="store_true", help="Error if any concept stays below MIN_ACCEPT_SCORE")
+    parser.add_argument("--strict-coverage", action="store_true", help="Error if any concept fails to meet MIN_ACCEPT_SCORE")
     parser.add_argument("--log-level", type=str, default="INFO", help="Logging level (e.g., INFO, DEBUG)")
     return parser.parse_args(argv)
 
@@ -206,6 +212,37 @@ def extract_prefixes(row: pd.Series) -> set[str]:
     return prefixes
 
 
+def _parse_income_band(text: str) -> tuple[Optional[int], Optional[int]]:
+    cleaned = _to_lower(text)
+    cleaned = re.sub(r"[,$\s]+", " ", cleaned)
+    match = re.search(r"(?:less than|under)\s*(\d{2,3} ?0{3})", cleaned)
+    if match:
+        hi = int(match.group(1).replace(" ", ""))
+        return 0, hi
+    match = re.search(r"(\d{2,3} ?0{3})\s*(?:to|-|–)\s*(\d{2,3} ?0{3})", cleaned)
+    if match:
+        lo = int(match.group(1).replace(" ", ""))
+        hi = int(match.group(2).replace(" ", ""))
+        return lo, hi
+    match = re.search(r"(\d{2,3} ?0{3})\s*(?:\+|or more|and above)", cleaned)
+    if match:
+        lo = int(match.group(1).replace(" ", ""))
+        return lo, None
+    return None, None
+
+
+def _bands_overlap(a: tuple[Optional[int], Optional[int]], b: tuple[Optional[int], Optional[int]]) -> bool:
+    lo_a, hi_a = a
+    lo_b, hi_b = b
+    if lo_a is None and lo_b is None:
+        return True
+    lo_a = lo_a or 0
+    lo_b = lo_b or 0
+    hi_a = hi_a if hi_a is not None else float("inf")
+    hi_b = hi_b if hi_b is not None else float("inf")
+    return max(lo_a, lo_b) <= min(hi_a, hi_b)
+
+
 def filter_candidates_by_forms(df: pd.DataFrame, forms: Optional[Sequence[str]]) -> pd.DataFrame:
     if not forms:
         return df.copy()
@@ -215,6 +252,37 @@ def filter_candidates_by_forms(df: pd.DataFrame, forms: Optional[Sequence[str]])
         prefixes = extract_prefixes(row)
         mask.append(bool(prefixes & allowed))
     return df.loc[mask].copy()
+
+
+def _parse_income_band(text: str) -> tuple[Optional[int], Optional[int]]:
+    text = (text or "").lower()
+    text = re.sub(r"[,$\s]+", " ", text)
+    match = re.search(r"(?:less than|under)\s*(\d{2,3} ?0{3})", text)
+    if match:
+        hi = int(match.group(1).replace(" ", ""))
+        return 0, hi
+    match = re.search(r"(\d{2,3} ?0{3})\s*(?:to|-|–)\s*(\d{2,3} ?0{3})", text)
+    if match:
+        lo = int(match.group(1).replace(" ", ""))
+        hi = int(match.group(2).replace(" ", ""))
+        return lo, hi
+    match = re.search(r"(\d{2,3} ?0{3})\s*(?:\+|or more|and above)", text)
+    if match:
+        lo = int(match.group(1).replace(" ", ""))
+        return lo, None
+    return None, None
+
+
+def _bands_overlap(a: tuple[Optional[int], Optional[int]], b: tuple[Optional[int], Optional[int]]) -> bool:
+    lo_a, hi_a = a
+    lo_b, hi_b = b
+    if lo_a is None and lo_b is None:
+        return True
+    lo_a = lo_a or 0
+    lo_b = lo_b or 0
+    hi_a = hi_a if hi_a is not None else float("inf")
+    hi_b = hi_b if hi_b is not None else float("inf")
+    return max(lo_a, lo_b) <= min(hi_a, hi_b)
 
 
 def score_candidate(row: pd.Series, concept: dict) -> float:
@@ -258,6 +326,28 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
         if survey_hint and survey_hint == str(concept.get("survey", "")).strip().lower():
             bonus = 1.0
     score += bonus
+    units = _to_lower(str(concept.get("units", "")))
+    money_hint = bool(re.search(r"\b(dollars?|amount|revenue|expenses?|net price)\b|\$", label_norm))
+    count_hint = bool(re.search(r"\bcount|students?|recipients?|headcount|fte\b", label_norm))
+    if units in {"usd", "$"}:
+        if money_hint:
+            score += 0.5
+        if count_hint:
+            score -= 0.5
+    if units in {"count", "fte"}:
+        if count_hint:
+            score += 0.5
+        if money_hint:
+            score -= 0.5
+    if "band_min" in concept or "band_max" in concept:
+        parsed = _parse_income_band(label_norm_raw)
+        if parsed != (None, None):
+            lo = concept.get("band_min")
+            hi = concept.get("band_max")
+            if _bands_overlap(parsed, (lo, hi)):
+                score += 1.0
+            else:
+                score -= 1.0
     for pattern in concept.get("exclude_regex", []):
         if re.search(pattern, label_norm, flags=re.IGNORECASE) or re.search(
             pattern, label_norm_raw, flags=re.IGNORECASE
@@ -403,8 +493,14 @@ def prefer_manifest_row(
             subset = with_dict
 
     subset = subset.copy()
-    subset["is_revision_flag"] = subset.get("is_revision", False).astype(str).str.lower().isin(["true", "1", "yes"])
-    subset["release_rank"] = subset.get("release", "").astype(str).str.lower().eq("revised").astype(int)
+    if "is_revision" in subset.columns:
+        subset["is_revision_flag"] = subset["is_revision"].astype(str).str.lower().isin(["true", "1", "yes"])
+    else:
+        subset["is_revision_flag"] = False
+    if "release" in subset.columns:
+        subset["release_rank"] = subset["release"].astype(str).str.lower().eq("revised").astype(int)
+    else:
+        subset["release_rank"] = 0
     subset.sort_values([
         "is_revision_flag",
         "release_rank",
@@ -768,7 +864,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 continue
             values = coerce_numeric(df[source_col])
             values = apply_transform(values, str(concept.get("transform", "identity")))
-            candidate_imputed_cols = [col for col in df.columns if IMPUTE_FLAG_PATTERN.search(str(col))]
+            xvar = f"X{source_col}"
+            impute_lookup = {str(col).lower(): col for col in df.columns}
+            xvar_match = impute_lookup.get(xvar.lower())
+            candidate_imputed_cols = (
+                [xvar_match]
+                if xvar_match is not None
+                else [col for col in df.columns if IMPUTE_FLAG_PATTERN.search(str(col))]
+            )
             preferred_imputed = [
                 col
                 for col in candidate_imputed_cols
@@ -831,15 +934,31 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         audit_df = pd.DataFrame(columns=audit_columns)
     else:
         audit_df = audit_df[audit_columns]
+    audit_df["accepted"] = audit_df["score"].apply(
+        lambda s: s is not None and not pd.isna(s) and float(s) >= MIN_ACCEPT_SCORE
+    )
     audit_df.to_csv("label_matches.csv", index=False)
     logging.info("Writing validation report to validation_report.csv")
     report_df.to_csv("validation_report.csv", index=False)
 
-    if errors:
+    coverage_fail = False
+    if args.strict_coverage:
+        weak = audit_df[(audit_df["year"].isin(years)) & (~audit_df["accepted"]) ]
+        if not weak.empty:
+            coverage_fail = True
+            logging.error(
+                "Strict coverage failed for %d rows. Examples:\n%s",
+                len(weak),
+                weak.head(10).to_string(index=False),
+            )
+    if errors or coverage_fail:
         for err in errors:
             logging.error(err)
         if args.strict_release:
             logging.error("Strict release policy violated; exiting with failure")
+            return 1
+        if coverage_fail:
+            logging.error("Strict coverage violated; exiting with failure")
             return 1
     return 0
 
