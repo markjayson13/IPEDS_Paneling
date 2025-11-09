@@ -24,7 +24,10 @@ except ImportError as exc:  # pragma: no cover - startup guard
 
 ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas")
 DEFAULT_OUTPUT = Path("dictionary_lake.parquet")
-DICT_NAME_PATTERN = re.compile(r"(?:^|[/_-])(dict|dictionary)(?:$|[_-])", re.IGNORECASE)
+DICT_NAME_PATTERN = re.compile(
+    r"(?:^|[/_-])(dict|dictionary|varlist|variables?|layout|codebook)(?:$|[_-])",
+    re.IGNORECASE,
+)
 SUPPORTED_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt"}
 VAR_PREFIX_RE = re.compile(
     r"^(F[123]A|EFFY|EFIA?|EFIB|EFIC|EFID|E1D|OM|HR|IC|SFA|GRS?|PE|AL|ADM|HD|C)",
@@ -135,8 +138,21 @@ def read_any_dictionary(path: Path) -> pd.DataFrame:
             extracted = df.iloc[:, :2].copy()
             extracted.columns = ["source_var", "source_label"]
         return extracted
+    if suffix == ".txt":
+        try:
+            df = pd.read_csv(path, dtype=str, sep=None, engine="python", encoding_errors="ignore")
+        except Exception:
+            try:
+                df = pd.read_csv(path, dtype=str, sep="|", encoding_errors="ignore")
+            except Exception:
+                df = pd.read_csv(path, dtype=str, delim_whitespace=True, encoding_errors="ignore")
+        extracted = extract_columns(df)
+        if extracted is None:
+            extracted = df.iloc[:, :2].copy()
+            extracted.columns = ["source_var", "source_label"]
+        return extracted
 
-    # Fallback: let pandas attempt to read (e.g., TXT)
+    # Fallback: let pandas attempt to read anything unknown
     engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
     df = pd.read_excel(path, sheet_name=0, dtype=str, engine=engine)
     extracted = extract_columns(df)
@@ -160,6 +176,8 @@ def derive_release(metadata: str) -> str:
         return "revised"
     if "provisional" in text:
         return "provisional"
+    if "final" in text:
+        return "final"
     return ""
 
 
@@ -230,6 +248,7 @@ def main() -> None:
         .fillna("")
         .str.strip()
         .str.lower()
+        .str.replace(r"[\u2010\u2011\u2012\u2013\u2014\u2212]", "-", regex=True)
         .str.replace(r"[•·]", " ", regex=True)
         .str.replace(r"[&]", " and ", regex=True)
         .str.replace(r"[^\w\s\(\)/%-]", "", regex=True)
