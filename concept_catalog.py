@@ -20,7 +20,9 @@ from collections import OrderedDict
 
 CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
     {
-        # Finance (FY)
+        # -------------------------
+        # Finance (FY, aligned forms)
+        # -------------------------
         "total_rev_invest_return": {
             "target_var": "total_rev_invest_return",
             "concept": "Total revenues and investment return (aligned forms)",
@@ -28,9 +30,15 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "Finance",
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
-            "label_regex": [r"^total revenues? (?:and )?investment return$"],
-            "exclude_regex": [],
-            "notes": "Use aligned total; do not map to balance-sheet items.",
+            "label_regex": [
+                r"^total revenues?(?: and other additions)?(?: and )?investment (?:return|income)(?:.*)$",
+                r"^total revenues?(?:,? operating and nonoperating)?(?:.*investment (?:return|income).*)$",
+            ],
+            "exclude_regex": [
+                r"endowment (?:market )?value",
+                r"balance sheet|net assets|position",
+            ],
+            "notes": "Aligned total. Avoid stock accounts and balance-sheet lines.",
             "transform": "identity",
         },
         "tuition_fees_net": {
@@ -41,11 +49,17 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
             "label_regex": [
-                r"tuition(?: and)? fees.*after deducting (?:discounts|allowances)",
-                r"tuition (?:and )?fees.*\(net\)",
+                r"^tuition(?: and)? fees.*after deducting (?:discounts|scholarship allowances)",
+                r"^tuition(?: and)? fees.*\(net\)$",
+                r"^net tuition(?: and)? fees$",
             ],
-            "exclude_regex": [r"(gross)", r"(before)"],
-            "notes": "Avoid double count with scholarships/allowances.",
+            "exclude_regex": [
+                r"\bgross\b",
+                r"before deducting",
+                r"discounts? and allowances$",
+                r"scholarship allowances$",
+            ],
+            "notes": "Map only the net line. Exclude allowances and gross.",
             "transform": "identity",
         },
         "state_appropriations": {
@@ -55,9 +69,12 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "Finance",
             "period_type": "FY",
             "forms": ["F1A", "F2A"],
-            "label_regex": [r"^state appropriations$"],
+            "label_regex": [
+                r"^state appropriations(?:,? (?:operating|nonoperating))?$",
+                r"^state appropriations$",
+            ],
             "exclude_regex": [],
-            "notes": "Not typically present for for-profits.",
+            "notes": "Typically not present for for-profits.",
             "transform": "identity",
         },
         "investment_return": {
@@ -67,9 +84,15 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "Finance",
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
-            "label_regex": [r"^investment return$", r"^investment (income|return)"],
-            "exclude_regex": [],
-            "notes": "Flow item; distinct from endowment market value (stock).",
+            "label_regex": [
+                r"^investment return(?:.*)$",
+                r"^investment income(?:.*)$",
+                r"^net investment (?:income|return)(?:.*)$",
+            ],
+            "exclude_regex": [
+                r"endowment (?:market )?value",
+            ],
+            "notes": "Flow item; not the endowment stock.",
             "transform": "identity",
         },
         "auxiliary_rev": {
@@ -79,9 +102,14 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "Finance",
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
-            "label_regex": [r"^auxiliary (?:enterprise|enterprises) revenues?$"],
-            "exclude_regex": [],
-            "notes": "Revenue line only.",
+            "label_regex": [
+                r"^auxiliary (?:enterprise|enterprises) revenues?$",
+                r"^sales and services of auxiliary enterprises$",
+            ],
+            "exclude_regex": [
+                r"expenses?",
+            ],
+            "notes": "Revenue only; not auxiliary expenses.",
             "transform": "identity",
         },
         "total_expenses": {
@@ -91,7 +119,10 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "Finance",
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
-            "label_regex": [r"^total expenses?(?: and deductions)?$"],
+            "label_regex": [
+                r"^total expenses?(?: and deductions)?$",
+                r"^total expenses?$",
+            ],
             "exclude_regex": [],
             "notes": "",
             "transform": "identity",
@@ -103,12 +134,20 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "Finance",
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
-            "label_regex": [r"^instruction$"],
-            "exclude_regex": [],
+            "label_regex": [
+                r"^instruction(?:\s*expenses?)?$",
+                r"^instruction\s*-\s*total$",
+            ],
+            "exclude_regex": [
+                r"instructional support",
+            ],
             "notes": "Functional expense.",
             "transform": "identity",
         },
-        # Enrollment (AY: EF and E12)
+
+        # -------------------------
+        # Enrollment (AY)
+        # -------------------------
         "ef_total": {
             "target_var": "ef_total",
             "concept": "Total fall headcount",
@@ -116,9 +155,20 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "FallEnrollment",
             "period_type": "AY",
             "forms": ["EF"],
-            "label_regex": [r"(?:grand )?total(?: students)?$", r"enrollment.*total$"],
-            "exclude_regex": [],
-            "notes": "EF fall snapshot.",
+            "label_regex": [
+                r"^grand total$",
+                r"^all students total$",
+                r"^total enrollment$",
+                r"^total$",
+            ],
+            "exclude_regex": [
+                r"undergraduate|graduate",
+                r"\bmen\b|\bwomen\b|\bmale\b|\bfemale\b",
+                r"nonresident|unknown",
+                r"part[- ]?time|full[- ]?time",
+                r"by race|ethnicity|age|level|resident|attendance",
+            ],
+            "notes": "Fall snapshot grand total only.",
             "transform": "identity",
         },
         "e12_fte": {
@@ -128,12 +178,22 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "12MonthEnrollment",
             "period_type": "AY",
             "forms": ["E12", "E1D", "EFFY"],
-            "label_regex": [r"full[- ]?time equivalent.*"],
-            "exclude_regex": [],
-            "notes": "Use E12/E1D/EFFY derived FTE.",
+            "label_regex": [
+                r"^12[- ]?month.*full[- ]?time equivalent.*$",
+                r"^full[- ]?time equivalent.*12[- ]?month.*$",
+                r"^effy.*full[- ]?time equivalent.*$",
+            ],
+            "exclude_regex": [
+                r"\bef\b",
+                r"by level|undergraduate|graduate",
+            ],
+            "notes": "Use E12/E1D/EFFY derived FTE; avoid EF fall FTE variants.",
             "transform": "identity",
         },
+
+        # -------------------------
         # SFA (AY)
+        # -------------------------
         "pell_recip_count": {
             "target_var": "pell_recip_count",
             "concept": "Pell Grant recipients (FTFT undergraduates)",
@@ -141,9 +201,14 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "StudentFinancialAid",
             "period_type": "AY",
             "forms": ["SFA"],
-            "label_regex": [r"pell.*(?:recipients|awarded).*full[- ]?time.*first[- ]?time"],
-            "exclude_regex": [],
-            "notes": "",
+            "label_regex": [
+                r"^number of.*pell.*full[- ]?time.*first[- ]?time.*undergraduat.*$",
+                r"^pell.*recipients.*ftft.*$",
+            ],
+            "exclude_regex": [
+                r"all undergraduates|part[- ]?time|graduate",
+            ],
+            "notes": "Restrict to FTFT cohort.",
             "transform": "identity",
         },
         "pell_amount": {
@@ -153,12 +218,15 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "StudentFinancialAid",
             "period_type": "AY",
             "forms": ["SFA"],
-            "label_regex": [r"pell grants?.*(?:amount|total)"],
+            "label_regex": [
+                r"^pell grants?.*(?:amount|total|dollars).*$",
+            ],
             "exclude_regex": [],
             "notes": "",
             "transform": "identity",
         },
-        # Net price (AY, Title IV recipients; pre-2024 SFA; if CST appears, match either)
+
+        # Net price (AY, Title IV cohort; SFA historically, CST in recent years)
         "anp_0_30": {
             "target_var": "anp_0_30",
             "concept": "Average net price 0–30k (Title IV)",
@@ -167,10 +235,10 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "forms": ["SFA", "CST"],
             "label_regex": [
-                r"average net price.*(?:0[-–]\s?30[, ]?000|0 to 30[, ]?000)",
+                r"average net price.*(?:less than 30[, ]?000|0[-–]\s?30[, ]?000|0 to 30[, ]?000)",
             ],
             "exclude_regex": [],
-            "notes": "Use Title IV band.",
+            "notes": "Title IV band.",
             "transform": "identity",
         },
         "anp_30_48": {

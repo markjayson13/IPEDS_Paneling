@@ -35,6 +35,8 @@ import yaml
 
 from concept_catalog import CONCEPTS
 
+MIN_ACCEPT_SCORE = 2.5
+
 NA_TOKENS = [
     "PrivacySuppressed",
     "NULL",
@@ -511,24 +513,43 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             candidates_df = filter_candidates_by_forms(year_lake, concept.get("forms"))
             n_candidates = len(candidates_df)
             best_row, best_score = choose_candidate(candidates_df, concept_key, concept) if n_candidates else (None, float("nan"))
+            if best_row is None or (pd.notna(best_score) and best_score < MIN_ACCEPT_SCORE):
+                logging.warning(
+                    "Weak or no match for %s in %s (score=%.2f; candidates=%s)",
+                    concept_key,
+                    year,
+                    float(best_score) if pd.notna(best_score) else float("nan"),
+                    n_candidates,
+                )
+                decision_records.append(
+                    CandidateSelection(
+                        concept_key=concept_key,
+                        year=year,
+                        target_var=str(concept.get("target_var")),
+                        source_var=None if best_row is None else str(best_row.get("source_var")),
+                        dict_file=None if best_row is None else str(best_row.get("dict_file")),
+                        score=None if pd.isna(best_score) else float(best_score),
+                        prefix=None,
+                        release=None,
+                        n_candidates=n_candidates,
+                    )
+                )
+                continue
             prefix = determine_prefix(best_row, concept)
-            release = str(best_row.get("release")) if best_row is not None and best_row.get("release") is not None else None
+            release = str(best_row.get("release")) if best_row.get("release") is not None else None
             decision_records.append(
                 CandidateSelection(
                     concept_key=concept_key,
                     year=year,
                     target_var=str(concept.get("target_var")),
-                    source_var=str(best_row.get("source_var")) if best_row is not None else None,
-                    dict_file=str(best_row.get("dict_file")) if best_row is not None else None,
+                    source_var=str(best_row.get("source_var")),
+                    dict_file=str(best_row.get("dict_file")) if best_row.get("dict_file") is not None else None,
                     score=None if pd.isna(best_score) else float(best_score),
                     prefix=prefix,
                     release=release,
                     n_candidates=n_candidates,
                 )
             )
-            if best_row is None:
-                logging.warning("No dictionary match for concept %s year %s", concept_key, year)
-                continue
             data_path, manifest_release = locate_data_file(year, prefix, str(concept.get("survey", "")), args.root, manifest_cache)
             effective_release = manifest_release or release
             if data_path is None:
