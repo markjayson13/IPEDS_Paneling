@@ -40,6 +40,7 @@ VAR_CANDIDATES = (
     "var",
     "var_name",
     "name",
+    "unitid",
     "column",
 )
 LABEL_CANDIDATES = (
@@ -54,6 +55,7 @@ LABEL_CANDIDATES = (
     "longdescription",
     "long description",
     "valuelabel",
+    "unique identification number of the institution",
 )
 
 

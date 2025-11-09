@@ -129,6 +129,7 @@ class CandidateSelection:
     notes: Optional[str]
     top_alternates: Optional[str]
     imputed_flag: Optional[str]
+    accepted: Optional[bool] = None
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -204,29 +205,43 @@ def extract_prefixes(row: pd.Series) -> set[str]:
         prefixes.add(prefix_hint.upper())
     filename = str(row.get("filename", ""))
     dict_file = str(row.get("dict_file", ""))
-    pattern = re.compile(r"\b(F1A|F2A|F3A|EF|E12|E1D|EFFY|SFA|CST|OM|GRS|PE)\b", re.IGNORECASE)
+    pattern = re.compile(r"\b(F1A|F2A|F3A|EF|EFIA|E12|E1D|EFFY|SFA|CST|OM|GRS|PE)\b", re.IGNORECASE)
     for text in (filename, dict_file):
         for match in pattern.findall(text):
             prefixes.add(match.upper())
+        parent = Path(text).parent.name.upper() if text else ""
+        for form in ("EFIA", "EFFY", "E12", "E1D", "SFA", "CST"):
+            if parent.startswith(form):
+                prefixes.add(form)
     return prefixes
 
 
 def _parse_income_band(text: str) -> tuple[Optional[int], Optional[int]]:
-    cleaned = _to_lower(text)
-    cleaned = re.sub(r"[,$\s]+", " ", cleaned)
-    match = re.search(r"(?:less than|under)\s*(\d{2,3} ?0{3})", cleaned)
+    raw = (text or "").lower()
+    raw = raw.replace("k", "000")
+    cleaned = re.sub(r"[,$\s]+", " ", raw)
+
+    def _to_int(token: str) -> int:
+        return int(re.sub(r"[\s,]", "", token))
+
+    match = re.search(r"(?:less than|under)\s*(\d{1,3}(?:,\d{3})*)", raw)
     if match:
-        hi = int(match.group(1).replace(" ", ""))
+        hi = _to_int(match.group(1))
         return 0, hi
-    match = re.search(r"(\d{2,3} ?0{3})\s*(?:to|-|–)\s*(\d{2,3} ?0{3})", cleaned)
+    match = re.search(r"(0)\s*(?:to|-|–)\s*(\d{1,3}(?:,\d{3})*)", raw)
     if match:
-        lo = int(match.group(1).replace(" ", ""))
-        hi = int(match.group(2).replace(" ", ""))
-        return lo, hi
-    match = re.search(r"(\d{2,3} ?0{3})\s*(?:\+|or more|and above)", cleaned)
+        hi = _to_int(match.group(2))
+        return 0, hi
+    match = re.search(r"(\d{1,3}(?:,\d{3})*)\s*(?:\+|or more|and above)", raw)
     if match:
-        lo = int(match.group(1).replace(" ", ""))
+        lo = _to_int(match.group(1))
         return lo, None
+    target = raw.split("income", 1)[1] if "income" in raw else raw
+    match = re.search(r"(\d{1,3}(?:,\d{3})*)\s*(?:to|-|–)\s*(\d{1,3}(?:,\d{3})*)", target)
+    if match:
+        lo = _to_int(match.group(1))
+        hi = _to_int(match.group(2))
+        return lo, hi
     return None, None
 
 
@@ -313,7 +328,7 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
             lo = concept.get("band_min")
             hi = concept.get("band_max")
             if _bands_overlap(parsed, (lo, hi)):
-                score += 1.0
+                score = max(score, 4.0)
             else:
                 score -= 1.0
     for pattern in concept.get("exclude_regex", []):
@@ -517,16 +532,28 @@ def locate_data_file(
         return None, None
 
     dict_tokens: set[str] = set()
+    preferred_dir: Optional[str] = None
     if dict_hint:
-        dict_stem = Path(str(dict_hint)).stem
+        dict_path = Path(str(dict_hint))
+        dict_stem = dict_path.stem
         dict_stem = re.sub(r"(?i)(dict|dictionary)", "", dict_stem)
         dict_tokens = {tok for tok in re.findall(r"[A-Z0-9]+", dict_stem.upper()) if tok}
+        parent_name = dict_path.parent.name
+        if parent_name:
+            preferred_dir = re.sub(r"(?i)(?:[_-]?dict|dictionary)$", "", parent_name).upper()
 
     def rank(p: Path) -> tuple[int, int, float]:
         name = p.name.upper()
         overlap = sum(1 for t in dict_tokens if t in name) if dict_tokens else 0
         text_pref = 1 if p.suffix.lower() in {".csv", ".tsv", ".txt"} else 0
-        return (overlap, text_pref, p.stat().st_mtime)
+        parent = p.parent.name.upper()
+        dir_boost = 0
+        if preferred_dir:
+            if parent == preferred_dir:
+                dir_boost = 2
+            elif parent.startswith(preferred_dir):
+                dir_boost = 1
+        return (overlap + dir_boost, text_pref, p.stat().st_mtime)
 
     candidates.sort(key=rank, reverse=True)
     chosen = candidates[0]
@@ -557,7 +584,7 @@ def load_data_file(path: Path, cache: dict[Path, tuple[pd.DataFrame, Optional[st
         df = pd.read_excel(path, dtype=str, engine=engine)
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
-    df.columns = [str(col) for col in df.columns]
+    df.columns = [str(col).strip() for col in df.columns]
     unitid_col = None
     for col in df.columns:
         if col.lower() == "unitid":
@@ -741,6 +768,41 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         year_lake = lake_by_year.get(year, pd.DataFrame(columns=lake.columns))
         logging.info("Processing year %s with %d dictionary rows", year, len(year_lake))
         for concept_key, concept in CONCEPTS.items():
+            record_kwargs = {
+                "concept_key": concept_key,
+                "year": year,
+                "target_var": str(concept.get("target_var")),
+                "score": None,
+                "n_candidates": 0,
+                "source_var": None,
+                "label_matched": None,
+                "dict_file": None,
+                "dict_filename": None,
+                "prefix_hint": None,
+                "survey_hint": None,
+                "chosen_data_file": None,
+                "manifest_release": None,
+                "notes": concept.get("notes"),
+                "top_alternates": None,
+                "imputed_flag": None,
+                "accepted": None,
+            }
+            min_year = concept.get("min_year")
+            max_year = concept.get("max_year")
+            if min_year and year < int(min_year):
+                note = concept.get("notes") or ""
+                reason = f"Unavailable before {min_year}"
+                record_kwargs["notes"] = f"{note} - {reason}" if note else reason
+                record_kwargs["accepted"] = True
+                decision_records.append(CandidateSelection(**record_kwargs))
+                continue
+            if max_year and year > int(max_year):
+                note = concept.get("notes") or ""
+                reason = f"Retired after {max_year}"
+                record_kwargs["notes"] = f"{note} - {reason}" if note else reason
+                record_kwargs["accepted"] = True
+                decision_records.append(CandidateSelection(**record_kwargs))
+                continue
             candidates_df = filter_candidates_by_forms(year_lake, concept.get("forms"))
             raw_candidates = len(candidates_df)
             best_row: Optional[pd.Series]
@@ -762,24 +824,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             label_matched = coerce_optional_str(best_row.get("source_label")) if best_row is not None else None
             source_var_val = coerce_optional_str(best_row.get("source_var")) if best_row is not None else None
             score_val = None if pd.isna(best_score) else float(best_score)
-            record_kwargs = {
-                "concept_key": concept_key,
-                "year": year,
-                "target_var": str(concept.get("target_var")),
-                "score": score_val,
-                "n_candidates": candidate_count,
-                "source_var": source_var_val,
-                "label_matched": label_matched,
-                "dict_file": dict_file,
-                "dict_filename": dict_filename,
-                "prefix_hint": prefix_hint,
-                "survey_hint": survey_hint,
-                "chosen_data_file": None,
-                "manifest_release": None,
-                "notes": concept.get("notes"),
-                "top_alternates": top_alternates,
-                "imputed_flag": None,
-            }
+            record_kwargs.update(
+                {
+                    "score": score_val,
+                    "n_candidates": candidate_count,
+                    "source_var": source_var_val,
+                    "label_matched": label_matched,
+                    "dict_file": dict_file,
+                    "dict_filename": dict_filename,
+                    "prefix_hint": prefix_hint,
+                    "survey_hint": survey_hint,
+                    "top_alternates": top_alternates,
+                }
+            )
             if best_row is None:
                 logging.warning(
                     "Weak or no match for %s in %s (score=%.2f; candidates=%s)",
@@ -788,6 +845,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     float(best_score) if pd.notna(best_score) else float("nan"),
                     candidate_count,
                 )
+                record_kwargs["accepted"] = False
+                record_kwargs["accepted"] = False
                 decision_records.append(CandidateSelection(**record_kwargs))
                 continue
             prefix = determine_prefix(best_row, concept)
@@ -809,6 +868,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 logging.warning(
                     "No data file found for concept %s year %s prefix %s", concept_key, year, prefix
                 )
+                record_kwargs["accepted"] = False
                 decision_records.append(CandidateSelection(**record_kwargs))
                 continue
             df, unitid_col = load_data_file(data_path, data_cache)
@@ -816,6 +876,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 logging.warning(
                     "Skipping concept %s year %s due to missing UNITID in %s", concept_key, year, data_path
                 )
+                record_kwargs["accepted"] = False
                 decision_records.append(CandidateSelection(**record_kwargs))
                 continue
             source_var = source_var_val or ""
@@ -828,6 +889,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     concept_key,
                     year,
                 )
+                record_kwargs["accepted"] = False
                 decision_records.append(CandidateSelection(**record_kwargs))
                 continue
             values = coerce_numeric(df[source_col])
@@ -871,6 +933,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 }
             )
             output_frames.append(frame)
+            record_kwargs["accepted"] = True
             decision_records.append(CandidateSelection(**record_kwargs))
 
     output_df = build_output_frame(output_frames)
@@ -896,15 +959,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "notes",
         "top_alternates",
         "imputed_flag",
+        "accepted",
     ]
     audit_df = pd.DataFrame([sel.__dict__ for sel in decision_records])
     if audit_df.empty:
         audit_df = pd.DataFrame(columns=audit_columns)
     else:
         audit_df = audit_df[audit_columns]
-    audit_df["accepted"] = audit_df["score"].apply(
+    if "accepted" not in audit_df:
+        audit_df["accepted"] = pd.NA
+    mask = audit_df["accepted"].isna()
+    audit_df.loc[mask, "accepted"] = audit_df.loc[mask, "score"].apply(
         lambda s: s is not None and not pd.isna(s) and float(s) >= MIN_ACCEPT_SCORE
     )
+    audit_df["accepted"] = audit_df["accepted"].astype(bool)
     audit_df.to_csv("label_matches.csv", index=False)
     logging.info("Writing validation report to validation_report.csv")
     report_df.to_csv("validation_report.csv", index=False)

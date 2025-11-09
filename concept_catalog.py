@@ -58,16 +58,19 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "Finance",
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
+            "min_year": 2008,
             "label_regex": [
                 r"^tuition(?: and)? fees.*after deducting (?:discounts|scholarship allowances)",
                 r"^tuition(?: and)? fees.*\(net\)$",
                 r"^net tuition(?: and)? fees$",
+                r"^tuition(?: and)? fees[, ]+after deducting .*discounts?.*allowances.*$",
+                r"^tuition(?: and)? fees.*net of .*allowances.*$",
             ],
             "exclude_regex": [
                 r"\bgross\b",
                 r"before deducting",
-                r"discounts? and allowances$",
-                r"scholarship allowances$",
+                r"^discounts? and allowances",
+                r"^scholarship allowances",
                 r"\b(before|gross)\b|discounts? (?:not )?deducted|allowances? (?:not )?deducted",
             ],
             "notes": "Map only the net line. Exclude allowances and gross.",
@@ -191,11 +194,12 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "units": "FTE",
             "survey": "12MonthEnrollment",
             "period_type": "AY",
-            "forms": ["E12", "E1D", "EFFY"],
+            "forms": ["E12", "E1D", "EFFY", "EFIA"],
+            "min_year": 2007,
             "label_regex": [
-                r"^full[- ]?time equivalent.*$",
-                r"^fte.*enrollment.*$",
-                r"^total 12[- ]?month full[- ]?time equivalent.*$",
+                r".*full[- ]?time equivalent.*$",
+                r".*fte.*enrollment.*$",
+                r".*12[- ]?month.*full[- ]?time equivalent.*$",
             ],
             "exclude_regex": [
                 r"\bfall\b",
@@ -217,8 +221,10 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "StudentFinancialAid",
             "period_type": "AY",
             "forms": ["SFA"],
+            "min_year": 2009,
             "label_regex": [
                 r"pell.*(?:recipients?|students (?:awarded|receiving)|number receiving).*full[- ]?time.*first[- ]?time",
+                r".*full[- ]?time.*first[- ]?time.*pell.*",
             ],
             "exclude_regex": [
                 r"amount|dollars|\$|total (?:aid|amount)|grant amount",
@@ -234,8 +240,10 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "StudentFinancialAid",
             "period_type": "AY",
             "forms": ["SFA"],
+            "min_year": 2009,
             "label_regex": [
                 r"pell grants?.*(?:amount|dollars|\$|total)",
+                r".*total amount.*pell grants?.*",
             ],
             "exclude_regex": [
                 r"recipient|students|count|number",
@@ -253,6 +261,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "SFA",
             "period_type": "AY",
             "forms": ["SFA", "CST"],
+            "min_year": 2009,
             "label_regex": [
                 r"average net price.*(?:less than\s*30[, ]?0{3}|0\s*[-–]\s*30[, ]?0{3}|0\s*to\s*30[, ]?0{3}|0\s*-\s*30k)",
                 r"average net price.*title iv.*0.*30[, ]?000",
@@ -271,6 +280,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "SFA",
             "period_type": "AY",
             "forms": ["SFA", "CST"],
+            "min_year": 2009,
             "label_regex": [
                 r"average net price.*(?:30[, ]?0{3}?\s*(to|[-–])\s*48[, ]?0{3}|30[, ]?001\s*(to|[-–])\s*48[, ]?0{3})",
                 r"average net price.*title iv.*30[, ]?001.*48[, ]?000",
@@ -289,6 +299,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "SFA",
             "period_type": "AY",
             "forms": ["SFA", "CST"],
+            "min_year": 2009,
             "label_regex": [
                 r"average net price.*(?:48[, ]?0{3}?\s*(to|[-–])\s*75[, ]?0{3}|48[, ]?001\s*(to|[-–])\s*75[, ]?0{3})",
                 r"average net price.*title iv.*48[, ]?001.*75[, ]?000",
@@ -307,6 +318,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "SFA",
             "period_type": "AY",
             "forms": ["SFA", "CST"],
+            "min_year": 2009,
             "label_regex": [
                 r"average net price.*(?:75[, ]?0{3}?\s*(to|[-–])\s*110[, ]?0{3}|75[, ]?001\s*(to|[-–])\s*110[, ]?0{3})",
                 r"average net price.*title iv.*75[, ]?001.*110[, ]?000",
@@ -325,6 +337,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "SFA",
             "period_type": "AY",
             "forms": ["SFA", "CST"],
+            "min_year": 2009,
             "label_regex": [
                 r"average net price.*(110[, ]?0{3}\s*(or more|\+)|110[, ]?001\s*(or more|\+))",
                 r"average net price.*(110[, ]?001|110[, ]?000 or more)",
