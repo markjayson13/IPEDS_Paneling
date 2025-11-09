@@ -88,6 +88,22 @@ OUTPUT_COLUMNS = [
     "notes",
 ]
 
+STATIC_LOCATIONAL_TARGETS = {
+    "dir_county_fips",
+    "dir_county_name",
+    "dir_congress_district",
+    "dir_cbsa_code",
+    "dir_cbsa_type",
+    "dir_csa_code",
+    "dir_necta_code",
+    "dir_latitude",
+    "dir_longitude",
+}
+
+CONCEPT_BY_TARGET_VAR = {
+    str(concept.get("target_var")): concept for concept in CONCEPTS.values() if concept.get("target_var")
+}
+
 
 def _to_lower(text: Optional[str]) -> str:
     return (text or "").strip().lower()
@@ -778,6 +794,69 @@ def run_validations(df: pd.DataFrame, rules: dict, strict_release: bool) -> tupl
     return report, errors
 
 
+def _expand_static_target(var_df: pd.DataFrame, target_var: str, years: Sequence[int]) -> pd.DataFrame:
+    ordered_years = sorted({int(y) for y in years})
+    if not ordered_years or var_df.empty:
+        return var_df.copy()
+    working = var_df.dropna(subset=["UNITID"]).copy()
+    if working.empty:
+        return var_df.iloc[0:0].copy()
+    working["UNITID"] = working["UNITID"].astype("Int64")
+    working = working.sort_values(["UNITID", "year"])
+    unitids = working["UNITID"].unique()
+    idx = pd.MultiIndex.from_product([unitids, ordered_years], names=["UNITID", "year"])
+    dedup = working.drop_duplicates(subset=["UNITID", "year"], keep="first").set_index(["UNITID", "year"])
+    expanded = dedup.reindex(idx).reset_index()
+    for col in OUTPUT_COLUMNS:
+        if col not in expanded.columns:
+            expanded[col] = pd.NA
+    expanded["target_var"] = target_var
+    concept_meta = CONCEPT_BY_TARGET_VAR.get(target_var, {})
+    for field in ("concept", "units", "survey", "period_type", "notes"):
+        if concept_meta.get(field) is not None:
+            expanded[field] = concept_meta.get(field)
+    expanded = expanded.sort_values(["UNITID", "year"])
+    fill_cols = [
+        "value",
+        "form_family",
+        "source_var",
+        "label_matched",
+        "imputed_flag",
+        "is_imputed",
+        "source_file",
+        "release",
+    ]
+    grouped = expanded.groupby("UNITID", group_keys=False)
+    for col in fill_cols:
+        if col in expanded.columns:
+            expanded[col] = grouped[col].transform(lambda s: s.ffill().bfill())
+    expanded["value"] = pd.to_numeric(expanded["value"], errors="coerce")
+    if "is_imputed" in expanded.columns:
+        expanded["is_imputed"] = expanded["is_imputed"].astype("boolean")
+    expanded = expanded[OUTPUT_COLUMNS]
+    return expanded
+
+
+def backfill_static_locational_fields(df: pd.DataFrame, years: Sequence[int]) -> pd.DataFrame:
+    if df.empty:
+        return df
+    ordered_years = sorted({int(y) for y in years})
+    if not ordered_years:
+        return df
+    mask = df["target_var"].isin(STATIC_LOCATIONAL_TARGETS)
+    if not mask.any():
+        return df
+    static_df = df[mask].copy()
+    rest_df = df[~mask].copy()
+    filled_frames: List[pd.DataFrame] = []
+    for target_var, target_df in static_df.groupby("target_var"):
+        filled = _expand_static_target(target_df, target_var, ordered_years)
+        filled_frames.append(filled)
+    combined = pd.concat([rest_df] + filled_frames, ignore_index=True)
+    combined = combined[OUTPUT_COLUMNS]
+    return combined
+
+
 def build_output_frame(records: List[pd.DataFrame]) -> pd.DataFrame:
     if not records:
         return pd.DataFrame(columns=OUTPUT_COLUMNS)
@@ -992,6 +1071,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             decision_records.append(CandidateSelection(**record_kwargs))
 
     output_df = build_output_frame(output_frames)
+    output_df = backfill_static_locational_fields(output_df, years)
     report_df, errors = run_validations(output_df, rules, args.strict_release)
 
     logging.info("Writing output parquet to %s", args.output)
