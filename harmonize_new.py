@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -59,6 +60,7 @@ OUTPUT_COLUMNS = [
     "form_family",
     "period_type",
     "source_var",
+    "label_matched",
     "source_file",
     "release",
     "notes",
@@ -76,6 +78,7 @@ class CandidateSelection:
     prefix: Optional[str]
     release: Optional[str]
     n_candidates: int
+    label_matched: Optional[str]
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -258,7 +261,9 @@ def load_manifest(year: int, root: Path, cache: dict[int, Optional[pd.DataFrame]
     return manifest
 
 
-def prefer_manifest_row(manifest: pd.DataFrame, prefix: str, survey: str) -> Optional[pd.Series]:
+def prefer_manifest_row(
+    manifest: pd.DataFrame, prefix: str, survey: str, dict_hint: Optional[str] = None
+) -> Optional[pd.Series]:
     if manifest is None or manifest.empty:
         return None
     prefix_upper = prefix.upper()
@@ -267,6 +272,13 @@ def prefer_manifest_row(manifest: pd.DataFrame, prefix: str, survey: str) -> Opt
         subset = manifest[manifest["filename"].astype(str).str.contains(prefix_upper, case=False, na=False)]
     if subset.empty:
         return None
+
+    if dict_hint and "dictionary_filename" in subset.columns:
+        dict_base = os.path.basename(str(dict_hint))
+        with_dict = subset[subset["dictionary_filename"].astype(str) == dict_base]
+        if not with_dict.empty:
+            subset = with_dict
+
     subset = subset.copy()
     subset["is_revision_flag"] = subset.get("is_revision", False).astype(str).str.lower().isin(["true", "1", "yes"])
     subset["release_rank"] = subset.get("release", "").astype(str).str.lower().eq("revised").astype(int)
@@ -277,12 +289,21 @@ def prefer_manifest_row(manifest: pd.DataFrame, prefix: str, survey: str) -> Opt
     return subset.iloc[0]
 
 
-def locate_data_file(year: int, prefix: Optional[str], survey: str, root: Path, manifest_cache: dict[int, Optional[pd.DataFrame]]) -> tuple[Optional[Path], Optional[str]]:
+def locate_data_file(
+    year: int,
+    prefix: Optional[str],
+    survey: str,
+    root: Path,
+    manifest_cache: dict[int, Optional[pd.DataFrame]],
+    dict_hint: Optional[str] = None,
+) -> tuple[Optional[Path], Optional[str]]:
     if prefix is None:
         logging.warning("Cannot locate data file without prefix for year=%s survey=%s", year, survey)
         return None, None
     manifest = load_manifest(year, root, manifest_cache)
-    manifest_row = prefer_manifest_row(manifest, prefix, survey) if manifest is not None else None
+    manifest_row = (
+        prefer_manifest_row(manifest, prefix, survey, dict_hint) if manifest is not None else None
+    )
     if manifest_row is not None:
         filename = manifest_row.get("filename")
         release = manifest_row.get("release")
@@ -307,7 +328,20 @@ def locate_data_file(year: int, prefix: Optional[str], survey: str, root: Path, 
     if not candidates:
         logging.warning("No files found matching prefix %s in %s", prefix, year_dir)
         return None, None
-    candidates.sort(key=lambda p: (p.suffix.lower() not in {".csv", ".tsv", ".txt"}, p.stat().st_mtime), reverse=False)
+
+    dict_tokens: set[str] = set()
+    if dict_hint:
+        dict_stem = Path(str(dict_hint)).stem
+        dict_stem = re.sub(r"(?i)(dict|dictionary)", "", dict_stem)
+        dict_tokens = {tok for tok in re.findall(r"[A-Z0-9]+", dict_stem.upper()) if tok}
+
+    def rank(p: Path) -> tuple[int, int, float]:
+        name = p.name.upper()
+        overlap = sum(1 for t in dict_tokens if t in name) if dict_tokens else 0
+        text_pref = 1 if p.suffix.lower() in {".csv", ".tsv", ".txt"} else 0
+        return (overlap, text_pref, p.stat().st_mtime)
+
+    candidates.sort(key=rank, reverse=True)
     chosen = candidates[0]
     logging.info("Fallback located %s for prefix %s year %s", chosen, prefix, year)
     return chosen, None
@@ -526,12 +560,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         concept_key=concept_key,
                         year=year,
                         target_var=str(concept.get("target_var")),
-                        source_var=None if best_row is None else str(best_row.get("source_var")),
-                        dict_file=None if best_row is None else str(best_row.get("dict_file")),
+                        source_var=None,
+                        dict_file=None,
                         score=None if pd.isna(best_score) else float(best_score),
                         prefix=None,
                         release=None,
                         n_candidates=n_candidates,
+                        label_matched=None,
                     )
                 )
                 continue
@@ -548,9 +583,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     prefix=prefix,
                     release=release,
                     n_candidates=n_candidates,
+                    label_matched=str(best_row.get("source_label")) if best_row.get("source_label") is not None else None,
                 )
             )
-            data_path, manifest_release = locate_data_file(year, prefix, str(concept.get("survey", "")), args.root, manifest_cache)
+            data_path, manifest_release = locate_data_file(
+                year,
+                prefix,
+                str(concept.get("survey", "")),
+                args.root,
+                manifest_cache,
+                dict_hint=str(best_row.get("dict_file")) if best_row.get("dict_file") is not None else None,
+            )
             effective_release = manifest_release or release
             if data_path is None:
                 logging.warning("No data file found for concept %s year %s prefix %s", concept_key, year, prefix)
@@ -578,6 +621,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "form_family": prefix,
                     "period_type": concept.get("period_type"),
                     "source_var": source_col,
+                    "label_matched": str(best_row.get("source_label")) if best_row.get("source_label") is not None else None,
                     "source_file": str(data_path),
                     "release": effective_release,
                     "notes": concept.get("notes"),
