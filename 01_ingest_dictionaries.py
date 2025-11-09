@@ -33,6 +33,7 @@ VAR_PREFIX_RE = re.compile(
     r"^(F[123]A|EFFY|EFIA?|EFIB|EFIC|EFID|E1D|OM|HR|IC|SFA|GRS?|PE|AL|ADM|HD|C)",
     re.IGNORECASE,
 )
+UNICODE_HYPHENS = r"[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]"
 
 VAR_CANDIDATES = (
     "varname",
@@ -250,7 +251,7 @@ def main() -> None:
         .fillna("")
         .str.strip()
         .str.lower()
-        .str.replace(r"[\u2010\u2011\u2012\u2013\u2014\u2212]", "-", regex=True)
+        .str.replace(UNICODE_HYPHENS, "-", regex=True)
         .str.replace(r"[•·]", " ", regex=True)
         .str.replace(r"[&]", " and ", regex=True)
         .str.replace(r"[^\w\s\(\)/%-]", "", regex=True)

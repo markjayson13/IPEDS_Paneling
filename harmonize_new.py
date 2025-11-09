@@ -82,6 +82,7 @@ OUTPUT_COLUMNS = [
     "source_var",
     "label_matched",
     "imputed_flag",
+    "is_imputed",
     "source_file",
     "release",
     "notes",
@@ -293,6 +294,13 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
             matched = True
     if not matched:
         score -= 1.0
+    required_keywords = [
+        tok.strip().lower()
+        for tok in (concept.get("requires_keywords") or [])
+        if isinstance(tok, str) and tok.strip()
+    ]
+    if required_keywords and not all(tok in label_norm for tok in required_keywords):
+        score = min(score, 3.0)
     bonus = 0.0
     forms = concept.get("forms")
     prefixes = extract_prefixes(row)
@@ -518,15 +526,23 @@ def locate_data_file(
     if not year_dir.exists():
         logging.error("Year directory %s missing", year_dir)
         return None, None
-    candidates = []
+    candidates: list[Path] = []
+    seen: set[Path] = set()
     prefix_lower = prefix.lower()
-    for ext in (".csv", ".tsv", ".txt", ".parquet", ".xlsx", ".xls"):
-        for file in year_dir.glob(f"**/*{prefix}*{ext}"):
+    allowed_suffixes = {".csv", ".tsv", ".txt", ".parquet", ".xlsx", ".xls"}
+    for file in year_dir.rglob("*"):
+        if not file.is_file():
+            continue
+        if file.suffix.lower() not in allowed_suffixes:
+            continue
+        name_lower = file.name.lower()
+        parent_lower = file.parent.name.lower()
+        if prefix_lower in name_lower or prefix_lower in parent_lower:
+            resolved = file.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
             candidates.append(file)
-    if not candidates:
-        for file in year_dir.glob("**/*"):
-            if prefix_lower in file.name.lower() and file.suffix.lower() in {".csv", ".tsv", ".txt", ".xlsx", ".xls", ".parquet"}:
-                candidates.append(file)
     if not candidates:
         logging.warning("No files found matching prefix %s in %s", prefix, year_dir)
         return None, None
@@ -566,8 +582,17 @@ def load_data_file(path: Path, cache: dict[Path, tuple[pd.DataFrame, Optional[st
         return cache[path]
     suffix = path.suffix.lower()
     if suffix in {".csv", ".tsv", ".txt"}:
-        sep = "," if suffix == ".csv" else "\t"
-        df = pd.read_csv(path, dtype=str, sep=sep, na_filter=False, low_memory=False)
+        if suffix == ".txt":
+            try:
+                df = pd.read_csv(path, dtype=str, sep=None, engine="python", na_filter=False, low_memory=False)
+            except Exception:
+                try:
+                    df = pd.read_csv(path, dtype=str, sep="|", na_filter=False, low_memory=False)
+                except Exception:
+                    df = pd.read_csv(path, dtype=str, delim_whitespace=True, na_filter=False, low_memory=False)
+        else:
+            sep = "," if suffix == ".csv" else "\t"
+            df = pd.read_csv(path, dtype=str, sep=sep, na_filter=False, low_memory=False)
     elif suffix == ".parquet":
         try:
             df = pd.read_parquet(path)
@@ -896,23 +921,40 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             values = apply_transform(values, str(concept.get("transform", "identity")))
             xvar = f"X{source_col}"
             impute_lookup = {str(col).lower(): col for col in df.columns}
-            xvar_match = impute_lookup.get(xvar.lower())
-            candidate_imputed_cols = (
-                [xvar_match]
-                if xvar_match is not None
-                else [col for col in df.columns if IMPUTE_FLAG_PATTERN.search(str(col))]
-            )
-            preferred_imputed = [
-                col
-                for col in candidate_imputed_cols
-                if source_col.lower() in str(col).lower()
-            ]
-            imputed_col = preferred_imputed[0] if preferred_imputed else (candidate_imputed_cols[0] if candidate_imputed_cols else None)
+            candidate_imputed_cols: list[str] = []
+            if xvar.lower() in impute_lookup:
+                candidate_imputed_cols.append(impute_lookup[xvar.lower()])
+            exact_key = f"x{source_col}".lower()
+            if exact_key in impute_lookup and impute_lookup[exact_key] not in candidate_imputed_cols:
+                candidate_imputed_cols.append(impute_lookup[exact_key])
+            if not candidate_imputed_cols:
+                pattern_cols = [col for col in df.columns if IMPUTE_FLAG_PATTERN.search(str(col))]
+                containing = [
+                    col
+                    for col in pattern_cols
+                    if source_col.lower() in str(col).lower()
+                ]
+                if containing:
+                    candidate_imputed_cols.extend(containing)
+                elif pattern_cols:
+                    candidate_imputed_cols.append(pattern_cols[0])
+            imputed_col = candidate_imputed_cols[0] if candidate_imputed_cols else None
             if imputed_col is not None:
                 record_kwargs["imputed_flag"] = str(imputed_col)
                 imputed_values = df[imputed_col]
             else:
                 imputed_values = pd.Series(pd.NA, index=df.index)
+
+            if isinstance(imputed_values, pd.Series):
+                normalized_flags = imputed_values.astype("string").str.strip().str.lower()
+                not_imputed_tokens = {"", "0", "n", "na", "nan", "none", "null", "no", "false"}
+                missing_mask = normalized_flags.isna()
+                false_mask = normalized_flags.isin(not_imputed_tokens)
+                bool_mask = (~missing_mask) & (~false_mask)
+                is_imputed = bool_mask.astype("boolean").mask(missing_mask, pd.NA)
+            else:
+                is_imputed = pd.Series(pd.NA, index=df.index, dtype="boolean")
+
             frame = pd.DataFrame(
                 {
                     "UNITID": df[unitid_col],
@@ -927,6 +969,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "source_var": source_col,
                     "label_matched": label_matched,
                     "imputed_flag": imputed_values,
+                    "is_imputed": is_imputed,
                     "source_file": str(data_path),
                     "release": effective_release,
                     "notes": concept.get("notes"),
@@ -969,10 +1012,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if "accepted" not in audit_df:
         audit_df["accepted"] = pd.NA
     mask = audit_df["accepted"].isna()
-    audit_df.loc[mask, "accepted"] = audit_df.loc[mask, "score"].apply(
-        lambda s: s is not None and not pd.isna(s) and float(s) >= MIN_ACCEPT_SCORE
-    )
-    audit_df["accepted"] = audit_df["accepted"].astype(bool)
+    if mask.any():
+        audit_df.loc[mask, "accepted"] = audit_df.loc[mask, "score"].apply(
+            lambda s: s is not None and not pd.isna(s) and float(s) >= MIN_ACCEPT_SCORE
+        )
+    audit_df["accepted"] = audit_df["accepted"].astype("boolean")
     audit_df.to_csv("label_matches.csv", index=False)
     logging.info("Writing validation report to validation_report.csv")
     report_df.to_csv("validation_report.csv", index=False)

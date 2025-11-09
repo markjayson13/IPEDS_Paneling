@@ -15,6 +15,18 @@ growth_caps:
   - target_var: totrev_all
     max_abs_pct: 0.35
     description: "Total revenue outliers above 35% YoY require manual validation"
+  - target_var: e12_fte
+    max_abs_pct: 0.40
+    description: "12-month FTE should not change by more than 40% year-over-year absent major events"
+  - target_var: tuition_fees_net
+    max_abs_pct: 0.60
+    description: "Tuition and fees (net) spikes above 60% YoY usually indicate a mis-map or denominator issue"
+
+denominator_checks:
+  - numerator: tuition_fees_net
+    denominator: e12_fte
+    description: "Per-student FY metrics must pair tuition & fees net (FY) with 12-month FTE (AY) to avoid fall snapshot denominators."
+    require_denominator: true
 
 release_policy:
   allow_mixed_release: false
