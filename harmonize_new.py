@@ -144,7 +144,6 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument("--rules", type=Path, default=Path("validation_rules.yaml"), help="Validation rules YAML path")
     parser.add_argument("--strict-release", action="store_true", help="Error if mixed provisional/revised releases")
-    parser.add_argument("--strict-coverage", action="store_true", help="Error if any concept stays below MIN_ACCEPT_SCORE")
     parser.add_argument("--strict-coverage", action="store_true", help="Error if any concept fails to meet MIN_ACCEPT_SCORE")
     parser.add_argument("--log-level", type=str, default="INFO", help="Logging level (e.g., INFO, DEBUG)")
     return parser.parse_args(argv)
@@ -252,37 +251,6 @@ def filter_candidates_by_forms(df: pd.DataFrame, forms: Optional[Sequence[str]])
         prefixes = extract_prefixes(row)
         mask.append(bool(prefixes & allowed))
     return df.loc[mask].copy()
-
-
-def _parse_income_band(text: str) -> tuple[Optional[int], Optional[int]]:
-    text = (text or "").lower()
-    text = re.sub(r"[,$\s]+", " ", text)
-    match = re.search(r"(?:less than|under)\s*(\d{2,3} ?0{3})", text)
-    if match:
-        hi = int(match.group(1).replace(" ", ""))
-        return 0, hi
-    match = re.search(r"(\d{2,3} ?0{3})\s*(?:to|-|–)\s*(\d{2,3} ?0{3})", text)
-    if match:
-        lo = int(match.group(1).replace(" ", ""))
-        hi = int(match.group(2).replace(" ", ""))
-        return lo, hi
-    match = re.search(r"(\d{2,3} ?0{3})\s*(?:\+|or more|and above)", text)
-    if match:
-        lo = int(match.group(1).replace(" ", ""))
-        return lo, None
-    return None, None
-
-
-def _bands_overlap(a: tuple[Optional[int], Optional[int]], b: tuple[Optional[int], Optional[int]]) -> bool:
-    lo_a, hi_a = a
-    lo_b, hi_b = b
-    if lo_a is None and lo_b is None:
-        return True
-    lo_a = lo_a or 0
-    lo_b = lo_b or 0
-    hi_a = hi_a if hi_a is not None else float("inf")
-    hi_b = hi_b if hi_b is not None else float("inf")
-    return max(lo_a, lo_b) <= min(hi_a, hi_b)
 
 
 def score_candidate(row: pd.Series, concept: dict) -> float:
