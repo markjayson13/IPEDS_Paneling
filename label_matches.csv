@@ -1,5 +1,5 @@
 concept_key,year,target_var,source_var,dict_file,score,prefix,release,n_candidates,label_matched
-total_rev_invest_return,2004,total_rev_invest_return,,,0.0,,,245,
+total_rev_invest_return,2004,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F1A_Dict/f0304_f1a.xlsx,5.0,F1A,,245,Total revenues and other additions
 tuition_fees_net,2004,tuition_fees_net,,,1.0,,,245,
 state_appropriations,2004,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F1A_Dict/f0304_f1a.xlsx,5.0,F1A,,241,State appropriations
 investment_return,2004,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F1A_Dict/f0304_f1a.xlsx,5.0,F1A,,245,Investment income
@@ -15,7 +15,7 @@ anp_30_48,2004,anp_30_48,,,0.0,,,29,
 anp_48_75,2004,anp_48_75,,,0.0,,,29,
 anp_75_110,2004,anp_75_110,,,0.0,,,29,
 anp_110_plus,2004,anp_110_plus,,,0.0,,,29,
-total_rev_invest_return,2005,total_rev_invest_return,,,0.0,,,245,
+total_rev_invest_return,2005,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2005/F0405_F1A_Dict/f0405_f1a.xlsx,5.0,F1A,,245,Total revenues and other additions
 tuition_fees_net,2005,tuition_fees_net,,,1.0,,,245,
 state_appropriations,2005,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2005/F0405_F1A_Dict/f0405_f1a.xlsx,5.0,F1A,,241,State appropriations
 investment_return,2005,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2005/F0405_F1A_Dict/f0405_f1a.xlsx,5.0,F1A,,245,Investment income
@@ -31,7 +31,7 @@ anp_30_48,2005,anp_30_48,,,0.0,,,29,
 anp_48_75,2005,anp_48_75,,,0.0,,,29,
 anp_75_110,2005,anp_75_110,,,0.0,,,29,
 anp_110_plus,2005,anp_110_plus,,,0.0,,,29,
-total_rev_invest_return,2006,total_rev_invest_return,,,0.0,,,245,
+total_rev_invest_return,2006,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2006/F0506_F1A_Dict/f0506_f1a.xlsx,5.0,F1A,,245,Total revenues and other additions
 tuition_fees_net,2006,tuition_fees_net,,,1.0,,,245,
 state_appropriations,2006,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2006/F0506_F1A_Dict/f0506_f1a.xlsx,5.0,F1A,,241,State appropriations
 investment_return,2006,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2006/F0506_F1A_Dict/f0506_f1a.xlsx,5.0,F1A,,245,Investment income
@@ -47,7 +47,7 @@ anp_30_48,2006,anp_30_48,,,0.0,,,29,
 anp_48_75,2006,anp_48_75,,,0.0,,,29,
 anp_75_110,2006,anp_75_110,,,0.0,,,29,
 anp_110_plus,2006,anp_110_plus,,,0.0,,,29,
-total_rev_invest_return,2007,total_rev_invest_return,,,0.0,,,245,
+total_rev_invest_return,2007,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2007/F0607_F1A_Dict/f0607_f1a.xlsx,5.0,F1A,,245,Total revenues and other additions
 tuition_fees_net,2007,tuition_fees_net,,,1.0,,,245,
 state_appropriations,2007,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2007/F0607_F1A_Dict/f0607_f1a.xlsx,5.0,F1A,,241,State appropriations
 investment_return,2007,investment_return,F1AF09,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2007/F0607_F1A_F_Dict/f0607_f1a_f.xlsx,5.0,F1A,,245,Investment return
@@ -63,7 +63,7 @@ anp_30_48,2007,anp_30_48,,,0.0,,,29,
 anp_48_75,2007,anp_48_75,,,0.0,,,29,
 anp_75_110,2007,anp_75_110,,,0.0,,,29,
 anp_110_plus,2007,anp_110_plus,,,0.0,,,29,
-total_rev_invest_return,2008,total_rev_invest_return,,,0.0,,,221,
+total_rev_invest_return,2008,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2008/F0708_F1A_Dict/f0708_f1a.xlsx,5.0,F1A,,221,Total revenues and other additions
 tuition_fees_net,2008,tuition_fees_net,,,1.0,,,221,
 state_appropriations,2008,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2008/F0708_F1A_Dict/f0708_f1a.xlsx,5.0,F1A,,217,State appropriations
 investment_return,2008,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2008/F0708_F1A_Dict/f0708_f1a.xlsx,5.0,F1A,,221,Investment income
@@ -127,7 +127,7 @@ anp_30_48,2011,anp_30_48,,,,,,0,
 anp_48_75,2011,anp_48_75,,,,,,0,
 anp_75_110,2011,anp_75_110,,,,,,0,
 anp_110_plus,2011,anp_110_plus,,,,,,0,
-total_rev_invest_return,2012,total_rev_invest_return,,,0.0,,,184,
+total_rev_invest_return,2012,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2012/F1112_F1A_Dict/f1112_f1a.xlsx,5.0,F1A,,184,Total revenues and other additions
 tuition_fees_net,2012,tuition_fees_net,,,1.0,,,184,
 state_appropriations,2012,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2012/F1112_F1A_Dict/f1112_f1a.xlsx,5.0,F1A,,180,State appropriations
 investment_return,2012,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2012/F1112_F1A_Dict/f1112_f1a.xlsx,5.0,F1A,,184,Investment income
@@ -143,7 +143,7 @@ anp_30_48,2012,anp_30_48,,,,,,0,
 anp_48_75,2012,anp_48_75,,,,,,0,
 anp_75_110,2012,anp_75_110,,,,,,0,
 anp_110_plus,2012,anp_110_plus,,,,,,0,
-total_rev_invest_return,2013,total_rev_invest_return,,,0.0,,,184,
+total_rev_invest_return,2013,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2013/F1213_F1A_Dict/f1213_f1a.xlsx,5.0,F1A,,184,Total revenues and other additions
 tuition_fees_net,2013,tuition_fees_net,,,1.0,,,184,
 state_appropriations,2013,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2013/F1213_F1A_Dict/f1213_f1a.xlsx,5.0,F1A,,180,State appropriations
 investment_return,2013,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2013/F1213_F1A_Dict/f1213_f1a.xlsx,5.0,F1A,,184,Investment income
@@ -159,7 +159,7 @@ anp_30_48,2013,anp_30_48,NPIS422,/Users/markjaysonfarol13/Higher Ed research/IPE
 anp_48_75,2013,anp_48_75,NPIS432,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2013/SFA1213_Dict/sfa1213.xlsx,3.0,SFA,,219,"Average net price (income 48,001-75,000)-students receiving Title IV Federal financial aid, 2012-13"
 anp_75_110,2013,anp_75_110,NPIS442,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2013/SFA1213_Dict/sfa1213.xlsx,3.0,SFA,,219,"Average net price (income 75,001-110,000)-students receiving Title IV Federal financial aid, 2012-13"
 anp_110_plus,2013,anp_110_plus,,,0.0,,,219,
-total_rev_invest_return,2014,total_rev_invest_return,,,0.0,,,196,
+total_rev_invest_return,2014,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2014/F1314_F1A_Dict/f1314_f1a.xlsx,5.0,F1A,,196,Total revenues and other additions
 tuition_fees_net,2014,tuition_fees_net,,,1.0,,,196,
 state_appropriations,2014,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2014/F1314_F1A_Dict/f1314_f1a.xlsx,5.0,F1A,,180,State appropriations
 investment_return,2014,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2014/F1314_F1A_Dict/f1314_f1a.xlsx,5.0,F1A,,196,Investment income
@@ -175,7 +175,7 @@ anp_30_48,2014,anp_30_48,NPIS422,/Users/markjaysonfarol13/Higher Ed research/IPE
 anp_48_75,2014,anp_48_75,NPIS432,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2014/SFA1314_Dict/sfa1314.xlsx,3.0,SFA,,239,"Average net price (income 48,001-75,000)-students awarded Title IV federal financial aid, 2013-14"
 anp_75_110,2014,anp_75_110,NPIS442,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2014/SFA1314_Dict/sfa1314.xlsx,3.0,SFA,,239,"Average net price (income 75,001-110,000)-students awarded Title IV federal financial aid, 2013-14"
 anp_110_plus,2014,anp_110_plus,,,0.0,,,239,
-total_rev_invest_return,2015,total_rev_invest_return,,,0.0,,,201,
+total_rev_invest_return,2015,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2015/F1415_F1A_Dict/f1415_f1a.xlsx,5.0,F1A,,201,Total revenues and other additions
 tuition_fees_net,2015,tuition_fees_net,,,1.0,,,201,
 state_appropriations,2015,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2015/F1415_F1A_Dict/f1415_f1a.xlsx,5.0,F1A,,185,State appropriations
 investment_return,2015,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2015/F1415_F1A_Dict/f1415_f1a.xlsx,5.0,F1A,,201,Investment income
@@ -191,7 +191,7 @@ anp_30_48,2015,anp_30_48,NPIS422,/Users/markjaysonfarol13/Higher Ed research/IPE
 anp_48_75,2015,anp_48_75,NPIS432,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2015/SFA1415_Dict/sfa1415.xlsx,3.0,SFA,,239,"Average net price (income 48,001-75,000)-students awarded Title IV federal financial aid, 2014-15"
 anp_75_110,2015,anp_75_110,NPIS442,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2015/SFA1415_Dict/sfa1415.xlsx,3.0,SFA,,239,"Average net price (income 75,001-110,000)-students awarded Title IV federal financial aid, 2014-15"
 anp_110_plus,2015,anp_110_plus,,,0.0,,,239,
-total_rev_invest_return,2016,total_rev_invest_return,,,0.0,,,145,
+total_rev_invest_return,2016,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2016/F1516_F1A_Dict/f1516_f1a.xlsx,5.0,F1A,,145,Total revenues and other additions
 tuition_fees_net,2016,tuition_fees_net,,,1.0,,,145,
 state_appropriations,2016,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2016/F1516_F1A_Dict/f1516_f1a.xlsx,5.0,F1A,,129,State appropriations
 investment_return,2016,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2016/F1516_F1A_Dict/f1516_f1a.xlsx,5.0,F1A,,145,Investment income
@@ -207,7 +207,7 @@ anp_30_48,2016,anp_30_48,NPIS422,/Users/markjaysonfarol13/Higher Ed research/IPE
 anp_48_75,2016,anp_48_75,NPIS432,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2016/SFA1516_Dict/sfa1516.xlsx,3.0,SFA,,239,"Average net price (income 48,001-75,000)-students awarded Title IV federal financial aid, 2015-16"
 anp_75_110,2016,anp_75_110,NPIS442,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2016/SFA1516_Dict/sfa1516.xlsx,3.0,SFA,,239,"Average net price (income 75,001-110,000)-students awarded Title IV federal financial aid, 2015-16"
 anp_110_plus,2016,anp_110_plus,,,0.0,,,239,
-total_rev_invest_return,2017,total_rev_invest_return,,,0.0,,,145,
+total_rev_invest_return,2017,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2017/F1617_F1A_Dict/f1617_f1a.xlsx,5.0,F1A,,145,Total revenues and other additions
 tuition_fees_net,2017,tuition_fees_net,,,1.0,,,145,
 state_appropriations,2017,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2017/F1617_F1A_Dict/f1617_f1a.xlsx,5.0,F1A,,129,State appropriations
 investment_return,2017,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2017/F1617_F1A_Dict/f1617_f1a.xlsx,5.0,F1A,,145,Investment income
@@ -223,7 +223,7 @@ anp_30_48,2017,anp_30_48,NPIS422,/Users/markjaysonfarol13/Higher Ed research/IPE
 anp_48_75,2017,anp_48_75,NPIS432,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2017/SFA1617_Dict/sfa1617.xlsx,3.0,SFA,,239,"Average net price (income 48,001-75,000)-students awarded Title IV federal financial aid, 2016-17"
 anp_75_110,2017,anp_75_110,NPIS442,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2017/SFA1617_Dict/sfa1617.xlsx,3.0,SFA,,239,"Average net price (income 75,001-110,000)-students awarded Title IV federal financial aid, 2016-17"
 anp_110_plus,2017,anp_110_plus,,,0.0,,,239,
-total_rev_invest_return,2018,total_rev_invest_return,,,0.0,,,145,
+total_rev_invest_return,2018,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2018/F1718_F1A_Dict/f1718_f1a.xlsx,5.0,F1A,,145,Total revenues and other additions
 tuition_fees_net,2018,tuition_fees_net,,,1.0,,,145,
 state_appropriations,2018,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2018/F1718_F1A_Dict/f1718_f1a.xlsx,5.0,F1A,,129,State appropriations
 investment_return,2018,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2018/F1718_F1A_Dict/f1718_f1a.xlsx,5.0,F1A,,145,Investment income
@@ -239,7 +239,7 @@ anp_30_48,2018,anp_30_48,NPIS422,/Users/markjaysonfarol13/Higher Ed research/IPE
 anp_48_75,2018,anp_48_75,NPIS432,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2018/SFA1718_Dict/sfa1718.xlsx,3.0,SFA,,239,"Average net price (income 48,001-75,000)-students awarded Title IV federal financial aid, 2017-18"
 anp_75_110,2018,anp_75_110,NPIS442,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2018/SFA1718_Dict/sfa1718.xlsx,3.0,SFA,,239,"Average net price (income 75,001-110,000)-students awarded Title IV federal financial aid, 2017-18"
 anp_110_plus,2018,anp_110_plus,,,0.0,,,239,
-total_rev_invest_return,2019,total_rev_invest_return,,,0.0,,,149,
+total_rev_invest_return,2019,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2019/F1819_F1A_Dict/f1819_f1a.xlsx,5.0,F1A,,149,Total revenues and other additions
 tuition_fees_net,2019,tuition_fees_net,,,1.0,,,149,
 state_appropriations,2019,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2019/F1819_F1A_Dict/f1819_f1a.xlsx,5.0,F1A,,133,State appropriations
 investment_return,2019,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2019/F1819_F1A_Dict/f1819_f1a.xlsx,5.0,F1A,,149,Investment income
@@ -255,7 +255,7 @@ anp_30_48,2019,anp_30_48,NPIS422,/Users/markjaysonfarol13/Higher Ed research/IPE
 anp_48_75,2019,anp_48_75,NPIS432,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2019/SFA1819_Dict/sfa1819.xlsx,3.0,SFA,,231,"Average net price (income 48,001-75,000)-students awarded Title IV federal financial aid, 2018-19"
 anp_75_110,2019,anp_75_110,NPIS442,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2019/SFA1819_Dict/sfa1819.xlsx,3.0,SFA,,231,"Average net price (income 75,001-110,000)-students awarded Title IV federal financial aid, 2018-19"
 anp_110_plus,2019,anp_110_plus,,,0.0,,,231,
-total_rev_invest_return,2020,total_rev_invest_return,,,0.0,,,180,
+total_rev_invest_return,2020,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2020/F1920_F1A_Dict/f1920_f1a.xlsx,5.0,F1A,,180,Total revenues and other additions
 tuition_fees_net,2020,tuition_fees_net,,,1.0,,,180,
 state_appropriations,2020,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2020/F1920_F1A_Dict/f1920_f1a.xlsx,5.0,F1A,,164,State appropriations
 investment_return,2020,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2020/F1920_F1A_Dict/f1920_f1a.xlsx,5.0,F1A,,180,Investment income
@@ -271,7 +271,7 @@ anp_30_48,2020,anp_30_48,NPIS422,/Users/markjaysonfarol13/Higher Ed research/IPE
 anp_48_75,2020,anp_48_75,NPIS432,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2020/SFA1920_Dict/sfa1920.xlsx,3.0,SFA,,231,"Average net price (income 48,001-75,000)-students awarded Title IV federal financial aid, 2019-20"
 anp_75_110,2020,anp_75_110,NPIS442,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2020/SFA1920_Dict/sfa1920.xlsx,3.0,SFA,,231,"Average net price (income 75,001-110,000)-students awarded Title IV federal financial aid, 2019-20"
 anp_110_plus,2020,anp_110_plus,,,0.0,,,231,
-total_rev_invest_return,2021,total_rev_invest_return,,,0.0,,,180,
+total_rev_invest_return,2021,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2021/F2021_F1A_Dict/f2021_f1a.xlsx,5.0,F1A,,180,Total revenues and other additions
 tuition_fees_net,2021,tuition_fees_net,,,1.0,,,180,
 state_appropriations,2021,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2021/F2021_F1A_Dict/f2021_f1a.xlsx,5.0,F1A,,164,State appropriations
 investment_return,2021,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2021/F2021_F1A_Dict/f2021_f1a.xlsx,5.0,F1A,,180,Investment income
@@ -287,7 +287,7 @@ anp_30_48,2021,anp_30_48,NPIS422,/Users/markjaysonfarol13/Higher Ed research/IPE
 anp_48_75,2021,anp_48_75,NPIS432,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2021/SFA2021_Dict/sfa2021.xlsx,3.0,SFA,,231,"Average net price (income 48,001-75,000)-students awarded Title IV federal financial aid, 2020-21"
 anp_75_110,2021,anp_75_110,NPIS442,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2021/SFA2021_Dict/sfa2021.xlsx,3.0,SFA,,231,"Average net price (income 75,001-110,000)-students awarded Title IV federal financial aid, 2020-21"
 anp_110_plus,2021,anp_110_plus,,,0.0,,,231,
-total_rev_invest_return,2022,total_rev_invest_return,,,0.0,,,180,
+total_rev_invest_return,2022,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2022/F2122_F1A_Dict/f2122_f1a.xlsx,5.0,F1A,,180,Total revenues and other additions
 tuition_fees_net,2022,tuition_fees_net,,,1.0,,,180,
 state_appropriations,2022,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2022/F2122_F1A_Dict/f2122_f1a.xlsx,5.0,F1A,,164,State appropriations
 investment_return,2022,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2022/F2122_F1A_Dict/f2122_f1a.xlsx,5.0,F1A,,180,Investment income
@@ -303,7 +303,7 @@ anp_30_48,2022,anp_30_48,NPIS422,/Users/markjaysonfarol13/Higher Ed research/IPE
 anp_48_75,2022,anp_48_75,NPIS432,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2022/SFA2122_Dict/sfa2122.xlsx,3.0,SFA,,247,"Average net price (income 48,001-75,000)-students awarded Title IV federal financial aid, 2021-22"
 anp_75_110,2022,anp_75_110,NPIS442,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2022/SFA2122_Dict/sfa2122.xlsx,3.0,SFA,,247,"Average net price (income 75,001-110,000)-students awarded Title IV federal financial aid, 2021-22"
 anp_110_plus,2022,anp_110_plus,,,0.0,,,247,
-total_rev_invest_return,2023,total_rev_invest_return,,,0.0,,,180,
+total_rev_invest_return,2023,total_rev_invest_return,F1D01,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2023/F2223_F1A_Dict/f2223_f1a.xlsx,5.0,F1A,,180,Total revenues and other additions
 tuition_fees_net,2023,tuition_fees_net,,,1.0,,,180,
 state_appropriations,2023,state_appropriations,F1B11,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2023/F2223_F1A_Dict/f2223_f1a.xlsx,5.0,F1A,,164,State appropriations
 investment_return,2023,investment_return,F1B17,/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2023/F2223_F1A_Dict/f2223_f1a.xlsx,5.0,F1A,,180,Investment income
