@@ -1,6 +1,0 @@
-rule_type,description,violations
-nonnegative,Financials and headcounts must be >= 0,0
-balance,Tuition is a component of total revenues; ensure totals exceed or equal tuition,0
-growth_cap,Undergraduate headcount should not jump >25% year-over-year without review,0
-growth_cap,Total revenue outliers above 35% YoY require manual validation,0
-release_policy,Warn if provisional and revised releases are mixed within the same panel slice,0

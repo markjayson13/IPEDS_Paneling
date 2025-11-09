@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
+# Generated harmonization artifacts
+*.parquet
+label_matches.csv
+validation_report.csv
