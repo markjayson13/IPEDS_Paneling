@@ -490,7 +490,8 @@ def load_data_file(path: Path, cache: dict[Path, tuple[pd.DataFrame, Optional[st
             raise
         df = df.applymap(lambda x: str(x) if not pd.isna(x) else None)
     elif suffix in {".xlsx", ".xls"}:
-        df = pd.read_excel(path, dtype=str)
+        engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
+        df = pd.read_excel(path, dtype=str, engine=engine)
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
     df.columns = [str(col) for col in df.columns]

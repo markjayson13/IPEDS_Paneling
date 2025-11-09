@@ -114,7 +114,7 @@ def read_any_dictionary(path: Path) -> pd.DataFrame:
         return None
 
     if suffix in {".xlsx", ".xls"}:
-        engine = "openpyxl" if suffix == ".xlsx" else None
+        engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
         xls = pd.ExcelFile(path, engine=engine)
         extracted = None
         for sheet in xls.sheet_names:
@@ -137,7 +137,8 @@ def read_any_dictionary(path: Path) -> pd.DataFrame:
         return extracted
 
     # Fallback: let pandas attempt to read (e.g., TXT)
-    df = pd.read_excel(path, sheet_name=0, dtype=str)
+    engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
+    df = pd.read_excel(path, sheet_name=0, dtype=str, engine=engine)
     extracted = extract_columns(df)
     if extracted is None:
         extracted = df.iloc[:, :2].copy()
