@@ -36,7 +36,12 @@ import yaml
 
 from concept_catalog import CONCEPTS
 
-MIN_ACCEPT_SCORE = 2.5
+MIN_ACCEPT_SCORE = 3.0
+
+METADATA_NEGATIVES = re.compile(
+    r"^(unitid(_p)?|unit id|instnm|institution name|year|state|zip|fips|sector)$",
+    re.IGNORECASE,
+)
 
 NA_TOKENS = [
     "PrivacySuppressed",
@@ -164,20 +169,30 @@ def filter_candidates_by_forms(df: pd.DataFrame, forms: Optional[Sequence[str]])
 
 
 def score_candidate(row: pd.Series, concept: dict) -> float:
-    label_norm = str(row.get("source_label_norm") or row.get("source_label") or "").strip()
+    label_norm_raw = str(row.get("source_label_norm") or row.get("source_label") or "").strip()
+    label_norm_stripped = re.sub(r"[,;$%]", "", label_norm_raw)
+    label_norm = label_norm_stripped.lower()
+
+    if METADATA_NEGATIVES.match(label_norm_stripped):
+        return -5.0
+
     score = 0.0
     matched = False
     for pattern in concept.get("label_regex", []):
         regex = re.compile(pattern, re.IGNORECASE)
-        if regex.fullmatch(label_norm):
+        if regex.fullmatch(label_norm) or regex.fullmatch(label_norm_stripped) or regex.fullmatch(label_norm_raw):
             score = max(score, 4.0)
             matched = True
             break
-        if regex.search(label_norm):
+        if (
+            regex.search(label_norm)
+            or regex.search(label_norm_stripped)
+            or regex.search(label_norm_raw)
+        ):
             score = max(score, 2.0)
             matched = True
     if not matched:
-        score -= 1.0  # discourage unmatched entries
+        score -= 1.0
     bonus = 0.0
     forms = concept.get("forms")
     prefixes = extract_prefixes(row)
@@ -195,7 +210,9 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
             bonus = 1.0
     score += bonus
     for pattern in concept.get("exclude_regex", []):
-        if re.search(pattern, label_norm, flags=re.IGNORECASE):
+        if re.search(pattern, label_norm, flags=re.IGNORECASE) or re.search(
+            pattern, label_norm_raw, flags=re.IGNORECASE
+        ):
             score -= 2.0
     return score
 

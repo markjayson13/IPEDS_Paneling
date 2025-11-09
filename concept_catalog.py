@@ -31,8 +31,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
             "label_regex": [
-                r"^total revenues?(?: and other additions)?(?: and )?investment (?:return|income)(?:.*)$",
-                r"^total revenues?(?:,? operating and nonoperating)?(?:.*investment (?:return|income).*)$",
+                r"^total revenues?(?: and (?:other additions )?)?investment (?:return|income).*$",
+                r"^total revenues?(?:,? operating and nonoperating)?.*investment (?:return|income).*$",
             ],
             "exclude_regex": [
                 r"endowment (?:market )?value",
@@ -179,13 +179,14 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "forms": ["E12", "E1D", "EFFY"],
             "label_regex": [
-                r"^12[- ]?month.*full[- ]?time equivalent.*$",
-                r"^full[- ]?time equivalent.*12[- ]?month.*$",
-                r"^effy.*full[- ]?time equivalent.*$",
+                r"(?:^|.*)\b12[- ]?month\b.*\bfull[- ]?time equivalent\b.*",
+                r"(?:^|.*)\bfull[- ]?time equivalent\b.*\b12[- ]?month\b.*",
+                r"(?:^|.*)\beffy\b.*\bfull[- ]?time equivalent\b.*",
             ],
             "exclude_regex": [
+                r"\bfall\b",
                 r"\bef\b",
-                r"by level|undergraduate|graduate",
+                r"\bundergraduate\b|\bgraduate\b",
             ],
             "notes": "Use E12/E1D/EFFY derived FTE; avoid EF fall FTE variants.",
             "transform": "identity",
@@ -202,13 +203,13 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "forms": ["SFA"],
             "label_regex": [
-                r"^number of.*pell.*full[- ]?time.*first[- ]?time.*undergraduat.*$",
-                r"^pell.*recipients.*ftft.*$",
+                r"(?:^|.*)\b(number|no\.)\s+of\b.*\bpell\b.*\bfull[- ]?time\b.*\bfirst[- ]?time\b.*\bundergrad",
+                r"(?:^|.*)\bpell\b.*\brecipients?\b.*\bfull[- ]?time\b.*\bfirst[- ]?time\b",
             ],
             "exclude_regex": [
-                r"all undergraduates|part[- ]?time|graduate",
+                r"\bamount\b|\bdollar(s)?\b|\bavg\b|\baverage\b|\bper[- ]?recipient\b|\btotal amount\b",
             ],
-            "notes": "Restrict to FTFT cohort.",
+            "notes": "Restrict to FTFT cohort; exclude dollar amounts.",
             "transform": "identity",
         },
         "pell_amount": {
@@ -219,10 +220,12 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "forms": ["SFA"],
             "label_regex": [
-                r"^pell grants?.*(?:amount|total|dollars).*$",
+                r"(?:^|.*)\bpell grants?\b.*\b(amount|total|dollars?)\b",
             ],
-            "exclude_regex": [],
-            "notes": "",
+            "exclude_regex": [
+                r"\brecipients?\b|\bavg\b|\baverage\b|\bper[- ]?recipient\b",
+            ],
+            "notes": "Total Pell dollars; exclude counts and averages.",
             "transform": "identity",
         },
 
@@ -235,7 +238,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "forms": ["SFA", "CST"],
             "label_regex": [
-                r"average net price.*(?:less than 30[, ]?000|0[-–]\s?30[, ]?000|0 to 30[, ]?000)",
+                r"average net price.*(?:less than\s*30[, ]?0{3}|0\s*[-–]\s*30[, ]?0{3}|0\s*to\s*30[, ]?0{3}|0\s*-\s*30k)",
             ],
             "exclude_regex": [],
             "notes": "Title IV band.",
@@ -249,7 +252,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "forms": ["SFA", "CST"],
             "label_regex": [
-                r"average net price.*(?:30[, ]?001[-–]\s?48[, ]?000|30 to 48[, ]?000)",
+                r"average net price.*(?:30[, ]?0{3}?\s*(to|[-–])\s*48[, ]?0{3}|30[, ]?001\s*(to|[-–])\s*48[, ]?0{3})",
             ],
             "exclude_regex": [],
             "notes": "",
@@ -263,7 +266,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "forms": ["SFA", "CST"],
             "label_regex": [
-                r"average net price.*(?:48[, ]?001[-–]\s?75[, ]?000|48 to 75[, ]?000)",
+                r"average net price.*(?:48[, ]?0{3}?\s*(to|[-–])\s*75[, ]?0{3}|48[, ]?001\s*(to|[-–])\s*75[, ]?0{3})",
             ],
             "exclude_regex": [],
             "notes": "",
@@ -277,7 +280,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "forms": ["SFA", "CST"],
             "label_regex": [
-                r"average net price.*(?:75[, ]?001[-–]\s?110[, ]?000|75 to 110[, ]?000)",
+                r"average net price.*(?:75[, ]?0{3}?\s*(to|[-–])\s*110[, ]?0{3}|75[, ]?001\s*(to|[-–])\s*110[, ]?0{3})",
             ],
             "exclude_regex": [],
             "notes": "",
@@ -291,7 +294,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "forms": ["SFA", "CST"],
             "label_regex": [
-                r"average net price.*(?:110[, ]?001.*|110[, ]?000 or more|110[, ]?001 or more)",
+                r"average net price.*(110[, ]?0{3}\s*(or more|\+)|110[, ]?001\s*(or more|\+))",
             ],
             "exclude_regex": [],
             "notes": "",
