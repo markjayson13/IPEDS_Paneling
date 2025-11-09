@@ -203,7 +203,11 @@ def main() -> None:
         .fillna("")
         .str.strip()
         .str.lower()
+        .str.replace(r"[•·]", " ", regex=True)
+        .str.replace(r"[&]", " and ", regex=True)
+        .str.replace(r"[^\w\s\(\)/%-]", "", regex=True)
         .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
     )
 
     lake.to_parquet(args.output, index=False)
