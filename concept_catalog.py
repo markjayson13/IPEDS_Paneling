@@ -133,6 +133,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [
                 r"^total expenses?(?: and deductions)?$",
                 r"^total expenses?$",
+                r"^total.*expenses?.*$",
             ],
             "exclude_regex": [],
             "notes": "",
@@ -148,6 +149,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [
                 r"^instruction(?:\s*expenses?)?$",
                 r"^instruction\s*-\s*total$",
+                r"^instruction\b.*expenses?.*$",
+                r"^instruction\b.*total.*$",
             ],
             "exclude_regex": [
                 r"instructional support",
@@ -250,8 +253,6 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "SFA",
             "period_type": "AY",
             "forms": ["SFA", "CST"],
-            "band_min": 0,
-            "band_max": 30000,
             "label_regex": [
                 r"average net price.*(?:less than\s*30[, ]?0{3}|0\s*[-–]\s*30[, ]?0{3}|0\s*to\s*30[, ]?0{3}|0\s*-\s*30k)",
                 r"average net price.*title iv.*0.*30[, ]?000",
@@ -259,6 +260,9 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [],
             "notes": "Title IV band.",
             "transform": "identity",
+            "band_min": 0,
+            "band_max": 30000,
+            "open_upper": False,
         },
         "anp_30_48": {
             "target_var": "anp_30_48",
@@ -267,8 +271,6 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "SFA",
             "period_type": "AY",
             "forms": ["SFA", "CST"],
-            "band_min": 30001,
-            "band_max": 48000,
             "label_regex": [
                 r"average net price.*(?:30[, ]?0{3}?\s*(to|[-–])\s*48[, ]?0{3}|30[, ]?001\s*(to|[-–])\s*48[, ]?0{3})",
                 r"average net price.*title iv.*30[, ]?001.*48[, ]?000",
@@ -276,6 +278,9 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [],
             "notes": "",
             "transform": "identity",
+            "band_min": 30001,
+            "band_max": 48000,
+            "open_upper": False,
         },
         "anp_48_75": {
             "target_var": "anp_48_75",
@@ -284,8 +289,6 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "SFA",
             "period_type": "AY",
             "forms": ["SFA", "CST"],
-            "band_min": 48001,
-            "band_max": 75000,
             "label_regex": [
                 r"average net price.*(?:48[, ]?0{3}?\s*(to|[-–])\s*75[, ]?0{3}|48[, ]?001\s*(to|[-–])\s*75[, ]?0{3})",
                 r"average net price.*title iv.*48[, ]?001.*75[, ]?000",
@@ -293,6 +296,9 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [],
             "notes": "",
             "transform": "identity",
+            "band_min": 48001,
+            "band_max": 75000,
+            "open_upper": False,
         },
         "anp_75_110": {
             "target_var": "anp_75_110",
@@ -301,8 +307,6 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "SFA",
             "period_type": "AY",
             "forms": ["SFA", "CST"],
-            "band_min": 75001,
-            "band_max": 110000,
             "label_regex": [
                 r"average net price.*(?:75[, ]?0{3}?\s*(to|[-–])\s*110[, ]?0{3}|75[, ]?001\s*(to|[-–])\s*110[, ]?0{3})",
                 r"average net price.*title iv.*75[, ]?001.*110[, ]?000",
@@ -310,6 +314,9 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [],
             "notes": "",
             "transform": "identity",
+            "band_min": 75001,
+            "band_max": 110000,
+            "open_upper": False,
         },
         "anp_110_plus": {
             "target_var": "anp_110_plus",
@@ -318,8 +325,6 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "SFA",
             "period_type": "AY",
             "forms": ["SFA", "CST"],
-            "band_min": 110001,
-            "band_max": None,
             "label_regex": [
                 r"average net price.*(110[, ]?0{3}\s*(or more|\+)|110[, ]?001\s*(or more|\+))",
                 r"average net price.*(110[, ]?001|110[, ]?000 or more)",
@@ -327,6 +332,9 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [],
             "notes": "",
             "transform": "identity",
+            "band_min": 110000,
+            "band_max": None,
+            "open_upper": True,
         },
     }
 )

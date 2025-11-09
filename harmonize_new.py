@@ -88,8 +88,13 @@ OUTPUT_COLUMNS = [
 ]
 
 
+<<<<<<< HEAD
 def _to_lower(s: Optional[str]) -> str:
     return (s or "").strip().lower()
+=======
+def _to_lower(text: Optional[str]) -> str:
+    return (text or "").strip().lower()
+>>>>>>> 036e04c20bddcd178b22d07d8341daddc928c139
 
 
 def report_duplicate_modules() -> None:
@@ -911,7 +916,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     coverage_fail = False
     if args.strict_coverage:
+<<<<<<< HEAD
         weak = audit_df[(audit_df["year"].isin(years)) & (~audit_df["accepted"]) ]
+=======
+        weak = audit_df[(audit_df["year"].isin(years)) & (~audit_df["accepted"])]
+>>>>>>> 036e04c20bddcd178b22d07d8341daddc928c139
         if not weak.empty:
             coverage_fail = True
             logging.error(
@@ -919,6 +928,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 len(weak),
                 weak.head(10).to_string(index=False),
             )
+<<<<<<< HEAD
+=======
+
+>>>>>>> 036e04c20bddcd178b22d07d8341daddc928c139
     if errors or coverage_fail:
         for err in errors:
             logging.error(err)
