@@ -14,7 +14,13 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
-import pandas as pd
+try:  # pylint: disable=wrong-import-position
+    import pandas as pd
+except ImportError as exc:  # pragma: no cover - startup guard
+    sys.stderr.write(
+        "pandas/openpyxl/xlrd missing. Run: source .venv/bin/activate && pip install -r requirements.txt\n"
+    )
+    raise
 
 ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas")
 DEFAULT_OUTPUT = Path("dictionary_lake.parquet")
@@ -46,6 +52,25 @@ LABEL_CANDIDATES = (
     "long description",
     "valuelabel",
 )
+
+
+def report_duplicate_modules() -> None:
+    repo_root = Path(__file__).resolve().parent
+    targets = {
+        "01_ingest_dictionaries.py": Path(__file__).resolve(),
+        "harmonize_new.py": repo_root / "harmonize_new.py",
+        "concept_catalog.py": repo_root / "concept_catalog.py",
+    }
+    for name, canonical in targets.items():
+        canonical_path = canonical.resolve()
+        matches = [p.resolve() for p in repo_root.rglob(name)]
+        duplicates = [
+            p
+            for p in matches
+            if p != canonical_path and ".venv" not in p.parts and "__pycache__" not in p.parts
+        ]
+        for dup in duplicates:
+            print(f"REMOVE_AFTER_REVIEW duplicate module found: {dup}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -89,7 +114,7 @@ def read_any_dictionary(path: Path) -> pd.DataFrame:
         return None
 
     if suffix in {".xlsx", ".xls"}:
-        engine = "openpyxl" if suffix == ".xlsx" else None
+        engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
         xls = pd.ExcelFile(path, engine=engine)
         extracted = None
         for sheet in xls.sheet_names:
@@ -112,7 +137,8 @@ def read_any_dictionary(path: Path) -> pd.DataFrame:
         return extracted
 
     # Fallback: let pandas attempt to read (e.g., TXT)
-    df = pd.read_excel(path, sheet_name=0, dtype=str)
+    engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
+    df = pd.read_excel(path, sheet_name=0, dtype=str, engine=engine)
     extracted = extract_columns(df)
     if extracted is None:
         extracted = df.iloc[:, :2].copy()
@@ -158,6 +184,7 @@ def iter_dictionary_files(year_dir: Path) -> Iterable[Path]:
 
 def main() -> None:
     args = parse_args()
+    report_duplicate_modules()
     root = args.root
     if not root.exists():
         sys.exit(f"Root directory not found: {root}")

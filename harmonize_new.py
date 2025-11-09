@@ -35,14 +35,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Sequence
 
-import pandas as pd
+try:  # pylint: disable=wrong-import-position
+    import pandas as pd
+except ImportError as exc:  # pragma: no cover - startup guard
+    sys.stderr.write(
+        "pandas/openpyxl/xlrd missing. Run: source .venv/bin/activate && pip install -r requirements.txt\n"
+    )
+    raise
 import yaml
 
 from concept_catalog import CONCEPTS, GLOBAL_EXCLUDE
 
-MIN_ACCEPT_SCORE = 2.5
+MIN_ACCEPT_SCORE = 3.5
+if MIN_ACCEPT_SCORE < 3.5:  # pragma: no cover - sanity guard
+    raise ValueError("MIN_ACCEPT_SCORE must be at least 3.5")
 TOPK_AUDIT = 5
 FINANCE_STOCK_EXCLUDE = re.compile(r"endowment market value|net assets", re.IGNORECASE)
+IMPUTE_FLAG_PATTERN = re.compile(r"(imputation|impute|imputed|status\s*flag)", re.IGNORECASE)
 
 METADATA_NEGATIVES = re.compile(
     r"^(unitid(_p)?|unit id|instnm|institution name|year|state|zip|fips|sector)$",
@@ -77,6 +86,25 @@ OUTPUT_COLUMNS = [
     "release",
     "notes",
 ]
+
+
+def report_duplicate_modules() -> None:
+    repo_root = Path(__file__).resolve().parent
+    targets = {
+        "01_ingest_dictionaries.py": repo_root / "01_ingest_dictionaries.py",
+        "harmonize_new.py": Path(__file__).resolve(),
+        "concept_catalog.py": repo_root / "concept_catalog.py",
+    }
+    for name, canonical in targets.items():
+        canonical_path = canonical.resolve()
+        matches = [p.resolve() for p in repo_root.rglob(name)]
+        duplicates = [
+            p
+            for p in matches
+            if p != canonical_path and ".venv" not in p.parts and "__pycache__" not in p.parts
+        ]
+        for dup in duplicates:
+            print(f"REMOVE_AFTER_REVIEW duplicate module found: {dup}")
 
 
 @dataclass
@@ -140,7 +168,15 @@ def parse_years(expr: str) -> List[int]:
 
 def load_dictionary_lake(path: Path) -> pd.DataFrame:
     logging.info("Loading dictionary lake from %s", path)
-    lake = pd.read_parquet(path)
+    try:
+        lake = pd.read_parquet(path)
+    except (ImportError, ValueError) as exc:
+        message = str(exc).lower()
+        if "pyarrow" in message or "fastparquet" in message:
+            raise ImportError(
+                "pyarrow or fastparquet required for parquet support. Run: source .venv/bin/activate && pip install -r requirements.txt"
+            ) from exc
+        raise
     if "year" not in lake.columns:
         raise KeyError("dictionary lake must include a 'year' column")
     lake["year"] = lake["year"].astype(int)
@@ -442,10 +478,19 @@ def load_data_file(path: Path, cache: dict[Path, tuple[pd.DataFrame, Optional[st
         sep = "," if suffix == ".csv" else "\t"
         df = pd.read_csv(path, dtype=str, sep=sep, na_filter=False, low_memory=False)
     elif suffix == ".parquet":
-        df = pd.read_parquet(path)
+        try:
+            df = pd.read_parquet(path)
+        except (ImportError, ValueError) as exc:
+            message = str(exc).lower()
+            if "pyarrow" in message or "fastparquet" in message:
+                raise ImportError(
+                    "pyarrow or fastparquet required for parquet support. Run: source .venv/bin/activate && pip install -r requirements.txt"
+                ) from exc
+            raise
         df = df.applymap(lambda x: str(x) if not pd.isna(x) else None)
     elif suffix in {".xlsx", ".xls"}:
-        df = pd.read_excel(path, dtype=str)
+        engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
+        df = pd.read_excel(path, dtype=str, engine=engine)
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
     df.columns = [str(col) for col in df.columns]
@@ -618,6 +663,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     configure_logging(args.log_level)
     years = parse_years(args.years)
+    report_duplicate_modules()
     lake = load_dictionary_lake(args.lake)
     rules = load_validation_rules(args.rules)
 
@@ -722,9 +768,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 continue
             values = coerce_numeric(df[source_col])
             values = apply_transform(values, str(concept.get("transform", "identity")))
-            flag_pattern = re.compile(rf"^{re.escape(source_col)}.*(flag|impute|imputed)$", re.IGNORECASE)
-            imputed_col = next((col for col in df.columns if flag_pattern.search(str(col))), None)
-            if imputed_col:
+            candidate_imputed_cols = [col for col in df.columns if IMPUTE_FLAG_PATTERN.search(str(col))]
+            preferred_imputed = [
+                col
+                for col in candidate_imputed_cols
+                if source_col.lower() in str(col).lower()
+            ]
+            imputed_col = preferred_imputed[0] if preferred_imputed else (candidate_imputed_cols[0] if candidate_imputed_cols else None)
+            if imputed_col is not None:
                 record_kwargs["imputed_flag"] = str(imputed_col)
                 imputed_values = df[imputed_col]
             else:
