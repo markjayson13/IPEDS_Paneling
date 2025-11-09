@@ -16,6 +16,10 @@ files without editing legacy modules.
 from __future__ import annotations
 
 from collections import OrderedDict
+import re
+
+
+GLOBAL_EXCLUDE = re.compile(r"^(unitid|instnm|opeid.*|^id$)", re.I)
 
 
 CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
@@ -31,12 +35,18 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
             "label_regex": [
+                r"^total revenues? (?:and )?investment return$",
+                r"^total revenues? (?:and )?other additions$",
+                r"^total other revenues? (?:&|and) additions$",
+                # Accept both modern and 2004-era labels; punctuation is preserved in source_label_norm
+                r"^total revenues?(?: &| and )other additions(?:.*)?$",
+                r"^total revenues?(?: and )?investment return(?:.*)?$",
                 r"^total revenues?(?: and (?:other additions )?)?investment (?:return|income).*$",
                 r"^total revenues?(?:,? operating and nonoperating)?.*investment (?:return|income).*$",
             ],
             "exclude_regex": [
-                r"endowment (?:market )?value",
-                r"balance sheet|net assets|position",
+                r"endowment (?:market )?value|net assets|liabilities",
+                r"balance sheet|position",
             ],
             "notes": "Aligned total. Avoid stock accounts and balance-sheet lines.",
             "transform": "identity",
@@ -58,6 +68,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"before deducting",
                 r"discounts? and allowances$",
                 r"scholarship allowances$",
+                r"\b(before|gross)\b|discounts? (?:not )?deducted|allowances? (?:not )?deducted",
             ],
             "notes": "Map only the net line. Exclude allowances and gross.",
             "transform": "identity",
@@ -179,14 +190,15 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "forms": ["E12", "E1D", "EFFY"],
             "label_regex": [
-                r"(?:^|.*)\b12[- ]?month\b.*\bfull[- ]?time equivalent\b.*",
-                r"(?:^|.*)\bfull[- ]?time equivalent\b.*\b12[- ]?month\b.*",
-                r"(?:^|.*)\beffy\b.*\bfull[- ]?time equivalent\b.*",
+                r"^full[- ]?time equivalent.*$",
+                r"^fte.*enrollment.*$",
+                r"^total 12[- ]?month full[- ]?time equivalent.*$",
             ],
             "exclude_regex": [
                 r"\bfall\b",
                 r"\bef\b",
                 r"\bundergraduate\b|\bgraduate\b",
+                r"^unitid$|identifier|opeid",
             ],
             "notes": "Use E12/E1D/EFFY derived FTE; avoid EF fall FTE variants.",
             "transform": "identity",
@@ -203,11 +215,11 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "forms": ["SFA"],
             "label_regex": [
-                r"(?:^|.*)\b(number|no\.)\s+of\b.*\bpell\b.*\bfull[- ]?time\b.*\bfirst[- ]?time\b.*\bundergrad",
-                r"(?:^|.*)\bpell\b.*\brecipients?\b.*\bfull[- ]?time\b.*\bfirst[- ]?time\b",
+                r"pell.*(?:recipients?|students (?:awarded|receiving)|number receiving).*full[- ]?time.*first[- ]?time",
             ],
             "exclude_regex": [
-                r"\bamount\b|\bdollar(s)?\b|\bavg\b|\baverage\b|\bper[- ]?recipient\b|\btotal amount\b",
+                r"amount|dollars|\$|total (?:aid|amount)|grant amount",
+                r"\bavg\b|\baverage\b|\bper[- ]?recipient\b",
             ],
             "notes": "Restrict to FTFT cohort; exclude dollar amounts.",
             "transform": "identity",
@@ -220,10 +232,11 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "forms": ["SFA"],
             "label_regex": [
-                r"(?:^|.*)\bpell grants?\b.*\b(amount|total|dollars?)\b",
+                r"pell grants?.*(?:amount|dollars|\$|total)",
             ],
             "exclude_regex": [
-                r"\brecipients?\b|\bavg\b|\baverage\b|\bper[- ]?recipient\b",
+                r"recipient|students|count|number",
+                r"\bavg\b|\baverage\b|\bper[- ]?recipient\b",
             ],
             "notes": "Total Pell dollars; exclude counts and averages.",
             "transform": "identity",
@@ -239,6 +252,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["SFA", "CST"],
             "label_regex": [
                 r"average net price.*(?:less than\s*30[, ]?0{3}|0\s*[-–]\s*30[, ]?0{3}|0\s*to\s*30[, ]?0{3}|0\s*-\s*30k)",
+                r"average net price.*title iv.*0.*30[, ]?000",
             ],
             "exclude_regex": [],
             "notes": "Title IV band.",
@@ -253,6 +267,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["SFA", "CST"],
             "label_regex": [
                 r"average net price.*(?:30[, ]?0{3}?\s*(to|[-–])\s*48[, ]?0{3}|30[, ]?001\s*(to|[-–])\s*48[, ]?0{3})",
+                r"average net price.*title iv.*30[, ]?001.*48[, ]?000",
             ],
             "exclude_regex": [],
             "notes": "",
@@ -267,6 +282,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["SFA", "CST"],
             "label_regex": [
                 r"average net price.*(?:48[, ]?0{3}?\s*(to|[-–])\s*75[, ]?0{3}|48[, ]?001\s*(to|[-–])\s*75[, ]?0{3})",
+                r"average net price.*title iv.*48[, ]?001.*75[, ]?000",
             ],
             "exclude_regex": [],
             "notes": "",
@@ -281,6 +297,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["SFA", "CST"],
             "label_regex": [
                 r"average net price.*(?:75[, ]?0{3}?\s*(to|[-–])\s*110[, ]?0{3}|75[, ]?001\s*(to|[-–])\s*110[, ]?0{3})",
+                r"average net price.*title iv.*75[, ]?001.*110[, ]?000",
             ],
             "exclude_regex": [],
             "notes": "",
@@ -295,6 +312,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["SFA", "CST"],
             "label_regex": [
                 r"average net price.*(110[, ]?0{3}\s*(or more|\+)|110[, ]?001\s*(or more|\+))",
+                r"average net price.*(110[, ]?001|110[, ]?000 or more)",
             ],
             "exclude_regex": [],
             "notes": "",

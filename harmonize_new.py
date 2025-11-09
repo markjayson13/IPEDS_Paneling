@@ -8,6 +8,10 @@ normalized dictionary labels, data files are located through the per-year
 manifest (with fallbacks), and the resulting long-form panel is validated using
 ``validation_rules.yaml``.
 
+Starting in the 2024-25 collection, Cost of Attendance (COA) and net price
+labels may surface under CST forms rather than SFA; the harmonizer honors that
+shift through the concept catalog's form mappings.
+
 Example
 -------
 To harmonize 2017-2018 data after running the downloader and dictionary ingest::
@@ -31,12 +35,24 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Sequence
 
-import pandas as pd
+try:  # pylint: disable=wrong-import-position
+    import pandas as pd
+except ImportError as exc:  # pragma: no cover - startup guard
+    sys.stderr.write(
+        "pandas/openpyxl/xlrd missing. Run: source .venv/bin/activate && pip install -r requirements.txt\n"
+    )
+    raise
+
 import yaml
 
-from concept_catalog import CONCEPTS
+from concept_catalog import CONCEPTS, GLOBAL_EXCLUDE
 
-MIN_ACCEPT_SCORE = 3.0
+MIN_ACCEPT_SCORE = 3.5
+if MIN_ACCEPT_SCORE < 3.5:  # pragma: no cover - sanity guard
+    raise ValueError("MIN_ACCEPT_SCORE must be at least 3.5")
+TOPK_AUDIT = 5
+FINANCE_STOCK_EXCLUDE = re.compile(r"endowment market value|net assets", re.IGNORECASE)
+IMPUTE_FLAG_PATTERN = re.compile(r"(imputation|impute|imputed|status\s*flag)", re.IGNORECASE)
 
 METADATA_NEGATIVES = re.compile(
     r"^(unitid(_p)?|unit id|instnm|institution name|year|state|zip|fips|sector)$",
@@ -66,10 +82,30 @@ OUTPUT_COLUMNS = [
     "period_type",
     "source_var",
     "label_matched",
+    "imputed_flag",
     "source_file",
     "release",
     "notes",
 ]
+
+
+def report_duplicate_modules() -> None:
+    repo_root = Path(__file__).resolve().parent
+    targets = {
+        "01_ingest_dictionaries.py": repo_root / "01_ingest_dictionaries.py",
+        "harmonize_new.py": Path(__file__).resolve(),
+        "concept_catalog.py": repo_root / "concept_catalog.py",
+    }
+    for name, canonical in targets.items():
+        canonical_path = canonical.resolve()
+        matches = [p.resolve() for p in repo_root.rglob(name)]
+        duplicates = [
+            p
+            for p in matches
+            if p != canonical_path and ".venv" not in p.parts and "__pycache__" not in p.parts
+        ]
+        for dup in duplicates:
+            print(f"REMOVE_AFTER_REVIEW duplicate module found: {dup}")
 
 
 @dataclass
@@ -77,13 +113,19 @@ class CandidateSelection:
     concept_key: str
     year: int
     target_var: str
-    source_var: Optional[str]
-    dict_file: Optional[str]
     score: Optional[float]
-    prefix: Optional[str]
-    release: Optional[str]
     n_candidates: int
+    source_var: Optional[str]
     label_matched: Optional[str]
+    dict_file: Optional[str]
+    dict_filename: Optional[str]
+    prefix_hint: Optional[str]
+    survey_hint: Optional[str]
+    chosen_data_file: Optional[str]
+    manifest_release: Optional[str]
+    notes: Optional[str]
+    top_alternates: Optional[str]
+    imputed_flag: Optional[str]
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -127,7 +169,15 @@ def parse_years(expr: str) -> List[int]:
 
 def load_dictionary_lake(path: Path) -> pd.DataFrame:
     logging.info("Loading dictionary lake from %s", path)
-    lake = pd.read_parquet(path)
+    try:
+        lake = pd.read_parquet(path)
+    except (ImportError, ValueError) as exc:
+        message = str(exc).lower()
+        if "pyarrow" in message or "fastparquet" in message:
+            raise ImportError(
+                "pyarrow or fastparquet required for parquet support. Run: source .venv/bin/activate && pip install -r requirements.txt"
+            ) from exc
+        raise
     if "year" not in lake.columns:
         raise KeyError("dictionary lake must include a 'year' column")
     lake["year"] = lake["year"].astype(int)
@@ -217,13 +267,31 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
     return score
 
 
-def choose_candidate(df: pd.DataFrame, concept_key: str, concept: dict) -> tuple[Optional[pd.Series], float]:
+def choose_candidate(
+    df: pd.DataFrame, concept_key: str, concept: dict
+) -> tuple[Optional[pd.Series], float, list[tuple[float, pd.Series]], int]:
     if df.empty:
-        return None, float("nan")
-    scored_rows = []
+        return None, float("nan"), [], 0
+
+    filtered_rows: list[pd.Series] = []
+    survey_lower = str(concept.get("survey", "")).strip().lower()
     for _, row in df.iterrows():
+        source_var = str(row.get("source_var") or "")
+        label_norm = str(row.get("source_label_norm") or row.get("source_label") or "")
+        if GLOBAL_EXCLUDE.search(source_var) or GLOBAL_EXCLUDE.search(label_norm):
+            continue
+        if survey_lower == "finance" and FINANCE_STOCK_EXCLUDE.search(label_norm):
+            continue
+        filtered_rows.append(row)
+
+    if not filtered_rows:
+        return None, float("nan"), [], 0
+
+    scored_rows: list[tuple[float, pd.Series]] = []
+    for row in filtered_rows:
         score = score_candidate(row, concept)
         scored_rows.append((score, row))
+
     scored_rows.sort(
         key=lambda item: (
             -item[0],
@@ -231,7 +299,16 @@ def choose_candidate(df: pd.DataFrame, concept_key: str, concept: dict) -> tuple
             -(len(str(item[1].get("source_label_norm") or item[1].get("source_label") or ""))),
         )
     )
-    best_score, best_row = scored_rows[0]
+
+    if not scored_rows:
+        return None, float("nan"), [], 0
+
+    top_candidates = scored_rows[:TOPK_AUDIT]
+    best_score, best_row = top_candidates[0]
+
+    if pd.isna(best_score) or best_score < MIN_ACCEPT_SCORE:
+        return None, best_score, top_candidates, len(filtered_rows)
+
     logging.info(
         "Resolved concept %s with source_var=%s label='%s' score=%.2f release=%s",
         concept_key,
@@ -240,7 +317,37 @@ def choose_candidate(df: pd.DataFrame, concept_key: str, concept: dict) -> tuple
         best_score,
         best_row.get("release"),
     )
-    return best_row, best_score
+    return best_row, best_score, top_candidates, len(filtered_rows)
+
+
+def coerce_optional_str(value: object) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned or cleaned.lower() in {"nan", "none"}:
+            return None
+        return cleaned
+    if pd.isna(value):
+        return None
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none"}:
+        return None
+    return text
+
+
+def format_top_alternates(candidates: list[tuple[float, pd.Series]]) -> str:
+    parts: list[str] = []
+    for score, row in candidates[1:]:
+        source_var = coerce_optional_str(row.get("source_var")) or ""
+        if not source_var:
+            continue
+        label = coerce_optional_str(row.get("source_label")) or coerce_optional_str(
+            row.get("source_label_norm")
+        )
+        score_str = "" if pd.isna(score) else f"{score:.2f}"
+        parts.append(f"{source_var}|{score_str}|{label or ''}")
+    return ";".join(parts)
 
 
 def determine_prefix(row: Optional[pd.Series], concept: dict) -> Optional[str]:
@@ -372,7 +479,15 @@ def load_data_file(path: Path, cache: dict[Path, tuple[pd.DataFrame, Optional[st
         sep = "," if suffix == ".csv" else "\t"
         df = pd.read_csv(path, dtype=str, sep=sep, na_filter=False, low_memory=False)
     elif suffix == ".parquet":
-        df = pd.read_parquet(path)
+        try:
+            df = pd.read_parquet(path)
+        except (ImportError, ValueError) as exc:
+            message = str(exc).lower()
+            if "pyarrow" in message or "fastparquet" in message:
+                raise ImportError(
+                    "pyarrow or fastparquet required for parquet support. Run: source .venv/bin/activate && pip install -r requirements.txt"
+                ) from exc
+            raise
         df = df.applymap(lambda x: str(x) if not pd.isna(x) else None)
     elif suffix in {".xlsx", ".xls"}:
         df = pd.read_excel(path, dtype=str)
@@ -548,6 +663,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     configure_logging(args.log_level)
     years = parse_years(args.years)
+    report_duplicate_modules()
     lake = load_dictionary_lake(args.lake)
     rules = load_validation_rules(args.rules)
 
@@ -562,70 +678,108 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         logging.info("Processing year %s with %d dictionary rows", year, len(year_lake))
         for concept_key, concept in CONCEPTS.items():
             candidates_df = filter_candidates_by_forms(year_lake, concept.get("forms"))
-            n_candidates = len(candidates_df)
-            best_row, best_score = choose_candidate(candidates_df, concept_key, concept) if n_candidates else (None, float("nan"))
-            if best_row is None or (pd.notna(best_score) and best_score < MIN_ACCEPT_SCORE):
+            raw_candidates = len(candidates_df)
+            best_row: Optional[pd.Series]
+            best_score: float
+            top_candidates: list[tuple[float, pd.Series]]
+            candidate_count = 0
+            if raw_candidates:
+                best_row, best_score, top_candidates, candidate_count = choose_candidate(
+                    candidates_df, concept_key, concept
+                )
+            else:
+                best_row, best_score, top_candidates = None, float("nan"), []
+            top_alternates = format_top_alternates(top_candidates)
+            primary_row = best_row if best_row is not None else (top_candidates[0][1] if top_candidates else None)
+            dict_file = coerce_optional_str(primary_row.get("dict_file")) if primary_row is not None else None
+            dict_filename = os.path.basename(dict_file) if dict_file else None
+            prefix_hint = coerce_optional_str(primary_row.get("prefix_hint")) if primary_row is not None else None
+            survey_hint = coerce_optional_str(primary_row.get("survey_hint")) if primary_row is not None else None
+            label_matched = coerce_optional_str(best_row.get("source_label")) if best_row is not None else None
+            source_var_val = coerce_optional_str(best_row.get("source_var")) if best_row is not None else None
+            score_val = None if pd.isna(best_score) else float(best_score)
+            record_kwargs = {
+                "concept_key": concept_key,
+                "year": year,
+                "target_var": str(concept.get("target_var")),
+                "score": score_val,
+                "n_candidates": candidate_count,
+                "source_var": source_var_val,
+                "label_matched": label_matched,
+                "dict_file": dict_file,
+                "dict_filename": dict_filename,
+                "prefix_hint": prefix_hint,
+                "survey_hint": survey_hint,
+                "chosen_data_file": None,
+                "manifest_release": None,
+                "notes": concept.get("notes"),
+                "top_alternates": top_alternates,
+                "imputed_flag": None,
+            }
+            if best_row is None:
                 logging.warning(
                     "Weak or no match for %s in %s (score=%.2f; candidates=%s)",
                     concept_key,
                     year,
                     float(best_score) if pd.notna(best_score) else float("nan"),
-                    n_candidates,
+                    candidate_count,
                 )
-                decision_records.append(
-                    CandidateSelection(
-                        concept_key=concept_key,
-                        year=year,
-                        target_var=str(concept.get("target_var")),
-                        source_var=None,
-                        dict_file=None,
-                        score=None if pd.isna(best_score) else float(best_score),
-                        prefix=None,
-                        release=None,
-                        n_candidates=n_candidates,
-                        label_matched=None,
-                    )
-                )
+                decision_records.append(CandidateSelection(**record_kwargs))
                 continue
             prefix = determine_prefix(best_row, concept)
-            release = str(best_row.get("release")) if best_row.get("release") is not None else None
-            decision_records.append(
-                CandidateSelection(
-                    concept_key=concept_key,
-                    year=year,
-                    target_var=str(concept.get("target_var")),
-                    source_var=str(best_row.get("source_var")),
-                    dict_file=str(best_row.get("dict_file")) if best_row.get("dict_file") is not None else None,
-                    score=None if pd.isna(best_score) else float(best_score),
-                    prefix=prefix,
-                    release=release,
-                    n_candidates=n_candidates,
-                    label_matched=str(best_row.get("source_label")) if best_row.get("source_label") is not None else None,
-                )
-            )
+            release = coerce_optional_str(best_row.get("release"))
             data_path, manifest_release = locate_data_file(
                 year,
                 prefix,
                 str(concept.get("survey", "")),
                 args.root,
                 manifest_cache,
-                dict_hint=str(best_row.get("dict_file")) if best_row.get("dict_file") is not None else None,
+                dict_hint=dict_file,
             )
+            if manifest_release:
+                record_kwargs["manifest_release"] = manifest_release
+            if data_path is not None:
+                record_kwargs["chosen_data_file"] = str(data_path)
             effective_release = manifest_release or release
             if data_path is None:
-                logging.warning("No data file found for concept %s year %s prefix %s", concept_key, year, prefix)
+                logging.warning(
+                    "No data file found for concept %s year %s prefix %s", concept_key, year, prefix
+                )
+                decision_records.append(CandidateSelection(**record_kwargs))
                 continue
             df, unitid_col = load_data_file(data_path, data_cache)
             if unitid_col is None:
-                logging.warning("Skipping concept %s year %s due to missing UNITID in %s", concept_key, year, data_path)
+                logging.warning(
+                    "Skipping concept %s year %s due to missing UNITID in %s", concept_key, year, data_path
+                )
+                decision_records.append(CandidateSelection(**record_kwargs))
                 continue
-            source_var = str(best_row.get("source_var"))
+            source_var = source_var_val or ""
             source_col = find_source_column(df, source_var)
             if source_col is None:
-                logging.warning("Source var %s not present in %s for concept %s year %s", source_var, data_path, concept_key, year)
+                logging.warning(
+                    "Source var %s not present in %s for concept %s year %s",
+                    source_var,
+                    data_path,
+                    concept_key,
+                    year,
+                )
+                decision_records.append(CandidateSelection(**record_kwargs))
                 continue
             values = coerce_numeric(df[source_col])
             values = apply_transform(values, str(concept.get("transform", "identity")))
+            candidate_imputed_cols = [col for col in df.columns if IMPUTE_FLAG_PATTERN.search(str(col))]
+            preferred_imputed = [
+                col
+                for col in candidate_imputed_cols
+                if source_col.lower() in str(col).lower()
+            ]
+            imputed_col = preferred_imputed[0] if preferred_imputed else (candidate_imputed_cols[0] if candidate_imputed_cols else None)
+            if imputed_col is not None:
+                record_kwargs["imputed_flag"] = str(imputed_col)
+                imputed_values = df[imputed_col]
+            else:
+                imputed_values = pd.Series(pd.NA, index=df.index)
             frame = pd.DataFrame(
                 {
                     "UNITID": df[unitid_col],
@@ -638,13 +792,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "form_family": prefix,
                     "period_type": concept.get("period_type"),
                     "source_var": source_col,
-                    "label_matched": str(best_row.get("source_label")) if best_row.get("source_label") is not None else None,
+                    "label_matched": label_matched,
+                    "imputed_flag": imputed_values,
                     "source_file": str(data_path),
                     "release": effective_release,
                     "notes": concept.get("notes"),
                 }
             )
             output_frames.append(frame)
+            decision_records.append(CandidateSelection(**record_kwargs))
 
     output_df = build_output_frame(output_frames)
     report_df, errors = run_validations(output_df, rules, args.strict_release)
@@ -652,7 +808,30 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     logging.info("Writing output parquet to %s", args.output)
     output_df.to_parquet(args.output, index=False, compression="snappy")
     logging.info("Writing label audit to label_matches.csv")
-    pd.DataFrame([sel.__dict__ for sel in decision_records]).to_csv("label_matches.csv", index=False)
+    audit_columns = [
+        "year",
+        "concept_key",
+        "target_var",
+        "score",
+        "n_candidates",
+        "source_var",
+        "label_matched",
+        "dict_file",
+        "dict_filename",
+        "prefix_hint",
+        "survey_hint",
+        "chosen_data_file",
+        "manifest_release",
+        "notes",
+        "top_alternates",
+        "imputed_flag",
+    ]
+    audit_df = pd.DataFrame([sel.__dict__ for sel in decision_records])
+    if audit_df.empty:
+        audit_df = pd.DataFrame(columns=audit_columns)
+    else:
+        audit_df = audit_df[audit_columns]
+    audit_df.to_csv("label_matches.csv", index=False)
     logging.info("Writing validation report to validation_report.csv")
     report_df.to_csv("validation_report.csv", index=False)
 
