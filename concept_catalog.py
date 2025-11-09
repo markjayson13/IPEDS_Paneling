@@ -31,6 +31,9 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
             "label_regex": [
+                # Accept both modern and 2004-era labels; punctuation is preserved in source_label_norm
+                r"^total revenues?(?: &| and )other additions(?:.*)?$",
+                r"^total revenues?(?: and )?investment return(?:.*)?$",
                 r"^total revenues?(?: and (?:other additions )?)?investment (?:return|income).*$",
                 r"^total revenues?(?:,? operating and nonoperating)?.*investment (?:return|income).*$",
             ],
