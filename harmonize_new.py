@@ -592,7 +592,19 @@ def load_data_file(path: Path, cache: dict[Path, tuple[pd.DataFrame, Optional[st
                     df = pd.read_csv(path, dtype=str, delim_whitespace=True, na_filter=False, low_memory=False)
         else:
             sep = "," if suffix == ".csv" else "\t"
-            df = pd.read_csv(path, dtype=str, sep=sep, na_filter=False, low_memory=False)
+            try:
+                df = pd.read_csv(path, dtype=str, sep=sep, na_filter=False, low_memory=False)
+            except UnicodeDecodeError:
+                logging.warning("Non-UTF8 content detected in %s; retrying with latin-1 encoding", path)
+                df = pd.read_csv(
+                    path,
+                    dtype=str,
+                    sep=sep,
+                    na_filter=False,
+                    low_memory=False,
+                    encoding="latin1",
+                    encoding_errors="replace",
+                )
     elif suffix == ".parquet":
         try:
             df = pd.read_parquet(path)
