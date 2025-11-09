@@ -88,6 +88,75 @@ OUTPUT_COLUMNS = [
     "notes",
 ]
 
+# Optional columns (e.g., 'state' for long-family extractions) are appended dynamically in build_output_frame.
+
+_US_STATES_AND_JURIS = [
+    "alabama",
+    "alaska",
+    "arizona",
+    "arkansas",
+    "california",
+    "colorado",
+    "connecticut",
+    "delaware",
+    "district of columbia",
+    "florida",
+    "georgia",
+    "hawaii",
+    "idaho",
+    "illinois",
+    "indiana",
+    "iowa",
+    "kansas",
+    "kentucky",
+    "louisiana",
+    "maine",
+    "maryland",
+    "massachusetts",
+    "michigan",
+    "minnesota",
+    "mississippi",
+    "missouri",
+    "montana",
+    "nebraska",
+    "nevada",
+    "new hampshire",
+    "new jersey",
+    "new mexico",
+    "new york",
+    "north carolina",
+    "north dakota",
+    "ohio",
+    "oklahoma",
+    "oregon",
+    "pennsylvania",
+    "rhode island",
+    "south carolina",
+    "south dakota",
+    "tennessee",
+    "texas",
+    "utah",
+    "vermont",
+    "virginia",
+    "washington",
+    "west virginia",
+    "wisconsin",
+    "wyoming",
+    "puerto rico",
+    "guam",
+    "american samoa",
+    "northern mariana islands",
+    "u.s. virgin islands",
+]
+
+def _extract_state_token(label_norm: str) -> Optional[str]:
+    if not label_norm:
+        return None
+    for state in _US_STATES_AND_JURIS:
+        if state in label_norm:
+            return state
+    return None
+
 STATIC_LOCATIONAL_TARGETS = {
     "dir_county_fips",
     "dir_county_name",
@@ -683,6 +752,41 @@ def apply_transform(values: pd.Series, transform: str) -> pd.Series:
     return values
 
 
+def resolve_imputation_flags(df: pd.DataFrame, source_col: str) -> tuple[pd.Series, pd.Series, Optional[str]]:
+    """Return imputed flag series, boolean mask, and chosen flag column for a source column."""
+    impute_lookup = {str(col).lower(): col for col in df.columns}
+    candidate_imputed_cols: list[str] = []
+    xvar = f"X{source_col}"
+    if xvar.lower() in impute_lookup:
+        candidate_imputed_cols.append(impute_lookup[xvar.lower()])
+    exact_key = f"x{source_col}".lower()
+    if exact_key in impute_lookup and impute_lookup[exact_key] not in candidate_imputed_cols:
+        candidate_imputed_cols.append(impute_lookup[exact_key])
+    if not candidate_imputed_cols:
+        pattern_cols = [col for col in df.columns if IMPUTE_FLAG_PATTERN.search(str(col))]
+        containing = [
+            col
+            for col in pattern_cols
+            if source_col.lower() in str(col).lower()
+        ]
+        if containing:
+            candidate_imputed_cols.extend(containing)
+        elif pattern_cols:
+            candidate_imputed_cols.append(pattern_cols[0])
+    imputed_col = candidate_imputed_cols[0] if candidate_imputed_cols else None
+    if imputed_col is not None:
+        imputed_values = df[imputed_col]
+    else:
+        imputed_values = pd.Series(pd.NA, index=df.index)
+    normalized_flags = imputed_values.astype("string").str.strip().str.lower()
+    not_imputed_tokens = {"", "0", "n", "na", "nan", "none", "null", "no", "false"}
+    missing_mask = normalized_flags.isna()
+    false_mask = normalized_flags.isin(not_imputed_tokens)
+    bool_mask = (~missing_mask) & (~false_mask)
+    is_imputed = bool_mask.astype("boolean").mask(missing_mask, pd.NA)
+    return imputed_values, is_imputed, imputed_col
+
+
 def run_nonnegative_rule(df: pd.DataFrame, rule: dict) -> int:
     vars_set = set(rule.get("target_vars", []))
     subset = df[df["target_var"].isin(vars_set)]
@@ -861,7 +965,10 @@ def build_output_frame(records: List[pd.DataFrame]) -> pd.DataFrame:
     if not records:
         return pd.DataFrame(columns=OUTPUT_COLUMNS)
     df = pd.concat(records, ignore_index=True)
-    df = df[OUTPUT_COLUMNS]
+    columns = OUTPUT_COLUMNS.copy()
+    if "state" in df.columns and "state" not in columns:
+        columns.insert(1, "state")
+    df = df[columns]
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
     return df
 
@@ -884,6 +991,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         year_lake = lake_by_year.get(year, pd.DataFrame(columns=lake.columns))
         logging.info("Processing year %s with %d dictionary rows", year, len(year_lake))
         for concept_key, concept in CONCEPTS.items():
+            family = str(concept.get("family") or "")
             record_kwargs = {
                 "concept_key": concept_key,
                 "year": year,
@@ -1008,43 +1116,80 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 record_kwargs["accepted"] = False
                 decision_records.append(CandidateSelection(**record_kwargs))
                 continue
+            if family == "state_residence":
+                row_patterns = [re.compile(p, re.IGNORECASE) for p in concept.get("row_regex", []) if p]
+                exclude_patterns = [re.compile(p, re.IGNORECASE) for p in concept.get("exclude_regex", []) if p]
+                fam_df = year_lake.copy()
+                if dict_file:
+                    fam_df = fam_df[fam_df["dict_file"] == dict_file]
+                fam_df = filter_candidates_by_forms(fam_df, concept.get("forms"))
+                state_rows: dict[str, pd.Series] = {}
+                for _, fam_row in fam_df.iterrows():
+                    label_raw = str(fam_row.get("source_label_norm") or fam_row.get("source_label") or "")
+                    label_norm = label_raw.lower()
+                    if row_patterns and not any(pattern.search(label_norm) for pattern in row_patterns):
+                        continue
+                    state_token = _extract_state_token(label_norm)
+                    if not state_token:
+                        continue
+                    if any(pattern.search(label_norm) for pattern in exclude_patterns):
+                        continue
+                    state_rows.setdefault(state_token, fam_row)
+                if not state_rows:
+                    record_kwargs["accepted"] = False
+                    decision_records.append(CandidateSelection(**record_kwargs))
+                    continue
+                long_frames: list[pd.DataFrame] = []
+                stored_imputed_name: Optional[str] = record_kwargs.get("imputed_flag")
+                for state_token, fam_row in state_rows.items():
+                    row_source = coerce_optional_str(fam_row.get("source_var")) or source_col
+                    state_col = find_source_column(df, row_source)
+                    if state_col is None:
+                        continue
+                    vals = coerce_numeric(df[state_col])
+                    vals = apply_transform(vals, str(concept.get("transform", "identity")))
+                    imputed_values, is_imputed, imputed_col_name = resolve_imputation_flags(df, state_col)
+                    if imputed_col_name and not stored_imputed_name:
+                        record_kwargs["imputed_flag"] = imputed_col_name
+                        stored_imputed_name = imputed_col_name
+                    state_label = coerce_optional_str(fam_row.get("source_label")) or coerce_optional_str(
+                        fam_row.get("source_label_norm")
+                    )
+                    frame = pd.DataFrame(
+                        {
+                            "UNITID": df[unitid_col],
+                            "state": state_token,
+                            "year": year,
+                            "target_var": concept.get("target_var"),
+                            "value": vals,
+                            "concept": concept.get("concept"),
+                            "units": concept.get("units"),
+                            "survey": concept.get("survey"),
+                            "form_family": prefix,
+                            "period_type": concept.get("period_type"),
+                            "source_var": state_col,
+                            "label_matched": state_label or label_matched,
+                            "imputed_flag": imputed_values,
+                            "is_imputed": is_imputed,
+                            "source_file": str(data_path),
+                            "release": effective_release,
+                            "notes": concept.get("notes"),
+                        }
+                    )
+                    long_frames.append(frame)
+                if long_frames:
+                    output_frames.extend(long_frames)
+                    record_kwargs["accepted"] = True
+                else:
+                    record_kwargs["accepted"] = False
+                decision_records.append(CandidateSelection(**record_kwargs))
+                continue
+
             values = coerce_numeric(df[source_col])
             values = apply_transform(values, str(concept.get("transform", "identity")))
-            xvar = f"X{source_col}"
-            impute_lookup = {str(col).lower(): col for col in df.columns}
-            candidate_imputed_cols: list[str] = []
-            if xvar.lower() in impute_lookup:
-                candidate_imputed_cols.append(impute_lookup[xvar.lower()])
-            exact_key = f"x{source_col}".lower()
-            if exact_key in impute_lookup and impute_lookup[exact_key] not in candidate_imputed_cols:
-                candidate_imputed_cols.append(impute_lookup[exact_key])
-            if not candidate_imputed_cols:
-                pattern_cols = [col for col in df.columns if IMPUTE_FLAG_PATTERN.search(str(col))]
-                containing = [
-                    col
-                    for col in pattern_cols
-                    if source_col.lower() in str(col).lower()
-                ]
-                if containing:
-                    candidate_imputed_cols.extend(containing)
-                elif pattern_cols:
-                    candidate_imputed_cols.append(pattern_cols[0])
-            imputed_col = candidate_imputed_cols[0] if candidate_imputed_cols else None
+            imputed_values, is_imputed, imputed_col = resolve_imputation_flags(df, source_col)
             if imputed_col is not None:
                 record_kwargs["imputed_flag"] = str(imputed_col)
-                imputed_values = df[imputed_col]
-            else:
-                imputed_values = pd.Series(pd.NA, index=df.index)
-
-            if isinstance(imputed_values, pd.Series):
-                normalized_flags = imputed_values.astype("string").str.strip().str.lower()
-                not_imputed_tokens = {"", "0", "n", "na", "nan", "none", "null", "no", "false"}
-                missing_mask = normalized_flags.isna()
-                false_mask = normalized_flags.isin(not_imputed_tokens)
-                bool_mask = (~missing_mask) & (~false_mask)
-                is_imputed = bool_mask.astype("boolean").mask(missing_mask, pd.NA)
-            else:
-                is_imputed = pd.Series(pd.NA, index=df.index, dtype="boolean")
 
             frame = pd.DataFrame(
                 {
