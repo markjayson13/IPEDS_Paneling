@@ -79,6 +79,7 @@ OUTPUT_COLUMNS = [
     "units",
     "survey",
     "form_family",
+    "decision_score",
     "period_type",
     "source_var",
     "label_matched",
@@ -517,6 +518,35 @@ def format_top_alternates(candidates: list[tuple[float, pd.Series]]) -> str:
     return ";".join(parts)
 
 
+def _form_priority(prefix: Optional[str]) -> int:
+    order = {"F1A": 3, "F2A": 2, "F3A": 1}
+    return order.get((prefix or "").upper(), 0)
+
+
+def resolve_crossform_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if df.empty:
+        return df, df.iloc[0:0].copy()
+    key = ["UNITID", "year", "target_var"]
+    dup_mask = df.duplicated(key, keep=False)
+    if not dup_mask.any():
+        return df, df.iloc[0:0].copy()
+    work = df.copy()
+    work["release_rank"] = work["release"].astype(str).str.lower().eq("revised").astype(int)
+    work["score_rank"] = pd.to_numeric(work.get("decision_score"), errors="coerce").fillna(-9e9)
+    work["form_rank"] = work["form_family"].map(_form_priority).fillna(0)
+    work = work.sort_values(
+        key + ["release_rank", "score_rank", "form_rank", "source_file"],
+        ascending=[True, False, False, False, True],
+    )
+    keep_idx = work.groupby(key, as_index=False).head(1).index
+    conflicts = work.loc[dup_mask].copy()
+    cleaned = work.loc[work.index.isin(keep_idx)].copy()
+    for col in ["release_rank", "score_rank", "form_rank"]:
+        cleaned.drop(columns=[col], inplace=True, errors="ignore")
+        conflicts.drop(columns=[col], inplace=True, errors="ignore")
+    return cleaned, conflicts
+
+
 def determine_prefix(row: Optional[pd.Series], concept: dict) -> Optional[str]:
     if row is None:
         forms = concept.get("forms")
@@ -889,6 +919,16 @@ def run_validations(df: pd.DataFrame, rules: dict, strict_release: bool) -> tupl
                 "violations": violations,
             }
         )
+    uniform_rules = rules.get("uniform_form_families", []) or []
+    for rule in uniform_rules:
+        violations = run_uniform_form_rule(df, rule)
+        records.append(
+            {
+                "rule_type": "uniform_form",
+                "description": rule.get("description"),
+                "violations": violations,
+            }
+        )
     release_rule = rules.get("release_policy", {}) or {}
     violations, release_errors = run_release_policy(df, release_rule, strict_release)
     records.append(
@@ -978,6 +1018,20 @@ def build_output_frame(records: List[pd.DataFrame]) -> pd.DataFrame:
     df = df[columns]
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
     return df
+
+
+def run_uniform_form_rule(df: pd.DataFrame, rule: dict) -> int:
+    survey = str(rule.get("survey") or "").strip().lower()
+    if not survey:
+        return 0
+    sub = df[df["survey"].astype(str).str.lower() == survey]
+    if sub.empty:
+        return 0
+    mix = (
+        sub.groupby(["UNITID", "year"])["form_family"]
+        .nunique(dropna=True)
+    )
+    return int((mix > 1).sum())
 
 
 def load_reporting_map(path: Optional[Path]) -> Optional[pd.DataFrame]:
@@ -1103,9 +1157,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "dict_filename": dict_filename,
                     "prefix_hint": prefix_hint,
                     "survey_hint": survey_hint,
-                    "top_alternates": top_alternates,
-                }
-            )
+        "top_alternates": top_alternates,
+            }
+        )
             if best_row is None:
                 logging.warning(
                     "Weak or no match for %s in %s (score=%.2f; candidates=%s)",
@@ -1212,6 +1266,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                             "units": concept.get("units"),
                             "survey": concept.get("survey"),
                             "form_family": prefix,
+                            "decision_score": score_val,
                             "period_type": concept.get("period_type"),
                             "source_var": state_col,
                             "label_matched": state_label or label_matched,
@@ -1249,6 +1304,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "units": concept.get("units"),
                     "survey": concept.get("survey"),
                     "form_family": prefix,
+                    "decision_score": score_val,
                     "period_type": concept.get("period_type"),
                     "source_var": source_col,
                     "label_matched": label_matched,
@@ -1265,6 +1321,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     output_df = build_output_frame(output_frames)
     output_df = backfill_static_locational_fields(output_df, years)
+    output_df, conflicts_df = resolve_crossform_conflicts(output_df)
+    if not conflicts_df.empty:
+        logging.warning("Form conflicts detected; writing form_conflicts.csv with %d rows", len(conflicts_df))
+        conflicts_df.to_csv("form_conflicts.csv", index=False)
     report_df, errors = run_validations(output_df, rules, args.strict_release)
 
     logging.info("Writing output parquet to %s", args.output)
