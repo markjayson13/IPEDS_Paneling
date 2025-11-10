@@ -545,7 +545,9 @@ def resolve_crossform_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
     key = ["UNITID", "year", "survey", "target_var"]
     if "state" in df.columns:
         key.append("state")
-    dup_mask = df.duplicated(key, keep=False)
+    key = [col for col in key if col in df.columns]
+    key_frame = df[key].fillna("__NA__")
+    dup_mask = key_frame.duplicated(keep=False)
     if not dup_mask.any():
         return df, df.iloc[0:0].copy()
     work = df.copy()
@@ -554,11 +556,13 @@ def resolve_crossform_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
     work["form_rank"] = work["form_family"].map(_form_priority).fillna(0)
     work = work.sort_values(
         key + ["release_rank", "score_rank", "form_rank", "source_file"],
-        ascending=[True, True, True, False, False, False, True],
+        ascending=[True] * len(key) + [False, False, False, True],
     )
-    keep_idx = work.groupby(key, as_index=False).head(1).index
-    conflicts = work.loc[dup_mask].copy()
-    cleaned = work.loc[work.index.isin(keep_idx)].copy()
+    key_sorted = work[key].fillna("__NA__")
+    keep_mask = ~key_sorted.duplicated(keep="first")
+    conflicts_mask = key_sorted.duplicated(keep=False)
+    cleaned = work.loc[keep_mask].copy()
+    conflicts = work.loc[conflicts_mask].copy()
     for col in ["release_rank", "score_rank", "form_rank"]:
         cleaned.drop(columns=[col], inplace=True, errors="ignore")
         conflicts.drop(columns=[col], inplace=True, errors="ignore")
