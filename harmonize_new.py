@@ -550,6 +550,7 @@ def resolve_crossform_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
     dup_mask = key_frame.duplicated(keep=False)
     if not dup_mask.any():
         return df, df.iloc[0:0].copy()
+
     work = df.copy()
     work["release_rank"] = work["release"].astype(str).str.lower().eq("revised").astype(int)
     work["score_rank"] = pd.to_numeric(work.get("decision_score"), errors="coerce").fillna(-9e9)
@@ -558,15 +559,12 @@ def resolve_crossform_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
         key + ["release_rank", "score_rank", "form_rank", "source_file"],
         ascending=[True] * len(key) + [False, False, False, True],
     )
-    key_sorted = work[key].fillna("__NA__")
-    keep_mask = ~key_sorted.duplicated(keep="first")
-    conflicts_mask = key_sorted.duplicated(keep=False)
-    cleaned = work.loc[keep_mask].copy()
-    conflicts = work.loc[conflicts_mask].copy()
+    deduped = work.drop_duplicates(key, keep="first").copy()
+    conflicts = work.loc[work[key].fillna("__NA__").duplicated(keep=False)].copy()
     for col in ["release_rank", "score_rank", "form_rank"]:
-        cleaned.drop(columns=[col], inplace=True, errors="ignore")
+        deduped.drop(columns=[col], inplace=True, errors="ignore")
         conflicts.drop(columns=[col], inplace=True, errors="ignore")
-    return cleaned, conflicts
+    return deduped, conflicts
 
 
 def determine_prefix(row: Optional[pd.Series], concept: dict) -> Optional[str]:
