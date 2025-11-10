@@ -1167,6 +1167,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             label_matched = coerce_optional_str(best_row.get("source_label")) if best_row is not None else None
             source_var_val = coerce_optional_str(best_row.get("source_var")) if best_row is not None else None
             score_val = None if pd.isna(best_score) else float(best_score)
+            survey_name = str(concept.get("survey", ""))
             record_kwargs.update(
                 {
                     "score": score_val,
