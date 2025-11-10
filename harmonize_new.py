@@ -542,7 +542,7 @@ def _form_priority(prefix: Optional[str]) -> int:
 def resolve_crossform_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     if df.empty:
         return df, df.iloc[0:0].copy()
-    key = ["UNITID", "year", "target_var"]
+    key = ["UNITID", "year", "survey", "target_var"]
     if "state" in df.columns:
         key.append("state")
     dup_mask = df.duplicated(key, keep=False)
