@@ -546,6 +546,8 @@ def resolve_crossform_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
         return df, df.iloc[0:0].copy()
     primary_id = "reporting_unitid" if "reporting_unitid" in df.columns else "UNITID"
     key = [primary_id, "year", "survey", "target_var"]
+    if "period_type" in df.columns:
+        key.append("period_type")
     if "state" in df.columns:
         key.append("state")
     key = [col for col in key if col in df.columns]
@@ -1445,6 +1447,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             lambda s: s is not None and not pd.isna(s) and float(s) >= MIN_ACCEPT_SCORE
         )
     audit_df["accepted"] = audit_df["accepted"].astype("boolean")
+    def _status(row: pd.Series) -> str:
+        note = str(row.get("notes") or "")
+        if "Retired after" in note:
+            return "retired"
+        if "Unavailable before" in note:
+            return "not_yet_available"
+        if row.get("accepted"):
+            return "extracted"
+        return "not_found"
+
+    audit_df["extraction_status"] = audit_df.apply(_status, axis=1)
     LABEL_CHECK_DIR.mkdir(parents=True, exist_ok=True)
     audit_df.to_csv(LABEL_MATCH_PATH, index=False)
     logging.info("Label audit written to %s", LABEL_MATCH_PATH)

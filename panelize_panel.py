@@ -311,6 +311,10 @@ def pivot_panel(df: pd.DataFrame) -> pd.DataFrame:
         logging.warning(
             "Multiple reporting_unitid values detected for some UNITID/year pairs; keeping first occurrence."
         )
+        offenders = id_cols.loc[dup_mask].sort_values(["UNITID", "year"])
+        conflict_path = Path(args.output).with_suffix(".reporting_conflicts.csv")
+        conflict_path.parent.mkdir(parents=True, exist_ok=True)
+        offenders.to_csv(conflict_path, index=False)
         id_cols = id_cols.drop_duplicates(subset=["UNITID", "year"], keep="first")
     id_cols = id_cols.sort_values(["UNITID", "year"])
     wide = (
