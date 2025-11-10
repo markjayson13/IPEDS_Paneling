@@ -490,7 +490,9 @@ def choose_candidate(
     top_candidates = scored_rows[:TOPK_AUDIT]
     best_score, best_row = top_candidates[0]
 
-    if pd.isna(best_score) or best_score < MIN_ACCEPT_SCORE:
+    threshold_val = concept.get("min_accept_score")
+    threshold = float(threshold_val) if threshold_val is not None else MIN_ACCEPT_SCORE
+    if pd.isna(best_score) or best_score < threshold:
         return None, best_score, top_candidates, len(filtered_rows)
 
     logging.info(
@@ -542,7 +544,8 @@ def _form_priority(prefix: Optional[str]) -> int:
 def resolve_crossform_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     if df.empty:
         return df, df.iloc[0:0].copy()
-    key = ["UNITID", "year", "survey", "target_var"]
+    primary_id = "reporting_unitid" if "reporting_unitid" in df.columns else "UNITID"
+    key = [primary_id, "year", "survey", "target_var"]
     if "state" in df.columns:
         key.append("state")
     key = [col for col in key if col in df.columns]

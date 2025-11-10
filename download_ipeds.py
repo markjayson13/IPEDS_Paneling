@@ -41,13 +41,16 @@ your final panel dataset depends on the analysis you perform *after*
 using this script.
 """
 
+import argparse
 import csv
+import hashlib
 import os
 import re
 import time
 import zipfile
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from urllib.parse import urljoin, urlparse
 
 from requests.adapters import HTTPAdapter
@@ -94,6 +97,32 @@ HUMAN_RESOURCES_S_PATTERN = re.compile(r'(?:^|[_-])S(?:19|20)\d{2}')
 def ensure_directory(path: str) -> None:
     """Create a directory if it does not already exist."""
     os.makedirs(path, exist_ok=True)
+
+
+def compute_file_metadata(path: str) -> tuple[str, str]:
+    """Return (filesize_bytes, sha256) for the given path."""
+    if not os.path.exists(path):
+        return "", ""
+    sha256 = hashlib.sha256()
+    size = 0
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            size += len(chunk)
+            sha256.update(chunk)
+    return str(size), sha256.hexdigest()
+
+
+def fetch_remote_filesize(session: requests.Session, url: str) -> str:
+    """Attempt to retrieve the Content-Length without downloading the file."""
+    try:
+        response = session.head(url, allow_redirects=True, timeout=30, headers=HEADERS)
+        response.raise_for_status()
+    except requests.RequestException:
+        return ""
+    length = response.headers.get("Content-Length")
+    if length and length.isdigit():
+        return length
+    return ""
 
 
 def get_survey_prefixes_for_year(
@@ -429,6 +458,8 @@ def write_year_manifest(year_dir: str, year: int, rows: list[dict]) -> None:
         'has_dictionary',
         'dictionary_filename',
         'release',
+        'filesize_bytes',
+        'sha256',
     ]
     try:
         with open(manifest_path, 'w', newline='') as csvfile:
@@ -440,7 +471,7 @@ def write_year_manifest(year_dir: str, year: int, rows: list[dict]) -> None:
         print(f"WARNING: Unable to write manifest for {year}: {exc}")
 
 
-def process_year(year: int) -> None:
+def process_year(year: int, *, manifest_only: bool = False) -> None:
     """Process downloads for a single year, handling all configured surveys."""
     print(f"\n>>> Processing Year {year}...")
     with requests.Session() as session:
@@ -497,19 +528,25 @@ def process_year(year: int) -> None:
                 downloaded_dicts: set[str] = set()
                 for data_entry in data_entries:
                     filename = data_entry['filename']
-                    if data_entry['is_revision']:
-                        print(
-                            f"Downloading {filename} for {survey_name} ({prefix_label}) "
-                            "(Prioritizing revised file)"
-                        )
+                    file_size = ""
+                    file_hash = ""
+                    if manifest_only:
+                        file_size = fetch_remote_filesize(session, data_entry['url'])
                     else:
-                        print(f"Downloading {filename} for {survey_name} ({prefix_label})...")
-                    destination = os.path.join(year_dir, filename)
-                    if download_file(session, data_entry['url'], destination):
-                        if destination.lower().endswith('.zip'):
-                            print(f"Unzipping {filename}...")
-                            unzip_and_remove(destination, year_dir, context=filename)
-                        time.sleep(1)
+                        if data_entry['is_revision']:
+                            print(
+                                f"Downloading {filename} for {survey_name} ({prefix_label}) "
+                                "(Prioritizing revised file)"
+                            )
+                        else:
+                            print(f"Downloading {filename} for {survey_name} ({prefix_label})...")
+                        destination = os.path.join(year_dir, filename)
+                        if download_file(session, data_entry['url'], destination):
+                            file_size, file_hash = compute_file_metadata(destination)
+                            if destination.lower().endswith('.zip'):
+                                print(f"Unzipping {filename}...")
+                                unzip_and_remove(destination, year_dir, context=filename)
+                            time.sleep(1)
 
                     dict_entry = find_dictionary_for_data(dict_entries, data_entry)
                     manifest_record = {
@@ -522,6 +559,8 @@ def process_year(year: int) -> None:
                         'has_dictionary': bool(dict_entry),
                         'dictionary_filename': dict_entry['filename'] if dict_entry else '',
                         'release': data_entry.get('release', ''),
+                        'filesize_bytes': file_size,
+                        'sha256': file_hash,
                     }
                     year_manifest.append(manifest_record)
 
@@ -530,6 +569,9 @@ def process_year(year: int) -> None:
                             f"WARNING: Matching dictionary not found for "
                             f"{survey_name} ({prefix_label}) file {filename}."
                         )
+                        continue
+
+                    if manifest_only:
                         continue
 
                     dict_filename = dict_entry['filename']
@@ -553,16 +595,60 @@ def process_year(year: int) -> None:
                         time.sleep(1)
                     downloaded_dicts.add(dict_filename)
 
-        if DOWNLOAD_ACCESS_DATABASE:
+        if DOWNLOAD_ACCESS_DATABASE and not manifest_only:
             download_access_database(session, year, year_dir, access_entries)
 
         write_year_manifest(year_dir, year, year_manifest)
 
 
-def main() -> None:
+def _parse_years(expr: str | None) -> list[int]:
+    if not expr:
+        return list(YEARS_TO_DOWNLOAD)
+    text = expr.strip()
+    if not text:
+        return list(YEARS_TO_DOWNLOAD)
+    if ":" in text:
+        start, end = text.split(":", 1)
+        start, end = int(start), int(end)
+        if end < start:
+            start, end = end, start
+        return list(range(start, end + 1))
+    if "," in text:
+        years: list[int] = []
+        for part in text.split(","):
+            part = part.strip()
+            if part:
+                years.append(int(part))
+        return years
+    return [int(text)]
+
+
+def main(argv: list[str] | None = None) -> None:
+    global DOWNLOAD_DIR  # noqa: PLW0603
+    parser = argparse.ArgumentParser(description="Download IPEDS raw data files and dictionaries.")
+    parser.add_argument(
+        "--out-root",
+        default=DOWNLOAD_DIR,
+        help="Root folder where year subdirectories are written",
+    )
+    parser.add_argument(
+        "--years",
+        default="",
+        help="Year expression: 'YYYY', 'YYYY:YYYY', or comma list 'YYYY,YYYY'",
+    )
+    parser.add_argument(
+        "--manifest-only",
+        action="store_true",
+        help="Skip downloading files; only emit manifests (fetches Content-Length when possible).",
+    )
+    args = parser.parse_args(argv)
+    DOWNLOAD_DIR = args.out_root
+    years = _parse_years(args.years)
+
     ensure_directory(DOWNLOAD_DIR)
+    worker = partial(process_year, manifest_only=args.manifest_only)
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        list(executor.map(process_year, YEARS_TO_DOWNLOAD))
+        list(executor.map(worker, years))
 
 
 if __name__ == '__main__':

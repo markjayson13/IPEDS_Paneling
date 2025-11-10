@@ -1,0 +1,72 @@
+name: Manifest Drift Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main, master]
+    paths:
+      - "download_ipeds.py"
+      - "scripts/**"
+      - "manifests/**"
+      - ".github/workflows/manifest-drift.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: manifest-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    permissions:
+      contents: read
+    env:
+      BASELINE_DIR: manifests/baseline
+      CURRENT_DIR: manifests/current
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Bootstrap environment
+        run: bash scripts/bootstrap_env.sh
+
+      - name: Prepare manifest output directory
+        run: mkdir -p "${CURRENT_DIR}"
+
+      - name: Generate current manifests (manifest-only crawl)
+        run: |
+          python scripts/check_manifest_drift.py \
+            --mode generate-current \
+            --out "${CURRENT_DIR}" \
+            --years "2004:2024"
+
+      - name: Diff baseline vs current
+        id: diff
+        run: |
+          python scripts/check_manifest_drift.py \
+            --mode compare \
+            --baseline "${BASELINE_DIR}" \
+            --current "${CURRENT_DIR}" \
+            --strategy "year,survey,prefix,filename,dictionary_filename,release,filesize_bytes,sha256" \
+            --allow-missing-baseline \
+            --diff-report manifests/diff_report.txt
+
+      - name: Upload drift artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifest-drift-artifacts
+          path: |
+            ${CURRENT_DIR}
+            manifests/diff_report.txt
+          if-no-files-found: ignore
