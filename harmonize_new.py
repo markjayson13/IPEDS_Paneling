@@ -71,6 +71,7 @@ NA_TOKENS = [
 
 OUTPUT_COLUMNS = [
     "UNITID",
+    "reporting_unitid",
     "year",
     "target_var",
     "value",
@@ -233,6 +234,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--strict-release", action="store_true", help="Error if mixed provisional/revised releases")
     parser.add_argument("--strict-coverage", action="store_true", help="Error if any concept fails to meet MIN_ACCEPT_SCORE")
     parser.add_argument("--log-level", type=str, default="INFO", help="Logging level (e.g., INFO, DEBUG)")
+    parser.add_argument("--reporting-map", type=Path, default=None, help="CSV crosswalk with UNITID->reporting_unitid actions")
     return parser.parse_args(argv)
 
 
@@ -577,10 +579,12 @@ def prefer_manifest_row(
         subset["release_rank"] = subset["release"].astype(str).str.lower().eq("revised").astype(int)
     else:
         subset["release_rank"] = 0
-    subset.sort_values([
-        "is_revision_flag",
-        "release_rank",
-    ], ascending=[False, False], inplace=True)
+    subset["prefix_exact"] = subset["prefix"].astype(str).str.upper().eq(prefix_upper)
+    subset.sort_values(
+        ["prefix_exact", "is_revision_flag", "release_rank"],
+        ascending=[False, False, False],
+        inplace=True,
+    )
     return subset.iloc[0]
 
 
@@ -654,7 +658,8 @@ def locate_data_file(
                 dir_boost = 2
             elif parent.startswith(preferred_dir):
                 dir_boost = 1
-        return (overlap + dir_boost, text_pref, p.stat().st_mtime)
+        prefix_hit = 1 if prefix.lower() in name else 0
+        return (prefix_hit * 3 + overlap + dir_boost, text_pref, p.stat().st_mtime)
 
     candidates.sort(key=rank, reverse=True)
     chosen = candidates[0]
@@ -968,9 +973,48 @@ def build_output_frame(records: List[pd.DataFrame]) -> pd.DataFrame:
     columns = OUTPUT_COLUMNS.copy()
     if "state" in df.columns and "state" not in columns:
         columns.insert(1, "state")
+    if "reporting_unitid" not in df.columns:
+        df["reporting_unitid"] = df.get("UNITID")
     df = df[columns]
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
     return df
+
+
+def load_reporting_map(path: Optional[Path]) -> Optional[pd.DataFrame]:
+    if not path:
+        return None
+    if not path.exists():
+        logging.error("Reporting map %s not found", path)
+        return None
+    df = pd.read_csv(path, dtype={"UNITID": "Int64", "reporting_unitid": "Int64", "component": str, "action": str})
+    df["component"] = df["component"].str.strip().str.lower()
+    df["action"] = df["action"].str.strip().str.lower()
+    return df
+
+
+def apply_reporting_rules(frame: pd.DataFrame, survey: str, rpt_map: Optional[pd.DataFrame]) -> pd.DataFrame:
+    if frame.empty:
+        return frame
+    if rpt_map is None:
+        if "reporting_unitid" not in frame.columns:
+            frame["reporting_unitid"] = frame["UNITID"]
+        return frame
+    comp = (survey or "").strip().lower()
+    rules = rpt_map[rpt_map["component"].eq(comp)]
+    if rules.empty:
+        if "reporting_unitid" not in frame.columns:
+            frame["reporting_unitid"] = frame["UNITID"]
+        return frame
+    rules = rules[["UNITID", "reporting_unitid", "action"]].dropna(how="all")
+    merged = frame.merge(rules, how="left", on="UNITID", suffixes=("", "_rule"))
+    merged["reporting_unitid"] = merged["reporting_unitid"].fillna(merged["UNITID"]).astype("Int64")
+    merged["action"] = merged["action"].fillna("keep_child")
+    drop_mask = merged["action"].eq("drop_child") & merged["UNITID"].ne(merged["reporting_unitid"])
+    merged = merged.loc[~drop_mask].copy()
+    roll_mask = merged["action"].eq("roll_to_parent") & merged["reporting_unitid"].notna()
+    merged.loc[roll_mask, "UNITID"] = merged.loc[roll_mask, "reporting_unitid"]
+    merged.drop(columns=["action"], inplace=True)
+    return merged
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -980,6 +1024,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     report_duplicate_modules()
     lake = load_dictionary_lake(args.lake)
     rules = load_validation_rules(args.rules)
+    reporting_map = load_reporting_map(args.reporting_map)
 
     lake_by_year: dict[int, pd.DataFrame] = {year: lake[lake["year"] == year].copy() for year in sorted(lake["year"].unique())}
     manifest_cache: dict[int, Optional[pd.DataFrame]] = {}
@@ -1158,6 +1203,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     frame = pd.DataFrame(
                         {
                             "UNITID": df[unitid_col],
+                            "reporting_unitid": df[unitid_col],
                             "state": state_token,
                             "year": year,
                             "target_var": concept.get("target_var"),
@@ -1176,6 +1222,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                             "notes": concept.get("notes"),
                         }
                     )
+                    frame = apply_reporting_rules(frame, str(concept.get("survey", "")), reporting_map)
                     long_frames.append(frame)
                 if long_frames:
                     output_frames.extend(long_frames)
@@ -1194,6 +1241,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             frame = pd.DataFrame(
                 {
                     "UNITID": df[unitid_col],
+                    "reporting_unitid": df[unitid_col],
                     "year": year,
                     "target_var": concept.get("target_var"),
                     "value": values,
