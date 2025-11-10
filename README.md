@@ -22,31 +22,49 @@ python 01_ingest_dictionaries.py \
   --output dictionary_lake.parquet
 ```
 
-## 3. Run harmonizer gates
-
-Legacy Finance labels (2004):
+## 3. Build the full 2004–2024 panel (strict release + coverage)
 
 ```bash
 python harmonize_new.py \
   --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
   --lake dictionary_lake.parquet \
-  --years 2004 \
-  --output panel_2004.parquet \
-  --strict-release
+  --years 2004:2024 \
+  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/panel_long.parquet" \
+  --rules validation_rules.yaml \
+  --strict-release \
+  --strict-coverage
 ```
 
-Modern labels (2017–2018):
+*Optional:* include `--reporting-map reporting_map.csv` if you maintain a UNITID→reporting-unit crosswalk.
+
+## 4. Produce the classic wide CSV (one row per UNITID-year)
 
 ```bash
-python harmonize_new.py \
-  --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
-  --lake dictionary_lake.parquet \
-  --years 2017:2018 \
-  --output panel_2017_2018.parquet \
-  --strict-release
+python - <<'PY'
+import pandas as pd
+from pathlib import Path
+
+base_dir = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets")
+long_path = base_dir / "panel_long.parquet"
+df = pd.read_parquet(long_path)
+df["reporting_unitid"] = df.get("reporting_unitid", df["UNITID"])
+
+wide = (
+    df.pivot_table(index=["UNITID","year"], columns="target_var", values="value", aggfunc="first")
+      .reset_index()
+)
+ru = df[["UNITID","year","reporting_unitid"]].drop_duplicates()
+wide = wide.merge(ru, on=["UNITID","year"], how="left")
+cols = ["UNITID","reporting_unitid","year"] + [
+    c for c in wide.columns if c not in {"UNITID","reporting_unitid","year"}
+]
+wide = wide[cols]
+
+wide.to_csv(base_dir / "panel_long_wide.csv", index=False)
+PY
 ```
 
-## 4. Spot-check label matches
+## 5. Spot-check label matches
 
 ```bash
 python - <<'PY'

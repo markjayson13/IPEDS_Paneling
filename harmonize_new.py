@@ -1321,10 +1321,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     output_df = build_output_frame(output_frames)
     output_df = backfill_static_locational_fields(output_df, years)
-    output_df, conflicts_df = resolve_crossform_conflicts(output_df)
-    if not conflicts_df.empty:
-        logging.warning("Form conflicts detected; writing form_conflicts.csv with %d rows", len(conflicts_df))
-        conflicts_df.to_csv("form_conflicts.csv", index=False)
     report_df, errors = run_validations(output_df, rules, args.strict_release)
 
     logging.info("Writing output parquet to %s", args.output)
