@@ -560,7 +560,22 @@ def resolve_crossform_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
         ascending=[True] * len(key) + [False, False, False, True],
     )
     deduped = work.drop_duplicates(key, keep="first").copy()
-    conflicts = work.loc[work[key].fillna("__NA__").duplicated(keep=False)].copy()
+    conflicts_mask = work[key].fillna("__NA__").duplicated(keep=False)
+    conflicts = work.loc[conflicts_mask].copy()
+    if not conflicts.empty:
+        keep_mask = pd.Series(False, index=conflicts.index)
+        if "form_family" in conflicts.columns:
+            keep_mask = keep_mask | conflicts.groupby(key, dropna=False)["form_family"].transform(
+                lambda s: s.nunique(dropna=False) > 1
+            )
+        if "source_file" in conflicts.columns:
+            keep_mask = keep_mask | conflicts.groupby(key, dropna=False)["source_file"].transform(
+                lambda s: s.nunique(dropna=False) > 1
+            )
+        if keep_mask.any():
+            conflicts = conflicts.loc[keep_mask].copy()
+        else:
+            conflicts = conflicts.iloc[0:0].copy()
     for col in ["release_rank", "score_rank", "form_rank"]:
         deduped.drop(columns=[col], inplace=True, errors="ignore")
         conflicts.drop(columns=[col], inplace=True, errors="ignore")
@@ -1374,9 +1389,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     output_df = build_output_frame(output_frames)
     output_df = backfill_static_locational_fields(output_df, years)
     output_df, conflicts_df = resolve_crossform_conflicts(output_df)
-    if not conflicts_df.empty:
-        FORM_CONFLICTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        conflicts_df.to_csv(FORM_CONFLICTS_PATH, index=False)
+    FORM_CONFLICTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conflicts_df.to_csv(FORM_CONFLICTS_PATH, index=False)
+    if conflicts_df.empty:
+        logging.info("No cross-form conflicts detected; wrote empty file to %s", FORM_CONFLICTS_PATH)
+    else:
         logging.warning("Form conflicts detected; details written to %s", FORM_CONFLICTS_PATH)
     report_df, errors = run_validations(output_df, rules, args.strict_release)
     coverage = (
