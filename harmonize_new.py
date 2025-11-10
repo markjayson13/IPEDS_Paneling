@@ -552,7 +552,7 @@ def resolve_crossform_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
     work["form_rank"] = work["form_family"].map(_form_priority).fillna(0)
     work = work.sort_values(
         key + ["release_rank", "score_rank", "form_rank", "source_file"],
-        ascending=[True, False, False, False, True],
+        ascending=[True, True, True, False, False, False, True],
     )
     keep_idx = work.groupby(key, as_index=False).head(1).index
     conflicts = work.loc[dup_mask].copy()
