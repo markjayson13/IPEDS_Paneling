@@ -23,7 +23,7 @@ except ImportError as exc:  # pragma: no cover - startup guard
     raise
 
 ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas")
-DEFAULT_OUTPUT = Path("dictionary_lake.parquet")
+DEFAULT_OUTPUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet")
 DICT_NAME_PATTERN = re.compile(
     r"(?:^|[/_-])(dict|dictionary|varlist|variables?|layout|codebook)(?:$|[_-])",
     re.IGNORECASE,
@@ -259,6 +259,7 @@ def main() -> None:
         .str.strip()
     )
 
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     lake.to_parquet(args.output, index=False)
     print(f"Wrote {len(lake):,} rows to {args.output}")
 

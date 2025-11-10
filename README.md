@@ -50,21 +50,23 @@ flowchart LR
 ```bash
 python 01_ingest_dictionaries.py \
   --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
-  --output dictionary_lake.parquet
+  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet"
 ```
 
 ### 2. Harmonize to a long panel (2004–2024)
 ```bash
 python harmonize_new.py \
   --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
-  --lake dictionary_lake.parquet \
+  --lake "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet" \
   --years 2004:2024 \
-  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/panel_long.parquet" \
+  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long.parquet" \
   --rules validation_rules.yaml \
   --strict-release \
   --strict-coverage
 ```
 *(Optional `--reporting-map reporting_map.csv` if you have a UNITID→reporting-unit crosswalk.)*
+
+> **Note:** All parquet/CSV outputs are written under `/Users/markjaysonfarol13/Higher Ed research/IPEDS/...` to keep the Git repository code-only. Do not add generated artifacts to version control.
 
 ### 3. Produce the classic wide CSV for downstream analysis
 ```bash
@@ -72,8 +74,9 @@ python - <<'PY'
 import pandas as pd
 from pathlib import Path
 
-base_dir = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets")
-long_path = base_dir / "panel_long.parquet"
+parquet_dir = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets")
+output_dir = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks/Label match")
+long_path = parquet_dir / "panel_long.parquet"
 df = pd.read_parquet(long_path)
 df["reporting_unitid"] = df.get("reporting_unitid", df["UNITID"])
 
@@ -87,9 +90,11 @@ cols = ["UNITID","reporting_unitid","year"] + [
     c for c in wide.columns if c not in {"UNITID","reporting_unitid","year"}
 ]
 wide = wide[cols]
-wide.to_csv(base_dir / "panel_long_wide.csv", index=False)
+output_dir.mkdir(parents=True, exist_ok=True)
+wide.to_csv(output_dir / "panel_long_wide.csv", index=False)
 PY
 ```
+*(If you produce supplemental panels or scenario cuts, store them under `/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks/Supp. Panels`.)*
 
 ### 4. Spot-check label matches
 ```bash
@@ -109,6 +114,7 @@ PY
 - Finance basis tagging (GASB/FASB/For-profit) per extracted row.
 - EF residence long-family extraction with state column.
 - QC outputs: `label_matches.csv`, `form_conflicts.csv`, `coverage_summary.csv`.
+  - `form_conflicts.csv` and `coverage_summary.csv` are written to `/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks/`.
 
 ---
 

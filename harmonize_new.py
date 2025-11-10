@@ -69,6 +69,14 @@ NA_TOKENS = [
     ".",
 ]
 
+# Default output locations
+PARQUET_OUTPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets")
+CHECKS_OUTPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks")
+LABEL_CHECK_DIR = CHECKS_OUTPUT_DIR / "Label match"
+SUPP_PANEL_DIR = CHECKS_OUTPUT_DIR / "Supp. Panels"
+FORM_CONFLICTS_PATH = CHECKS_OUTPUT_DIR / "form_conflicts.csv"
+COVERAGE_SUMMARY_PATH = CHECKS_OUTPUT_DIR / "coverage_summary.csv"
+
 OUTPUT_COLUMNS = [
     "UNITID",
     "reporting_unitid",
@@ -228,7 +236,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Label-driven IPEDS harmonizer")
     parser.add_argument("--root", type=Path, default=Path("data/raw"), help="Raw data root containing year folders")
     parser.add_argument("--lake", type=Path, default=Path("dictionary_lake.parquet"), help="Dictionary lake parquet path")
-    parser.add_argument("--output", type=Path, default=Path("panel_long.parquet"), help="Output parquet path")
+    parser.add_argument("--output", type=Path, default=PARQUET_OUTPUT_DIR / "panel_long.parquet", help="Output parquet path")
     parser.add_argument(
         "--years",
         type=str,
@@ -1359,16 +1367,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     output_df = build_output_frame(output_frames)
     output_df = backfill_static_locational_fields(output_df, years)
+    output_df, conflicts_df = resolve_crossform_conflicts(output_df)
+    if not conflicts_df.empty:
+        FORM_CONFLICTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        conflicts_df.to_csv(FORM_CONFLICTS_PATH, index=False)
+        logging.warning("Form conflicts detected; details written to %s", FORM_CONFLICTS_PATH)
     report_df, errors = run_validations(output_df, rules, args.strict_release)
     coverage = (
         output_df.groupby(["year", "survey"], dropna=False)["target_var"]
         .nunique()
         .reset_index(name="n_concepts")
     )
-    coverage.to_csv("coverage_summary.csv", index=False)
-    logging.info("Coverage by year and survey written to coverage_summary.csv")
+    COVERAGE_SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    coverage.to_csv(COVERAGE_SUMMARY_PATH, index=False)
+    logging.info("Coverage by year and survey written to %s", COVERAGE_SUMMARY_PATH)
 
     logging.info("Writing output parquet to %s", args.output)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     output_df.to_parquet(args.output, index=False, compression="snappy")
     logging.info("Writing label audit to label_matches.csv")
     audit_columns = [
