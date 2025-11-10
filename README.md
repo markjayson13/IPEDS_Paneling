@@ -1,29 +1,50 @@
 # IPEDS Paneling
 
-The IPEDS paneling workflow harmonizes dictionary metadata with survey data
-files using a label-driven concept catalog. Use the following terminal commands
-to rebuild the dictionary lake and run key smoke tests once your Python
-environment is ready.
+![Python](https://img.shields.io/badge/Python-3.13-blue.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-## 1. Bootstrap the virtual environment
+## Table of Contents
+1. [Project Description](#project-description)
+2. [Installation](#installation)
+3. [Usage](#usage)
+4. [Features](#features)
+5. [Contributing](#contributing)
+6. [Technologies Used](#technologies-used)
+7. [License](#license)
+8. [Authors & Contact](#authors--contact)
+9. [Troubleshooting / FAQ](#troubleshooting--faq)
+10. [Known Issues](#known-issues)
+11. [Bug Tracker](#bug-tracker)
 
+---
+
+## Project Description
+IPEDS Paneling builds research-ready institution-level panels from the U.S. Department of Education’s IPEDS surveys. It merges dictionary metadata with survey files using a label-driven concept catalog, enforces parent/child policies, and emits long and wide datasets covering 2004–2024 (plus future years as released). The design follows best practices highlighted in IPEDS guidance, the Jaquette & Parra (2013) research playbook, and comparisons to StataIPEDSAll, prioritizing traceability and strict QC.
+
+---
+
+## Installation
 ```bash
+git clone https://github.com/markjaysonfarol13/IPEDS_Paneling.git
+cd IPEDS_Paneling
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip
 python -m pip install -r requirements.txt
 ```
 
-## 2. Refresh the dictionary lake
+---
 
+## Usage
+
+### 1. Refresh the dictionary lake
 ```bash
 python 01_ingest_dictionaries.py \
   --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
   --output dictionary_lake.parquet
 ```
 
-## 3. Build the full 2004–2024 panel (strict release + coverage)
-
+### 2. Harmonize to a long panel (2004–2024)
 ```bash
 python harmonize_new.py \
   --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
@@ -34,11 +55,9 @@ python harmonize_new.py \
   --strict-release \
   --strict-coverage
 ```
+*(Optional `--reporting-map reporting_map.csv` if you have a UNITID→reporting-unit crosswalk.)*
 
-*Optional:* include `--reporting-map reporting_map.csv` if you maintain a UNITID→reporting-unit crosswalk.
-
-## 4. Produce the classic wide CSV (one row per UNITID-year)
-
+### 3. Produce the classic wide CSV for downstream analysis
 ```bash
 python - <<'PY'
 import pandas as pd
@@ -59,13 +78,11 @@ cols = ["UNITID","reporting_unitid","year"] + [
     c for c in wide.columns if c not in {"UNITID","reporting_unitid","year"}
 ]
 wide = wide[cols]
-
 wide.to_csv(base_dir / "panel_long_wide.csv", index=False)
 PY
 ```
 
-## 5. Spot-check label matches
-
+### 4. Spot-check label matches
 ```bash
 python - <<'PY'
 import pandas as pd
@@ -74,24 +91,65 @@ print(df.sort_values(["score", "year"]).head(10))
 PY
 ```
 
-Run each block from the repository root. The environment bootstrap only needs
-to be performed once per machine (repeat the `source .venv/bin/activate` step
-whenever you open a new shell).
+---
 
-## Important: UNITID vs. OPEID
+## Features
+- Label-driven harmonization with regex/exclude logic per concept.
+- Parent/child reporting policies with explicit `reporting_unitid`.
+- Strict release, coverage, and uniform-form validations.
+- Finance basis tagging (GASB/FASB/For-profit) per extracted row.
+- EF residence long-family extraction with state column.
+- QC outputs: `label_matches.csv`, `form_conflicts.csv`, `coverage_summary.csv`.
 
-IPEDS panels are keyed on `UNITID`. Do **not** aggregate by OPEID or super-OPEID
-without a vetted crosswalk (see Robert Kelchen’s guidance on OPEID pitfalls).
-The harmonizer will refuse `--scorecard-merge` unless you also pass an approved
-`--scorecard-crosswalk` file. Always join Scorecard data via an explicit,
-documented UNITID↔OPEID map to avoid double-counting systems that share OPEIDs.
+---
 
-## Coverage and QC artifacts
+## Contributing
+1. Fork and clone the repo.
+2. Create a feature branch (`git checkout -b feature/my-update`).
+3. Run lint/tests before committing.
+4. Open a pull request describing the change.
 
-Every harmonizer run emits:
+---
 
-- `label_matches.csv` – per-concept audit with scores and matched labels.
-- `form_conflicts.csv` (when needed) – Finance/SFA rows where multiple forms existed; only the highest-ranked row is kept.
-- `coverage_summary.csv` – number of concepts resolved per survey × year, so you can see partial components (e.g., early CST).
+## Technologies Used
+- Python 3.13
+- pandas, pyarrow
+- Label-driven regex catalog
+- CLI-driven workflows
 
-Review these files after each panel build to confirm coverage and form uniformity.
+---
+
+## License
+MIT License. See `LICENSE` for details.
+
+---
+
+## Authors & Contact
+- **Mark Jayson Farol** – `markjaysonfarol13@gmail.com`  
+- GitHub: [markjaysonfarol13](https://github.com/markjaysonfarol13)
+
+---
+
+## Troubleshooting / FAQ
+- **OPEID merges?** Don’t aggregate on OPEID without a vetted crosswalk. See Robert Kelchen’s warning on OPEID pitfalls. The harmonizer refuses `--scorecard-merge` unless you provide `--scorecard-crosswalk`.
+- **Mixed forms in Finance?** Check `form_conflicts.csv`; ensure each UNITID-year uses a single Finance form (F1A vs F2A vs F3A).
+- **Partial components (e.g., CST 2024)**? See `coverage_summary.csv` for per-year survey counts.
+
+---
+
+## Known Issues
+- Early 2000s Finance forms sometimes use idiosyncratic wording; watch for low-scoring matches in `label_matches.csv`.
+- 2024 components remain partial until NCES posts final Finance/SFA/CST files.
+
+---
+
+## Bug Tracker
+Report issues via GitHub: <https://github.com/markjaysonfarol13/IPEDS_Paneling/issues>
+
+---
+
+## Build / Test Instructions
+- **Build panel**: run steps in [Usage](#usage).
+- **Tests**: run targeted smoke tests per instructions (no formal test suite yet); inspect QC files for anomalies.
+
+--- *** End Patch
