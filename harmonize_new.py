@@ -549,7 +549,7 @@ def resolve_crossform_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
     if "state" in df.columns:
         key.append("state")
     key = [col for col in key if col in df.columns]
-    key_frame = df[key].fillna("__NA__")
+    key_frame = df[key].astype(object).fillna("__NA__")
     dup_mask = key_frame.duplicated(keep=False)
     if not dup_mask.any():
         return df, df.iloc[0:0].copy()
@@ -563,7 +563,8 @@ def resolve_crossform_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
         ascending=[True] * len(key) + [False, False, False, True],
     )
     deduped = work.drop_duplicates(key, keep="first").copy()
-    conflicts_mask = work[key].fillna("__NA__").duplicated(keep=False)
+    key_nonnull = work[key].astype(object).fillna("__NA__")
+    conflicts_mask = key_nonnull.duplicated(keep=False)
     conflicts = work.loc[conflicts_mask].copy()
     if not conflicts.empty:
         keep_mask = pd.Series(False, index=conflicts.index)
