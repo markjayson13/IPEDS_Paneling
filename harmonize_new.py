@@ -79,6 +79,7 @@ OUTPUT_COLUMNS = [
     "units",
     "survey",
     "form_family",
+    "finance_basis",
     "decision_score",
     "period_type",
     "source_var",
@@ -88,6 +89,9 @@ OUTPUT_COLUMNS = [
     "source_file",
     "release",
     "notes",
+    "reporting_map_policy",
+    "reporting_unit_scope",
+    "allocation_factor_used",
 ]
 
 # Optional columns (e.g., 'state' for long-family extractions) are appended dynamically in build_output_frame.
@@ -236,6 +240,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--strict-coverage", action="store_true", help="Error if any concept fails to meet MIN_ACCEPT_SCORE")
     parser.add_argument("--log-level", type=str, default="INFO", help="Logging level (e.g., INFO, DEBUG)")
     parser.add_argument("--reporting-map", type=Path, default=None, help="CSV crosswalk with UNITID->reporting_unitid actions")
+    parser.add_argument("--scorecard-merge", action="store_true", help="Enable Scorecard merge guard (requires --scorecard-crosswalk)")
+    parser.add_argument("--scorecard-crosswalk", type=Path, default=None, help="Approved UNITID/OPEID crosswalk for Scorecard merges")
     return parser.parse_args(argv)
 
 
@@ -1052,21 +1058,33 @@ def apply_reporting_rules(frame: pd.DataFrame, survey: str, rpt_map: Optional[pd
     if rpt_map is None:
         if "reporting_unitid" not in frame.columns:
             frame["reporting_unitid"] = frame["UNITID"]
+        frame["reporting_map_policy"] = frame.get("reporting_map_policy", "keep_child")
+        frame["reporting_unit_scope"] = frame.get("reporting_unit_scope", "campus")
+        frame["allocation_factor_used"] = frame.get("allocation_factor_used", "")
         return frame
     comp = (survey or "").strip().lower()
     rules = rpt_map[rpt_map["component"].eq(comp)]
     if rules.empty:
         if "reporting_unitid" not in frame.columns:
             frame["reporting_unitid"] = frame["UNITID"]
+        frame["reporting_map_policy"] = frame.get("reporting_map_policy", "keep_child")
+        frame["reporting_unit_scope"] = frame.get("reporting_unit_scope", "campus")
+        frame["allocation_factor_used"] = frame.get("allocation_factor_used", "")
         return frame
+    base = frame.copy()
+    base["reporting_map_policy"] = "keep_child"
+    base["reporting_unit_scope"] = "campus"
+    base["allocation_factor_used"] = base.get("allocation_factor_used", "")
     rules = rules[["UNITID", "reporting_unitid", "action"]].dropna(how="all")
-    merged = frame.merge(rules, how="left", on="UNITID", suffixes=("", "_rule"))
+    merged = base.merge(rules, how="left", on="UNITID", suffixes=("", "_rule"))
     merged["reporting_unitid"] = merged["reporting_unitid"].fillna(merged["UNITID"]).astype("Int64")
     merged["action"] = merged["action"].fillna("keep_child")
+    merged["reporting_map_policy"] = merged["action"]
     drop_mask = merged["action"].eq("drop_child") & merged["UNITID"].ne(merged["reporting_unitid"])
     merged = merged.loc[~drop_mask].copy()
     roll_mask = merged["action"].eq("roll_to_parent") & merged["reporting_unitid"].notna()
     merged.loc[roll_mask, "UNITID"] = merged.loc[roll_mask, "reporting_unitid"]
+    merged.loc[roll_mask, "reporting_unit_scope"] = "system"
     merged.drop(columns=["action"], inplace=True)
     return merged
 
@@ -1076,6 +1094,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     configure_logging(args.log_level)
     years = parse_years(args.years)
     report_duplicate_modules()
+    if args.scorecard_merge and not args.scorecard_crosswalk:
+        raise SystemExit("Refusing to merge on OPEID without --scorecard-crosswalk. See README.")
     lake = load_dictionary_lake(args.lake)
     rules = load_validation_rules(args.rules)
     reporting_map = load_reporting_map(args.reporting_map)
@@ -1173,6 +1193,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 decision_records.append(CandidateSelection(**record_kwargs))
                 continue
             prefix = determine_prefix(best_row, concept)
+            finance_basis = ""
+            if survey_name.strip().lower() == "finance":
+                form_upper = (prefix or "").upper()
+                if form_upper.startswith("F1"):
+                    finance_basis = "GASB"
+                elif form_upper.startswith("F2"):
+                    finance_basis = "FASB"
+                elif form_upper.startswith("F3"):
+                    finance_basis = "FORPROFIT"
             release = coerce_optional_str(best_row.get("release"))
             data_path, manifest_release = locate_data_file(
                 year,
@@ -1266,6 +1295,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                             "units": concept.get("units"),
                             "survey": concept.get("survey"),
                             "form_family": prefix,
+                            "finance_basis": finance_basis,
                             "decision_score": score_val,
                             "period_type": concept.get("period_type"),
                             "source_var": state_col,
@@ -1275,6 +1305,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                             "source_file": str(data_path),
                             "release": effective_release,
                             "notes": concept.get("notes"),
+                            "reporting_map_policy": "",
+                            "reporting_unit_scope": "campus",
+                            "allocation_factor_used": "",
                         }
                     )
                     frame = apply_reporting_rules(frame, str(concept.get("survey", "")), reporting_map)
@@ -1304,6 +1337,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "units": concept.get("units"),
                     "survey": concept.get("survey"),
                     "form_family": prefix,
+                    "finance_basis": finance_basis,
                     "decision_score": score_val,
                     "period_type": concept.get("period_type"),
                     "source_var": source_col,
@@ -1313,6 +1347,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "source_file": str(data_path),
                     "release": effective_release,
                     "notes": concept.get("notes"),
+                    "reporting_map_policy": "",
+                    "reporting_unit_scope": "campus",
+                    "allocation_factor_used": "",
                 }
             )
             output_frames.append(frame)
@@ -1322,6 +1359,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     output_df = build_output_frame(output_frames)
     output_df = backfill_static_locational_fields(output_df, years)
     report_df, errors = run_validations(output_df, rules, args.strict_release)
+    coverage = (
+        output_df.groupby(["year", "survey"], dropna=False)["target_var"]
+        .nunique()
+        .reset_index(name="n_concepts")
+    )
+    coverage.to_csv("coverage_summary.csv", index=False)
+    logging.info("Coverage by year and survey written to coverage_summary.csv")
 
     logging.info("Writing output parquet to %s", args.output)
     output_df.to_parquet(args.output, index=False, compression="snappy")

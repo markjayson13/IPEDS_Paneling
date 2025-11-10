@@ -820,6 +820,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [
                 r"^total revenues? (?:and )?investment return$",
                 r"^total other revenues? (?:&|and) additions$",
+                r"^total revenues? (?:and )?other additions$",
                 r"^total revenues?(?:,? operating and nonoperating)?.*investment (?:return|income).*$",
             ],
             "exclude_regex": [r"endowment (?:market )?value|net assets|position|balance sheet"],
@@ -836,6 +837,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^tuition (?:and )?fees,? after deducting (?:discounts|allowances)$",
                 r"^tuition (?:and )?fees.*\(net\)$",
                 r"^net tuition (?:and )?fees$",
+                r"^tuition (?:and )?fees[, ]+after deducting .*discounts?.*allowances.*$",
+                r"^tuition (?:and )?fees.*net of .*allowances.*$",
             ],
             "exclude_regex": [r"\bgross\b|before deducting|discounts? and allowances$"],
             "notes": "Net revenue line; excludes contra-revenue allowances.",
@@ -1011,8 +1014,11 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "Finance",
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
-            "label_regex": [r"^scholarships? (?:and )?fellowships?(?:\s*expenses?)?.*$"],
-            "exclude_regex": [r"revenues?|allowances|discounts?"],
+            "label_regex": [
+                r"^scholarships? (?:and )?fellowships?(?:\s*expenses?)?.*$",
+                r"^scholarships? (?:and )?fellowships?\s*-\s*total$",
+            ],
+            "exclude_regex": [r"revenues?|allowances|discounts?|contra"],
             "notes": "Expense functional line; excludes contra-revenue allowances.",
         },
         "fin_auxiliary_exp": {
@@ -1073,7 +1079,10 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "Finance",
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
-            "label_regex": [r"^discounts? and allowances applied to tuition (?:and )?fees$"],
+            "label_regex": [
+                r"^discounts? and allowances applied to tuition (?:and )?fees$",
+                r"^scholarship allowances applied to tuition (?:and )?fees$",
+            ],
         },
         "fin_allowances_aux": {
             "target_var": "fin_allowances_aux",
@@ -1082,7 +1091,10 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "survey": "Finance",
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
-            "label_regex": [r"^discounts? and allowances applied to (sales and services of )?auxiliary (?:enterprise|enterprises) revenues?$"],
+            "label_regex": [
+                r"^discounts? and allowances applied to (sales and services of )?auxiliary (?:enterprise|enterprises) revenues?$",
+                r"^scholarship allowances applied to (sales and services of )?auxiliary (?:enterprise|enterprises) revenues?$",
+            ],
         },
         "fin_endowment_assets_boy_eoy": {
             "target_var": "fin_endowment_assets_boy_eoy",

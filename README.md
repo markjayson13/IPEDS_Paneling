@@ -77,3 +77,21 @@ PY
 Run each block from the repository root. The environment bootstrap only needs
 to be performed once per machine (repeat the `source .venv/bin/activate` step
 whenever you open a new shell).
+
+## Important: UNITID vs. OPEID
+
+IPEDS panels are keyed on `UNITID`. Do **not** aggregate by OPEID or super-OPEID
+without a vetted crosswalk (see Robert Kelchen’s guidance on OPEID pitfalls).
+The harmonizer will refuse `--scorecard-merge` unless you also pass an approved
+`--scorecard-crosswalk` file. Always join Scorecard data via an explicit,
+documented UNITID↔OPEID map to avoid double-counting systems that share OPEIDs.
+
+## Coverage and QC artifacts
+
+Every harmonizer run emits:
+
+- `label_matches.csv` – per-concept audit with scores and matched labels.
+- `form_conflicts.csv` (when needed) – Finance/SFA rows where multiple forms existed; only the highest-ranked row is kept.
+- `coverage_summary.csv` – number of concepts resolved per survey × year, so you can see partial components (e.g., early CST).
+
+Review these files after each panel build to confirm coverage and form uniformity.
