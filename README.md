@@ -113,8 +113,9 @@ PY
 - Strict release, coverage, and uniform-form validations.
 - Finance basis tagging (GASB/FASB/For-profit) per extracted row.
 - EF residence long-family extraction with state column.
-- QC outputs: `label_matches.csv`, `form_conflicts.csv`, `coverage_summary.csv`.
-  - `form_conflicts.csv` and `coverage_summary.csv` are written to `/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks/`.
+- QC outputs written outside the repo:
+  - `label_matches.csv` → `/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks/Label match/`
+  - `validation_report.csv`, `form_conflicts.csv`, `coverage_summary.csv` → `/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks/`
 
 ---
 

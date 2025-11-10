@@ -73,6 +73,8 @@ NA_TOKENS = [
 PARQUET_OUTPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets")
 CHECKS_OUTPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks")
 LABEL_CHECK_DIR = CHECKS_OUTPUT_DIR / "Label match"
+LABEL_MATCH_PATH = LABEL_CHECK_DIR / "label_matches.csv"
+VALIDATION_REPORT_PATH = CHECKS_OUTPUT_DIR / "validation_report.csv"
 SUPP_PANEL_DIR = CHECKS_OUTPUT_DIR / "Supp. Panels"
 FORM_CONFLICTS_PATH = CHECKS_OUTPUT_DIR / "form_conflicts.csv"
 COVERAGE_SUMMARY_PATH = CHECKS_OUTPUT_DIR / "coverage_summary.csv"
@@ -1418,9 +1420,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             lambda s: s is not None and not pd.isna(s) and float(s) >= MIN_ACCEPT_SCORE
         )
     audit_df["accepted"] = audit_df["accepted"].astype("boolean")
-    audit_df.to_csv("label_matches.csv", index=False)
-    logging.info("Writing validation report to validation_report.csv")
-    report_df.to_csv("validation_report.csv", index=False)
+    LABEL_CHECK_DIR.mkdir(parents=True, exist_ok=True)
+    audit_df.to_csv(LABEL_MATCH_PATH, index=False)
+    logging.info("Label audit written to %s", LABEL_MATCH_PATH)
+    CHECKS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    report_df.to_csv(VALIDATION_REPORT_PATH, index=False)
+    logging.info("Validation report written to %s", VALIDATION_REPORT_PATH)
 
     coverage_fail = False
     if args.strict_coverage:
