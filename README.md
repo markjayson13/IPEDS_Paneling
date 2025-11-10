@@ -36,6 +36,15 @@ python -m pip install -r requirements.txt
 ---
 
 ## Usage
+(high-level data flow)
+
+```mermaid
+flowchart LR
+    A[Raw IPEDS downloads<br>(/Cross sectional Datas)] --> B[01_ingest_dictionaries.py<br>dictionary_lake.parquet]
+    B --> C[harmonize_new.py<br>label-driven matching]
+    C --> D[panel_long.parquet<br>(long)]
+    D --> E[pivot to panel_long_wide.csv<br>(wide)]
+```
 
 ### 1. Refresh the dictionary lake
 ```bash
@@ -131,7 +140,7 @@ MIT License. See `LICENSE` for details.
 ---
 
 ## Troubleshooting / FAQ
-- **OPEID merges?** Don’t aggregate on OPEID without a vetted crosswalk. See Robert Kelchen’s warning on OPEID pitfalls. The harmonizer refuses `--scorecard-merge` unless you provide `--scorecard-crosswalk`.
+- **OPEID merges?** Don’t aggregate on OPEID without a vetted crosswalk. See Robert Kelchen’s warning on OPEID pitfalls (Kelchen, *Beware OPEIDs and Super OPEIDs*, 2019). The harmonizer refuses `--scorecard-merge` unless you provide `--scorecard-crosswalk`.
 - **Mixed forms in Finance?** Check `form_conflicts.csv`; ensure each UNITID-year uses a single Finance form (F1A vs F2A vs F3A).
 - **Partial components (e.g., CST 2024)**? See `coverage_summary.csv` for per-year survey counts.
 
@@ -151,5 +160,12 @@ Report issues via GitHub: <https://github.com/markjaysonfarol13/IPEDS_Paneling/i
 ## Build / Test Instructions
 - **Build panel**: run steps in [Usage](#usage).
 - **Tests**: run targeted smoke tests per instructions (no formal test suite yet); inspect QC files for anomalies.
+
+## References
+- **NCES IPEDS Survey Components**: <https://nces.ed.gov/ipeds/>
+- **NCES Finance Overview**: <https://nces.ed.gov/ipeds/survey-components/2>
+- **NCES Fall Enrollment Overview**: <https://nces.ed.gov/ipeds/survey-components/8>
+- **Jaquette & Parra (2013)**: *The Handbook of Institutional Research* (Springer) – chapter on IPEDS research design.
+- **Kelchen (2019)**: “Beware OPEIDs and Super OPEIDs” – IPEDS R&D Series.
 
 --- *** End Patch
