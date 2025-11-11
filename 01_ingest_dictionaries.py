@@ -13,6 +13,7 @@ import re
 import sys
 from pathlib import Path
 from typing import Iterable
+import json
 
 try:  # pylint: disable=wrong-import-position
     import pandas as pd
@@ -58,6 +59,74 @@ LABEL_CANDIDATES = (
     "valuelabel",
     "unique identification number of the institution",
 )
+
+SURVEY_HINT_BY_PREFIX = {
+    "F1A": "Finance",
+    "F2A": "Finance",
+    "F3A": "Finance",
+    "F1": "Finance",
+    "F2": "Finance",
+    "F3": "Finance",
+    "EF": "FallEnrollment",
+    "EFIA": "12MonthEnrollment",
+    "EFIB": "12MonthEnrollment",
+    "EFIC": "12MonthEnrollment",
+    "EFID": "12MonthEnrollment",
+    "E1D": "12MonthEnrollment",
+    "EFFY": "12MonthEnrollment",
+    "IC": "InstitutionalCharacteristics",
+    "HD": "InstitutionalCharacteristics",
+    "SFA": "StudentFinancialAid",
+    "OM": "OutcomeMeasures",
+    "HR": "HumanResources",
+    "GR": "GraduationRates",
+    "GRS": "GraduationRates",
+    "PE": "GraduationRates",
+    "ADM": "Admissions",
+    "AL": "AcademicLibraries",
+    "C": "Completions",
+}
+
+
+def normalize_label(series: pd.Series) -> pd.Series:
+    return (
+        series.fillna("")
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .str.replace(UNICODE_HYPHENS, "-", regex=True)
+        .str.replace(r"[•·●\u2022]", " ", regex=True)
+        .str.replace(r"&", " and ", regex=True)
+        .str.replace(r"[^\w\s\(\)/%-]", "", regex=True)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+    )
+
+
+def extract_columns(df: pd.DataFrame) -> pd.DataFrame | None:
+    if df is None or df.empty:
+        return None
+    var_col = first_match(df.columns, VAR_CANDIDATES)
+    label_col = first_match(df.columns, LABEL_CANDIDATES)
+    if var_col and label_col:
+        out = df[[var_col, label_col]].copy()
+        out.columns = ["source_var", "source_label"]
+        return out
+    return None
+
+
+def read_txt(path: Path) -> pd.DataFrame | None:
+    attempts = (
+        dict(sep=None, engine="python"),
+        dict(sep="|"),
+        dict(delim_whitespace=True),
+    )
+    for kwargs in attempts:
+        try:
+            return pd.read_csv(path, dtype=str, encoding_errors="ignore", low_memory=False, **kwargs)
+        except Exception:
+            continue
+    return None
 
 
 def report_duplicate_modules() -> None:
@@ -107,18 +176,6 @@ def first_match(columns: Iterable[str], candidates: Iterable[str]) -> str | None
 
 def read_any_dictionary(path: Path) -> pd.DataFrame:
     suffix = path.suffix.lower()
-
-    def extract_columns(df: pd.DataFrame) -> pd.DataFrame | None:
-        if df is None or df.empty:
-            return None
-        var_col = first_match(df.columns, VAR_CANDIDATES)
-        label_col = first_match(df.columns, LABEL_CANDIDATES)
-        if var_col and label_col:
-            out = df[[var_col, label_col]].copy()
-            out.columns = ["source_var", "source_label"]
-            return out
-        return None
-
     if suffix in {".xlsx", ".xls"}:
         engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
         xls = pd.ExcelFile(path, engine=engine)
@@ -133,29 +190,23 @@ def read_any_dictionary(path: Path) -> pd.DataFrame:
             extracted = extract_columns(df) or df.iloc[:, :2].copy()
             extracted.columns = ["source_var", "source_label"]
         return extracted
-
     if suffix == ".csv":
-        df = pd.read_csv(path, dtype=str, encoding_errors="ignore")
+        df = pd.read_csv(path, dtype=str, encoding_errors="ignore", low_memory=False)
         extracted = extract_columns(df)
         if extracted is None:
             extracted = df.iloc[:, :2].copy()
             extracted.columns = ["source_var", "source_label"]
         return extracted
     if suffix == ".txt":
-        try:
-            df = pd.read_csv(path, dtype=str, sep=None, engine="python", encoding_errors="ignore")
-        except Exception:
-            try:
-                df = pd.read_csv(path, dtype=str, sep="|", encoding_errors="ignore")
-            except Exception:
-                df = pd.read_csv(path, dtype=str, delim_whitespace=True, encoding_errors="ignore")
+        df = read_txt(path)
+        if df is None:
+            raise ValueError(f"Unable to parse TXT dictionary {path}")
         extracted = extract_columns(df)
         if extracted is None:
             extracted = df.iloc[:, :2].copy()
             extracted.columns = ["source_var", "source_label"]
         return extracted
-
-    # Fallback: let pandas attempt to read anything unknown
+    # Fallback to Excel reader for anything else
     engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
     df = pd.read_excel(path, sheet_name=0, dtype=str, engine=engine)
     extracted = extract_columns(df)
@@ -203,6 +254,16 @@ def iter_dictionary_files(year_dir: Path) -> Iterable[Path]:
             yield path
 
 
+def map_survey_hint(prefix_hint: str, fallback: str) -> str:
+    prefix_upper = (prefix_hint or "").upper()
+    if prefix_upper in SURVEY_HINT_BY_PREFIX:
+        return SURVEY_HINT_BY_PREFIX[prefix_upper]
+    for key, value in SURVEY_HINT_BY_PREFIX.items():
+        if prefix_upper.startswith(key):
+            return value
+    return fallback
+
+
 def main() -> None:
     args = parse_args()
     report_duplicate_modules()
@@ -238,30 +299,78 @@ def main() -> None:
             if fallback:
                 df.loc[df["prefix_hint"].eq(""), "prefix_hint"] = fallback
             df["release"] = derive_release(path.name)
-            survey_hint = re.findall(r"/([A-Z]{1,4})[_-]", "/" + path.stem.upper() + "_")
-            df["survey_hint"] = survey_hint[0] if survey_hint else ""
+            path_hint = re.findall(r"/([A-Z]{1,4})[_-]", "/" + path.stem.upper() + "_")
+            fallback_hint = path_hint[0] if path_hint else ""
+            df["survey_hint"] = df["prefix_hint"].apply(lambda p: map_survey_hint(p, fallback_hint))
             rows.append(df)
 
     if not rows:
         sys.exit("No dictionary files found. Did you run the downloader?")
 
     lake = pd.concat(rows, ignore_index=True)
-    lake["source_label_norm"] = (
-        lake["source_label"]
-        .fillna("")
-        .str.strip()
-        .str.lower()
-        .str.replace(UNICODE_HYPHENS, "-", regex=True)
-        .str.replace(r"[•·]", " ", regex=True)
-        .str.replace(r"[&]", " and ", regex=True)
-        .str.replace(r"[^\w\s\(\)/%-]", "", regex=True)
-        .str.replace(r"\s+", " ", regex=True)
-        .str.strip()
+    lake["source_label_norm"] = normalize_label(lake["source_label"])
+    lake["source_var"] = lake["source_var"].astype(str).str.strip()
+    lake["dict_file"] = lake["dict_file"].astype(str)
+    lake["filename"] = lake["filename"].astype(str)
+    lake["prefix_hint"] = lake["prefix_hint"].fillna("").astype(str).str.upper()
+    lake["survey_hint"] = lake["survey_hint"].fillna("").astype(str)
+    lake["release"] = lake["release"].fillna("").astype(str)
+    lake["year"] = pd.to_numeric(lake["year"], errors="coerce").astype("Int64")
+
+    required_cols = [
+        "year",
+        "source_var",
+        "source_label",
+        "source_label_norm",
+        "dict_file",
+        "filename",
+        "release",
+        "prefix_hint",
+        "survey_hint",
+    ]
+    missing = [col for col in required_cols if col not in lake.columns]
+    if missing:
+        raise RuntimeError(f"Dictionary lake missing required columns: {missing}")
+
+    dedup_key = ["year", "dict_file", "source_var", "source_label_norm"]
+    dup_rows = lake[lake.duplicated(dedup_key, keep=False)].copy()
+    lake = (
+        lake.sort_values(["year", "survey_hint", "prefix_hint", "dict_file", "source_var"])
+        .drop_duplicates(dedup_key, keep="first")
+        .reset_index(drop=True)
     )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    lake.to_parquet(args.output, index=False)
+    lake.to_parquet(args.output, index=False, compression="snappy")
     print(f"Wrote {len(lake):,} rows to {args.output}")
+
+    if not dup_rows.empty:
+        dup_path = args.output.with_name("dictionary_lake_duplicates.csv")
+        dup_rows.sort_values(dedup_key).to_csv(dup_path, index=False)
+        print(f"Duplicate rows written to {dup_path}")
+
+    top_labels = (
+        lake.groupby(["year", "survey_hint", "source_label_norm"], dropna=False)
+        .size()
+        .reset_index(name="count")
+    )
+    top_labels = (
+        top_labels.sort_values(["year", "survey_hint", "count"], ascending=[True, True, False])
+        .groupby(["year", "survey_hint"], as_index=False)
+        .head(25)
+    )
+    top_path = args.output.with_name("dictionary_lake_top_labels.csv")
+    top_labels.to_csv(top_path, index=False)
+    print(f"Top label summary written to {top_path}")
+
+    profile = (
+        lake.groupby(["year", "survey_hint", "prefix_hint", "dict_file"], dropna=False)
+        .size()
+        .reset_index(name="row_count")
+    )
+    profile_path = args.output.with_name("dictionary_lake_columns_profile.json")
+    profile.to_json(profile_path, orient="records", indent=2)
+    print(f"Dictionary profile written to {profile_path}")
 
 
 if __name__ == "__main__":
