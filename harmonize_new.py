@@ -27,11 +27,13 @@ The script will emit ``panel_long.parquet`` with tidy concept values,
 from __future__ import annotations
 
 import argparse
+import hashlib
 import logging
 import os
 import re
 import sys
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional, Sequence
 
@@ -97,6 +99,7 @@ OUTPUT_COLUMNS = [
     "imputed_flag",
     "is_imputed",
     "source_file",
+    "source_file_sha256",
     "release",
     "notes",
     "reporting_map_policy",
@@ -231,6 +234,11 @@ class CandidateSelection:
     notes: Optional[str]
     top_alternates: Optional[str]
     imputed_flag: Optional[str]
+    survey: Optional[str] = None
+    period_type: Optional[str] = None
+    reporting_unitid: Optional[str] = None
+    extraction_status: Optional[str] = None
+    source_file_sha256: Optional[str] = None
     accepted: Optional[bool] = None
 
 
@@ -544,8 +552,11 @@ def _form_priority(prefix: Optional[str]) -> int:
 def resolve_crossform_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     if df.empty:
         return df, df.iloc[0:0].copy()
+    df = _coalesce_reporting(df.copy())
     primary_id = "reporting_unitid" if "reporting_unitid" in df.columns else "UNITID"
     key = [primary_id, "year", "survey", "target_var"]
+    if "period_type" in df.columns:
+        key.append("period_type")
     if "state" in df.columns:
         key.append("state")
     key = [col for col in key if col in df.columns]
@@ -1045,6 +1056,15 @@ def backfill_static_locational_fields(df: pd.DataFrame, years: Sequence[int]) ->
     return combined
 
 
+def _coalesce_reporting(df: pd.DataFrame) -> pd.DataFrame:
+    if "reporting_unitid" not in df.columns:
+        df["reporting_unitid"] = pd.NA
+    df["reporting_unitid"] = df["reporting_unitid"].replace("", pd.NA)
+    if "UNITID" in df.columns:
+        df["reporting_unitid"] = df["reporting_unitid"].fillna(df["UNITID"])
+    return df
+
+
 def build_output_frame(records: List[pd.DataFrame]) -> pd.DataFrame:
     if not records:
         return pd.DataFrame(columns=OUTPUT_COLUMNS)
@@ -1055,6 +1075,7 @@ def build_output_frame(records: List[pd.DataFrame]) -> pd.DataFrame:
     if "reporting_unitid" not in df.columns:
         df["reporting_unitid"] = df.get("UNITID")
     df = df[columns]
+    df = _coalesce_reporting(df)
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
     return df
 
@@ -1071,6 +1092,36 @@ def run_uniform_form_rule(df: pd.DataFrame, rule: dict) -> int:
         .nunique(dropna=True)
     )
     return int((mix > 1).sum())
+
+
+@lru_cache(maxsize=4096)
+def _sha256_path(path: str) -> Optional[str]:
+    if not path:
+        return None
+    try:
+        with open(path, "rb") as handle:
+            digest = hashlib.sha256()
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except FileNotFoundError:
+        return None
+
+
+def _inject_source_hash(df: pd.DataFrame) -> pd.DataFrame:
+    if "source_file" not in df.columns:
+        df["source_file_sha256"] = pd.NA
+        return df
+    paths = (
+        df["source_file"]
+        .dropna()
+        .astype(str)
+        .unique()
+        .tolist()
+    )
+    hash_map = {p: _sha256_path(p) for p in paths if os.path.exists(p)}
+    df["source_file_sha256"] = df["source_file"].map(hash_map).fillna(pd.NA)
+    return df
 
 
 def load_reporting_map(path: Optional[Path]) -> Optional[pd.DataFrame]:
@@ -1161,6 +1212,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "notes": concept.get("notes"),
                 "top_alternates": None,
                 "imputed_flag": None,
+                "survey": None,
+                "period_type": concept.get("period_type"),
+                "reporting_unitid": None,
+                "extraction_status": None,
                 "accepted": None,
             }
             min_year = concept.get("min_year")
@@ -1169,6 +1224,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 note = concept.get("notes") or ""
                 reason = f"Unavailable before {min_year}"
                 record_kwargs["notes"] = f"{note} - {reason}" if note else reason
+                record_kwargs["extraction_status"] = "not_yet_available"
                 record_kwargs["accepted"] = True
                 decision_records.append(CandidateSelection(**record_kwargs))
                 continue
@@ -1176,6 +1232,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 note = concept.get("notes") or ""
                 reason = f"Retired after {max_year}"
                 record_kwargs["notes"] = f"{note} - {reason}" if note else reason
+                record_kwargs["extraction_status"] = "retired"
                 record_kwargs["accepted"] = True
                 decision_records.append(CandidateSelection(**record_kwargs))
                 continue
@@ -1201,6 +1258,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             source_var_val = coerce_optional_str(best_row.get("source_var")) if best_row is not None else None
             score_val = None if pd.isna(best_score) else float(best_score)
             survey_name = str(concept.get("survey", ""))
+            record_kwargs["survey"] = survey_name
             record_kwargs.update(
                 {
                     "score": score_val,
@@ -1222,7 +1280,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     float(best_score) if pd.notna(best_score) else float("nan"),
                     candidate_count,
                 )
-                record_kwargs["accepted"] = False
+                record_kwargs["extraction_status"] = "not_found"
                 record_kwargs["accepted"] = False
                 decision_records.append(CandidateSelection(**record_kwargs))
                 continue
@@ -1254,6 +1312,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 logging.warning(
                     "No data file found for concept %s year %s prefix %s", concept_key, year, prefix
                 )
+                record_kwargs["extraction_status"] = "not_found"
                 record_kwargs["accepted"] = False
                 decision_records.append(CandidateSelection(**record_kwargs))
                 continue
@@ -1262,6 +1321,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 logging.warning(
                     "Skipping concept %s year %s due to missing UNITID in %s", concept_key, year, data_path
                 )
+                record_kwargs["extraction_status"] = "not_found"
                 record_kwargs["accepted"] = False
                 decision_records.append(CandidateSelection(**record_kwargs))
                 continue
@@ -1275,6 +1335,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     concept_key,
                     year,
                 )
+                record_kwargs["extraction_status"] = "not_found"
                 record_kwargs["accepted"] = False
                 decision_records.append(CandidateSelection(**record_kwargs))
                 continue
@@ -1298,6 +1359,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         continue
                     state_rows.setdefault(state_token, fam_row)
                 if not state_rows:
+                    record_kwargs["extraction_status"] = "not_found"
                     record_kwargs["accepted"] = False
                     decision_records.append(CandidateSelection(**record_kwargs))
                     continue
@@ -1349,7 +1411,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 if long_frames:
                     output_frames.extend(long_frames)
                     record_kwargs["accepted"] = True
+                    record_kwargs["extraction_status"] = "extracted"
                 else:
+                    record_kwargs["extraction_status"] = "not_found"
                     record_kwargs["accepted"] = False
                 decision_records.append(CandidateSelection(**record_kwargs))
                 continue
@@ -1388,10 +1452,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             output_frames.append(frame)
             record_kwargs["accepted"] = True
+            record_kwargs["extraction_status"] = "extracted"
             decision_records.append(CandidateSelection(**record_kwargs))
 
     output_df = build_output_frame(output_frames)
     output_df = backfill_static_locational_fields(output_df, years)
+    output_df = _coalesce_reporting(output_df)
+    output_df = _inject_source_hash(output_df)
     output_df, conflicts_df = resolve_crossform_conflicts(output_df)
     FORM_CONFLICTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     conflicts_df.to_csv(FORM_CONFLICTS_PATH, index=False)
@@ -1400,14 +1467,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     else:
         logging.warning("Form conflicts detected; details written to %s", FORM_CONFLICTS_PATH)
     report_df, errors = run_validations(output_df, rules, args.strict_release)
-    coverage = (
-        output_df.groupby(["year", "survey"], dropna=False)["target_var"]
-        .nunique()
-        .reset_index(name="n_concepts")
-    )
-    COVERAGE_SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    coverage.to_csv(COVERAGE_SUMMARY_PATH, index=False)
-    logging.info("Coverage by year and survey written to %s", COVERAGE_SUMMARY_PATH)
 
     logging.info("Writing output parquet to %s", args.output)
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -1430,12 +1489,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "notes",
         "top_alternates",
         "imputed_flag",
+        "survey",
+        "period_type",
+        "reporting_unitid",
         "accepted",
+        "extraction_status",
+        "source_file_sha256",
     ]
     audit_df = pd.DataFrame([sel.__dict__ for sel in decision_records])
     if audit_df.empty:
         audit_df = pd.DataFrame(columns=audit_columns)
     else:
+        for col in audit_columns:
+            if col not in audit_df.columns:
+                audit_df[col] = pd.NA
         audit_df = audit_df[audit_columns]
     if "accepted" not in audit_df:
         audit_df["accepted"] = pd.NA
@@ -1446,8 +1513,25 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
     audit_df["accepted"] = audit_df["accepted"].astype("boolean")
     LABEL_CHECK_DIR.mkdir(parents=True, exist_ok=True)
+    if "chosen_data_file" in audit_df.columns:
+        unique_files = [
+            p
+            for p in audit_df["chosen_data_file"].dropna().astype(str).unique()
+            if os.path.exists(p)
+        ]
+        hash_map = {p: _sha256_path(p) for p in unique_files}
+        audit_df["source_file_sha256"] = audit_df["chosen_data_file"].map(hash_map)
     audit_df.to_csv(LABEL_MATCH_PATH, index=False)
     logging.info("Label audit written to %s", LABEL_MATCH_PATH)
+    coverage = (
+        audit_df[audit_df.get("extraction_status", "") == "extracted"]
+        .groupby(["year", "survey"], dropna=False)["target_var"]
+        .nunique()
+        .reset_index(name="n_concepts")
+    )
+    COVERAGE_SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    coverage.to_csv(COVERAGE_SUMMARY_PATH, index=False)
+    logging.info("Coverage by year and survey written to %s", COVERAGE_SUMMARY_PATH)
     CHECKS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     report_df.to_csv(VALIDATION_REPORT_PATH, index=False)
     logging.info("Validation report written to %s", VALIDATION_REPORT_PATH)

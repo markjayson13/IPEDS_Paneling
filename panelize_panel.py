@@ -284,6 +284,14 @@ def configure_logging(level: str) -> None:
     )
 
 
+def normalize_reporting_ids(df: pd.DataFrame) -> pd.DataFrame:
+    if "reporting_unitid" not in df.columns:
+        df["reporting_unitid"] = df.get("UNITID")
+    df["reporting_unitid"] = df["reporting_unitid"].replace("", pd.NA)
+    df.loc[df["reporting_unitid"].isna(), "reporting_unitid"] = df["UNITID"]
+    return df
+
+
 def dedupe_panel(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
@@ -398,6 +406,7 @@ def main() -> int:
     logging.info("Loaded %d long-form rows", len(df))
     deduped = dedupe_panel(df)
     logging.info("After deduplication: %d rows", len(deduped))
+    deduped = normalize_reporting_ids(deduped)
     conflict_path = args.output.with_suffix(".reporting_conflicts.csv")
     wide = pivot_panel(deduped, conflict_path)
     logging.info("Wide panel shape: %s rows x %s columns", wide.shape[0], wide.shape[1])
