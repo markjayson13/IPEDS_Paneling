@@ -292,6 +292,18 @@ def normalize_reporting_ids(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def enforce_single_reporter(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    preferred = (
+        df.groupby(["UNITID", "year"])["reporting_unitid"]
+        .transform(lambda s: next((val for val in s if pd.notna(val)), pd.NA))
+    )
+    df = df.copy()
+    df["reporting_unitid"] = preferred.fillna(df["reporting_unitid"])
+    return df
+
+
 def dedupe_panel(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
@@ -316,28 +328,14 @@ def dedupe_panel(df: pd.DataFrame) -> pd.DataFrame:
     return deduped
 
 
-def pivot_panel(df: pd.DataFrame, conflict_path: Path | None = None) -> pd.DataFrame:
+def pivot_panel(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
-        return pd.DataFrame(columns=["UNITID", "year"])
-    id_cols = df[["UNITID", "year", "reporting_unitid"]].drop_duplicates()
-    dup_mask = id_cols.duplicated(subset=["UNITID", "year"], keep=False)
-    if dup_mask.any():
-        logging.warning(
-            "Multiple reporting_unitid values detected for some UNITID/year pairs; keeping first occurrence."
-        )
-        if conflict_path is not None:
-            offenders = id_cols.loc[dup_mask].sort_values(["UNITID", "year", "reporting_unitid"])
-            conflict_path.parent.mkdir(parents=True, exist_ok=True)
-            offenders.to_csv(conflict_path, index=False)
-            logging.warning("Reporting-unit conflicts written to %s", conflict_path)
-        id_cols = id_cols.drop_duplicates(subset=["UNITID", "year"], keep="first")
-    id_cols = id_cols.sort_values(["UNITID", "year"])
+        return pd.DataFrame(columns=["UNITID", "year", "reporting_unitid"])
     wide = (
-        df.pivot(index=["UNITID", "year"], columns="target_var", values="value")
+        df.pivot(index=["UNITID", "year", "reporting_unitid"], columns="target_var", values="value")
         .sort_index()
         .reset_index()
     )
-    wide = id_cols.merge(wide, on=["UNITID", "year"], how="right")
     wide.columns = [col if isinstance(col, str) else str(col) for col in wide.columns]
     wide = wide.sort_values(["UNITID", "year"]).reset_index(drop=True)
     return wide
@@ -402,13 +400,44 @@ def main() -> int:
         logging.info("Loaded %d template columns from %s", len(template_cols), args.columns_template)
     logging.info("Loading panel parquet from %s", args.source)
     df = pd.read_parquet(args.source)
+    if "accepted" not in df.columns:
+        logging.error("Input long panel is missing the 'accepted' column; rerun harmonize_new.py.")
+        return 1
+    df = df[df["accepted"] == True].copy()  # noqa: E712
+    if df.empty:
+        logging.warning("No accepted rows found; writing empty wide CSV.")
+        wide = pd.DataFrame(columns=CORE_COLUMNS)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        wide.to_csv(args.output, index=False)
+        return 0
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
-    logging.info("Loaded %d long-form rows", len(df))
+    df = normalize_reporting_ids(df)
     deduped = dedupe_panel(df)
     logging.info("After deduplication: %d rows", len(deduped))
-    deduped = normalize_reporting_ids(deduped)
+    deduped.drop(columns=[c for c in ["accepted"] if c in deduped.columns], inplace=True, errors="ignore")
     conflict_path = args.output.with_suffix(".reporting_conflicts.csv")
-    wide = pivot_panel(deduped, conflict_path)
+    conflict_counts = (
+        deduped.groupby(["UNITID", "year"])["reporting_unitid"]
+        .nunique(dropna=True)
+        .reset_index(name="n_reporters")
+    )
+    conflicts = conflict_counts[conflict_counts["n_reporters"] > 1]
+    if not conflicts.empty:
+        offenders = (
+            deduped.merge(conflicts[["UNITID", "year"]], on=["UNITID", "year"], how="inner")
+            [["UNITID", "year", "reporting_unitid"]]
+            .drop_duplicates()
+            .sort_values(["UNITID", "year", "reporting_unitid"])
+        )
+        conflict_path.parent.mkdir(parents=True, exist_ok=True)
+        offenders.to_csv(conflict_path, index=False)
+        logging.warning(
+            "Multiple reporting_unitid values detected for some UNITID/year pairs; see %s", conflict_path
+        )
+        deduped = enforce_single_reporter(deduped)
+    elif conflict_path.exists():
+        conflict_path.unlink()
+    wide = pivot_panel(deduped)
     logging.info("Wide panel shape: %s rows x %s columns", wide.shape[0], wide.shape[1])
     wide = order_columns(wide)
     wide = apply_column_template(wide, template_cols)

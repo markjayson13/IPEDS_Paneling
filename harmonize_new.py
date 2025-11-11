@@ -60,6 +60,9 @@ METADATA_NEGATIVES = re.compile(
     re.IGNORECASE,
 )
 
+SENTINEL_VALUES = {-1, -2, -3, -8, -9}
+SENTINEL_PREFIXES = ("ef_", "e12_", "sfa_", "anp_", "fin_")
+
 NA_TOKENS = [
     "PrivacySuppressed",
     "NULL",
@@ -318,7 +321,10 @@ def extract_prefixes(row: pd.Series) -> set[str]:
         prefixes.add(prefix_hint.upper())
     filename = str(row.get("filename", ""))
     dict_file = str(row.get("dict_file", ""))
-    pattern = re.compile(r"\b(F1A|F2A|F3A|EF|EFIA|E12|E1D|EFFY|SFA|CST|OM|GRS|PE)\b", re.IGNORECASE)
+    pattern = re.compile(
+        r"\b(F1A|F2A|F3A|EF|EFIA|E12|E1D|EFFY|SFA|CST|OM|GRS|PE|IC|HD|ADM)\b",
+        re.IGNORECASE,
+    )
     for text in (filename, dict_file):
         for match in pattern.findall(text):
             prefixes.add(match.upper())
@@ -1127,6 +1133,20 @@ def _inject_source_hash(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _sanitize_sentinels(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty or "target_var" not in df.columns or "value" not in df.columns:
+        return df
+    mask = (
+        df["target_var"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .str.startswith(SENTINEL_PREFIXES)
+    )
+    df.loc[mask & df["value"].isin(SENTINEL_VALUES), "value"] = pd.NA
+    return df
+
+
 def load_reporting_map(path: Optional[Path]) -> Optional[pd.DataFrame]:
     if not path:
         return None
@@ -1217,7 +1237,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "imputed_flag": None,
                 "survey": None,
                 "period_type": concept.get("period_type"),
-                "reporting_unitid": None,
+                "reporting_unitid": "UNITID",
                 "extraction_status": None,
                 "accepted": None,
             }
@@ -1462,6 +1482,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     output_df = backfill_static_locational_fields(output_df, years)
     output_df = _coalesce_reporting(output_df)
     output_df = _inject_source_hash(output_df)
+    output_df = _sanitize_sentinels(output_df)
     output_df, conflicts_df = resolve_crossform_conflicts(output_df)
     FORM_CONFLICTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     conflicts_df.to_csv(FORM_CONFLICTS_PATH, index=False)
@@ -1535,6 +1556,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     COVERAGE_SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
     coverage.to_csv(COVERAGE_SUMMARY_PATH, index=False)
     logging.info("Coverage by year and survey written to %s", COVERAGE_SUMMARY_PATH)
+    if coverage.empty and not output_df.empty:
+        logging.error(
+            "Coverage summary is empty but the long panel has %d rows; ensure survey metadata is populated",
+            len(output_df),
+        )
+        sys.exit(2)
     CHECKS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     report_df.to_csv(VALIDATION_REPORT_PATH, index=False)
     logging.info("Validation report written to %s", VALIDATION_REPORT_PATH)
