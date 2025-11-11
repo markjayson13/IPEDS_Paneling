@@ -74,6 +74,68 @@ NA_TOKENS = [
     ".",
 ]
 
+SURVEY_NAME_ALIASES = {
+    "ic": "InstitutionalCharacteristics",
+    "institutionalcharacteristics": "InstitutionalCharacteristics",
+    "institutionalcharacteristic": "InstitutionalCharacteristics",
+    "hd": "InstitutionalCharacteristics",
+    "directory": "InstitutionalCharacteristics",
+    "finance": "Finance",
+    "fin": "Finance",
+    "fall": "FallEnrollment",
+    "fallenrollment": "FallEnrollment",
+    "ef": "FallEnrollment",
+    "efc": "FallEnrollment",
+    "e12": "12MonthEnrollment",
+    "e1d": "12MonthEnrollment",
+    "effy": "12MonthEnrollment",
+    "efia": "12MonthEnrollment",
+    "12monthenrollment": "12MonthEnrollment",
+    "twelvemonthenrollment": "12MonthEnrollment",
+    "studentfinancialaid": "StudentFinancialAid",
+    "sfa": "StudentFinancialAid",
+    "financialaid": "StudentFinancialAid",
+    "admissions": "Admissions",
+    "adm": "Admissions",
+    "outcomemeasures": "OutcomeMeasures",
+    "om": "OutcomeMeasures",
+    "graduationrates": "GraduationRates",
+    "gr": "GraduationRates",
+    "grs": "GraduationRates",
+    "pe": "GraduationRates",
+    "humanresources": "HumanResources",
+    "hr": "HumanResources",
+    "academiclibraries": "AcademicLibraries",
+    "al": "AcademicLibraries",
+    "completions": "Completions",
+    "c": "Completions",
+}
+
+
+def canonicalize_survey_name(value: Optional[str]) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    key = re.sub(r"[\s/_-]+", "", raw).lower()
+    return SURVEY_NAME_ALIASES.get(key, raw)
+
+
+def parse_survey_list(expr: Optional[str]) -> set[str]:
+    if not expr:
+        return set()
+    surveys = {
+        canonicalize_survey_name(token)
+        for token in expr.split(",")
+        if token and canonicalize_survey_name(token)
+    }
+    return surveys
+
+
+def _slugify(label: Optional[str]) -> str:
+    cleaned = re.sub(r"[^\w]+", "_", (label or "unknown").strip().lower())
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return cleaned or "unknown"
+
 # Default output locations
 PARQUET_OUTPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets")
 CHECKS_OUTPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks")
@@ -90,6 +152,7 @@ OUTPUT_COLUMNS = [
     "year",
     "target_var",
     "value",
+    "accepted",
     "concept",
     "units",
     "survey",
@@ -255,6 +318,23 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         type=str,
         default="2004:2024",
         help="Year expression: 'YYYY', 'YYYY:YYYY', or comma list 'YYYY,YYYY'",
+    )
+    parser.add_argument(
+        "--survey-filter",
+        type=str,
+        default=None,
+        help="Comma-separated list of surveys/components to process (e.g., 'IC,SFA,Finance'). Defaults to all.",
+    )
+    parser.add_argument(
+        "--split-by-survey",
+        action="store_true",
+        help="Write additional parquet files per survey alongside the combined panel.",
+    )
+    parser.add_argument(
+        "--split-output-dir",
+        type=Path,
+        default=None,
+        help="Destination directory for split-by-survey parquet files (default: same directory as --output).",
     )
     parser.add_argument("--rules", type=Path, default=Path("validation_rules.yaml"), help="Validation rules YAML path")
     parser.add_argument("--strict-release", action="store_true", help="Error if mixed provisional/revised releases")
@@ -1147,6 +1227,26 @@ def _sanitize_sentinels(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _write_split_surveys(df: pd.DataFrame, base_path: Path, split_dir: Optional[Path]) -> None:
+    if df.empty:
+        logging.info("Split-by-survey requested but output is empty; skipping additional files.")
+        return
+    destination = split_dir or base_path.parent
+    destination.mkdir(parents=True, exist_ok=True)
+    stem = base_path.stem
+    suffix = base_path.suffix or ".parquet"
+    for survey_value, subset in df.groupby("survey", dropna=False):
+        slug = _slugify(survey_value)
+        out_path = destination / f"{stem}__{slug}{suffix}"
+        subset.to_parquet(out_path, index=False, compression="snappy")
+        logging.info(
+            "Wrote %s rows for survey '%s' to %s",
+            len(subset),
+            survey_value or "unknown",
+            out_path,
+        )
+
+
 def load_reporting_map(path: Optional[Path]) -> Optional[pd.DataFrame]:
     if not path:
         return None
@@ -1206,6 +1306,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     lake = load_dictionary_lake(args.lake)
     rules = load_validation_rules(args.rules)
     reporting_map = load_reporting_map(args.reporting_map)
+    allowed_surveys = parse_survey_list(args.survey_filter)
+    if allowed_surveys:
+        logging.info(
+            "Restricting harmonization to %s",
+            ", ".join(sorted(allowed_surveys)),
+        )
 
     lake_by_year: dict[int, pd.DataFrame] = {year: lake[lake["year"] == year].copy() for year in sorted(lake["year"].unique())}
     manifest_cache: dict[int, Optional[pd.DataFrame]] = {}
@@ -1217,6 +1323,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         year_lake = lake_by_year.get(year, pd.DataFrame(columns=lake.columns))
         logging.info("Processing year %s with %d dictionary rows", year, len(year_lake))
         for concept_key, concept in CONCEPTS.items():
+            survey_name = canonicalize_survey_name(concept.get("survey"))
+            if allowed_surveys and (not survey_name or survey_name not in allowed_surveys):
+                continue
             family = str(concept.get("family") or "")
             record_kwargs = {
                 "concept_key": concept_key,
@@ -1235,7 +1344,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "notes": concept.get("notes"),
                 "top_alternates": None,
                 "imputed_flag": None,
-                "survey": None,
+                "survey": survey_name,
                 "period_type": concept.get("period_type"),
                 "reporting_unitid": "UNITID",
                 "extraction_status": None,
@@ -1280,8 +1389,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             label_matched = coerce_optional_str(best_row.get("source_label")) if best_row is not None else None
             source_var_val = coerce_optional_str(best_row.get("source_var")) if best_row is not None else None
             score_val = None if pd.isna(best_score) else float(best_score)
-            survey_name = str(concept.get("survey", ""))
-            record_kwargs["survey"] = survey_name
+            survey_name = survey_name or ""
             record_kwargs.update(
                 {
                     "score": score_val,
@@ -1454,9 +1562,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "year": year,
                     "target_var": concept.get("target_var"),
                     "value": values,
+                    "accepted": True,
                     "concept": concept.get("concept"),
                     "units": concept.get("units"),
-                    "survey": concept.get("survey"),
+                    "survey": survey_name,
                     "form_family": prefix,
                     "finance_basis": finance_basis,
                     "decision_score": score_val,
@@ -1495,6 +1604,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     logging.info("Writing output parquet to %s", args.output)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     output_df.to_parquet(args.output, index=False, compression="snappy")
+    if args.split_by_survey:
+        _write_split_surveys(output_df, args.output, args.split_output_dir)
     logging.info("Writing label audit to label_matches.csv")
     audit_columns = [
         "year",

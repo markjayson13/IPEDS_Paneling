@@ -252,6 +252,63 @@ COLUMN_GROUP_SPECS = [
     {"explicit": ADMISSIONS_COLUMNS, "prefixes": ["adm_", "sat_", "act_"]},
 ]
 
+SURVEY_NAME_ALIASES = {
+    "ic": "InstitutionalCharacteristics",
+    "institutionalcharacteristics": "InstitutionalCharacteristics",
+    "hd": "InstitutionalCharacteristics",
+    "finance": "Finance",
+    "fin": "Finance",
+    "fallenrollment": "FallEnrollment",
+    "fall": "FallEnrollment",
+    "ef": "FallEnrollment",
+    "e12": "12MonthEnrollment",
+    "e1d": "12MonthEnrollment",
+    "effy": "12MonthEnrollment",
+    "efia": "12MonthEnrollment",
+    "12monthenrollment": "12MonthEnrollment",
+    "sfa": "StudentFinancialAid",
+    "studentfinancialaid": "StudentFinancialAid",
+    "admissions": "Admissions",
+    "adm": "Admissions",
+    "outcomemeasures": "OutcomeMeasures",
+    "om": "OutcomeMeasures",
+    "graduationrates": "GraduationRates",
+    "gr": "GraduationRates",
+    "grs": "GraduationRates",
+    "pe": "GraduationRates",
+    "humanresources": "HumanResources",
+    "hr": "HumanResources",
+    "academiclibraries": "AcademicLibraries",
+    "al": "AcademicLibraries",
+    "completions": "Completions",
+    "c": "Completions",
+}
+
+
+def canonicalize_survey_name(value: str | None) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    key = "".join(ch for ch in raw.lower() if ch.isalnum())
+    return SURVEY_NAME_ALIASES.get(key, raw)
+
+
+def parse_survey_list(expr: str | None) -> set[str]:
+    if not expr:
+        return set()
+    surveys = {
+        canonicalize_survey_name(token)
+        for token in expr.split(",")
+        if token and canonicalize_survey_name(token)
+    }
+    return surveys
+
+
+def _slugify(label: str | None) -> str:
+    cleaned = "".join(ch if ch.isalnum() else "_" for ch in (label or "unknown").strip().lower())
+    cleaned = "_".join(filter(None, cleaned.split("_")))
+    return cleaned or "unknown"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Pivot the harmonized long panel into a wide CSV.")
@@ -272,6 +329,23 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Optional CSV with a 'target_var' column listing the wide columns to force into the output.",
+    )
+    parser.add_argument(
+        "--survey-filter",
+        type=str,
+        default=None,
+        help="Comma-separated list of surveys/components to retain before pivoting (e.g., 'IC,SFA,Finance').",
+    )
+    parser.add_argument(
+        "--split-by-survey",
+        action="store_true",
+        help="Write additional wide CSVs per survey alongside the combined panel.",
+    )
+    parser.add_argument(
+        "--split-output-dir",
+        type=Path,
+        default=None,
+        help="Destination directory for split-by-survey CSVs (default: same directory as --output).",
     )
     parser.add_argument("--log-level", type=str, default="INFO", help="Logging level (e.g., INFO, DEBUG)")
     return parser.parse_args()
@@ -377,6 +451,31 @@ def apply_column_template(df: pd.DataFrame, template: list[str] | None) -> pd.Da
     return df[ordered + remaining]
 
 
+def write_split_wide_panels(
+    df: pd.DataFrame,
+    args: argparse.Namespace,
+    template_cols: list[str] | None,
+) -> None:
+    if df.empty:
+        logging.info("Split-by-survey requested but no rows to write.")
+        return
+    split_dir = args.split_output_dir or args.output.parent
+    split_dir.mkdir(parents=True, exist_ok=True)
+    for survey_value, subset in df.groupby("survey", dropna=False):
+        slug = _slugify(survey_value)
+        wide = pivot_panel(subset)
+        wide = order_columns(wide)
+        wide = apply_column_template(wide, template_cols)
+        out_path = split_dir / f"{args.output.stem}__{slug}{args.output.suffix}"
+        wide.to_csv(out_path, index=False)
+        logging.info(
+            "Split-by-survey wrote %s rows for '%s' to %s",
+            len(wide),
+            survey_value or "unknown",
+            out_path,
+        )
+
+
 def main() -> int:
     args = parse_args()
     configure_logging(args.log_level)
@@ -410,6 +509,21 @@ def main() -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         wide.to_csv(args.output, index=False)
         return 0
+    if "survey" not in df.columns:
+        logging.error("Input panel is missing the 'survey' column; rerun harmonize_new.py.")
+        return 1
+    df["survey"] = df["survey"].apply(canonicalize_survey_name)
+    allowed_surveys = parse_survey_list(args.survey_filter)
+    if allowed_surveys:
+        df = df[df["survey"].isin(allowed_surveys)].copy()
+        if df.empty:
+            logging.warning(
+                "Survey filter %s resulted in zero rows; writing empty wide CSV.",
+                ", ".join(sorted(allowed_surveys)),
+            )
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            pd.DataFrame(columns=CORE_COLUMNS).to_csv(args.output, index=False)
+            return 0
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
     df = normalize_reporting_ids(df)
     deduped = dedupe_panel(df)
@@ -444,6 +558,8 @@ def main() -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     wide.to_csv(args.output, index=False)
     logging.info("Panel CSV written to %s", args.output)
+    if args.split_by_survey:
+        write_split_wide_panels(deduped, args, template_cols)
     return 0
 
 
