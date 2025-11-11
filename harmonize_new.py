@@ -1074,6 +1074,9 @@ def build_output_frame(records: List[pd.DataFrame]) -> pd.DataFrame:
         columns.insert(1, "state")
     if "reporting_unitid" not in df.columns:
         df["reporting_unitid"] = df.get("UNITID")
+    for col in columns:
+        if col not in df.columns:
+            df[col] = pd.NA
     df = df[columns]
     df = _coalesce_reporting(df)
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
