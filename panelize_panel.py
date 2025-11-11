@@ -267,6 +267,12 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_OUTPUT_PATH,
         help=f"Destination CSV path (default: {DEFAULT_OUTPUT_PATH})",
     )
+    parser.add_argument(
+        "--columns-template",
+        type=Path,
+        default=None,
+        help="Optional CSV with a 'target_var' column listing the wide columns to force into the output.",
+    )
     parser.add_argument("--log-level", type=str, default="INFO", help="Logging level (e.g., INFO, DEBUG)")
     return parser.parse_args()
 
@@ -302,7 +308,7 @@ def dedupe_panel(df: pd.DataFrame) -> pd.DataFrame:
     return deduped
 
 
-def pivot_panel(df: pd.DataFrame) -> pd.DataFrame:
+def pivot_panel(df: pd.DataFrame, conflict_path: Path | None = None) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame(columns=["UNITID", "year"])
     id_cols = df[["UNITID", "year", "reporting_unitid"]].drop_duplicates()
@@ -311,6 +317,11 @@ def pivot_panel(df: pd.DataFrame) -> pd.DataFrame:
         logging.warning(
             "Multiple reporting_unitid values detected for some UNITID/year pairs; keeping first occurrence."
         )
+        if conflict_path is not None:
+            offenders = id_cols.loc[dup_mask].sort_values(["UNITID", "year", "reporting_unitid"])
+            conflict_path.parent.mkdir(parents=True, exist_ok=True)
+            offenders.to_csv(conflict_path, index=False)
+            logging.warning("Reporting-unit conflicts written to %s", conflict_path)
         id_cols = id_cols.drop_duplicates(subset=["UNITID", "year"], keep="first")
     id_cols = id_cols.sort_values(["UNITID", "year"])
     wide = (
@@ -348,21 +359,50 @@ def order_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df[ordered]
 
 
+def apply_column_template(df: pd.DataFrame, template: list[str] | None) -> pd.DataFrame:
+    if not template:
+        return df
+    key_cols = [col for col in CORE_COLUMNS if col in df.columns]
+    for col in template:
+        if col not in df.columns:
+            df[col] = pd.NA
+    ordered = key_cols + [col for col in template if col not in key_cols]
+    remaining = [col for col in df.columns if col not in ordered]
+    return df[ordered + remaining]
+
+
 def main() -> int:
     args = parse_args()
     configure_logging(args.log_level)
     if not args.source.exists():
         logging.error("Source parquet %s does not exist", args.source)
         return 1
+    template_cols: list[str] | None = None
+    if args.columns_template:
+        if not args.columns_template.exists():
+            logging.error("Columns template %s does not exist", args.columns_template)
+            return 1
+        tpl_df = pd.read_csv(args.columns_template, dtype=str)
+        if "target_var" not in tpl_df.columns:
+            logging.error("Columns template %s must contain a 'target_var' column", args.columns_template)
+            return 1
+        template_cols = []
+        for col in tpl_df["target_var"]:
+            name = str(col).strip()
+            if name and name.lower() != "nan" and name not in template_cols:
+                template_cols.append(name)
+        logging.info("Loaded %d template columns from %s", len(template_cols), args.columns_template)
     logging.info("Loading panel parquet from %s", args.source)
     df = pd.read_parquet(args.source)
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
     logging.info("Loaded %d long-form rows", len(df))
     deduped = dedupe_panel(df)
     logging.info("After deduplication: %d rows", len(deduped))
-    wide = pivot_panel(deduped)
+    conflict_path = args.output.with_suffix(".reporting_conflicts.csv")
+    wide = pivot_panel(deduped, conflict_path)
     logging.info("Wide panel shape: %s rows x %s columns", wide.shape[0], wide.shape[1])
     wide = order_columns(wide)
+    wide = apply_column_template(wide, template_cols)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     wide.to_csv(args.output, index=False)
     logging.info("Panel CSV written to %s", args.output)
