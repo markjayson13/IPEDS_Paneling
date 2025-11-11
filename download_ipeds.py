@@ -70,7 +70,14 @@ USER_AGENT = (
 HEADERS = {'User-Agent': USER_AGENT}
 MAX_WORKERS = int(os.getenv('IPEDSDL_WORKERS', '3'))
 DOWNLOAD_ACCESS_DATABASE = False
-DICT_EXTENSION_PRIORITY = {'.zip': 2, '.xlsx': 1, '.xls': 0}
+DICT_EXTENSION_PRIORITY = {
+    '.zip': 3,
+    '.xlsx': 2,
+    '.xls': 1,
+    '.csv': 1,
+    '.txt': 1,
+}
+ALLOWED_DICT_EXTENSIONS = set(DICT_EXTENSION_PRIORITY.keys())
 # This comprehensive map defines a "research name" (key) and
 # all its known historical file prefixes (values).
 SURVEY_DEFINITIONS: dict[str, list[str]] = {
@@ -285,6 +292,9 @@ def parse_year_links(
             revision_priority = 1 if is_revision else 0
             ext = os.path.splitext(filename)[1].lower()
             if entry_type == 'dict':
+                if ext and ALLOWED_DICT_EXTENSIONS and ext not in ALLOWED_DICT_EXTENSIONS:
+                    # Skip HTML or other non-dictionary links that occasionally masquerade as downloads.
+                    continue
                 ext_priority = DICT_EXTENSION_PRIORITY.get(ext, 0)
             else:
                 ext_priority = 1 if ext == '.zip' else 0
@@ -348,18 +358,27 @@ def download_file(
     delay = backoff_seconds
     while attempt <= max_attempts:
         try:
-            with session.get(
-                url,
-                stream=True,
-                timeout=120,
-                headers=HEADERS,
-            ) as response:
+            with session.get(url, stream=True, timeout=120, headers=HEADERS) as response:
                 response.raise_for_status()
+                content_type = (response.headers.get("Content-Type") or "").lower()
+                dest_ext = os.path.splitext(destination)[1].lower()
+                if "text/html" in content_type and dest_ext not in {".html", ".htm"}:
+                    preview = ""
+                    try:
+                        preview = response.content[:512].decode("utf-8", errors="replace")
+                    except Exception:  # noqa: BLE001
+                        preview = ""
+                    raise ValueError(
+                        f"HTML directory page returned instead of file. URL: {url}\n"
+                        f"{preview[:200].strip()}"
+                    )
                 with open(destination, 'wb') as file_obj:
                     for chunk in response.iter_content(chunk_size=65536):
                         if chunk:
                             file_obj.write(chunk)
             return True
+        except ValueError as exc:
+            print(f"WARNING: {exc}")
         except requests.HTTPError as exc:
             status_code = exc.response.status_code if exc.response else None
             retriable = status_code in {403, 429, 500, 502, 503, 504}
