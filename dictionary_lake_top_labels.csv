@@ -1292,6 +1292,7 @@ year,survey_hint,source_label_norm,count
 2009,AcademicLibraries,without faculty status women,1
 2009,Admissions,admission test scores,1
 2009,Admissions,admissions men,1
+2009,Admissions,admissions office web address,1
 2009,Admissions,admissions total,1
 2009,Admissions,admissions women,1
 2009,Admissions,completion of college-preparatory program,1
@@ -1450,8 +1451,8 @@ year,survey_hint,source_label_norm,count
 2009,InstitutionalCharacteristics,average number of months to complete largest program,1
 2009,InstitutionalCharacteristics,bachelors degree,1
 2009,InstitutionalCharacteristics,combined charge for room and board,1
-2009,InstitutionalCharacteristics,distance learning opportunities,1
-2009,InstitutionalCharacteristics,doctors degree - other (new classification),1
+2009,InstitutionalCharacteristics,data feedback report comparison group category,1
+2009,InstitutionalCharacteristics,degree of urbanization (urban-centric locale),1
 2009,StudentFinancialAid,average net price (income 0-30000)-students receiving title iv federal financial aid 2008-09,2
 2009,StudentFinancialAid,average net price (income 30001-48000)-students receiving title iv federal financial aid 2008-09,2
 2009,StudentFinancialAid,average net price (income 48001-75000)-students receiving title iv federal financial aid 2008-09,2
