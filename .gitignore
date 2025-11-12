@@ -1,0 +1,30 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.venv-*/
+venv-*/
+.DS_Store
+**/.DS_Store
+
+# Jupyter (never commit)
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Large raw inputs and generated data outputs (keep out of repo)
+Raw_Cross_Section_Data/
+Cross_sections/
+Panels/
+audit_pack/
+Checks/
+Artifacts/Checks/
+Artifacts/Checks/dictionary_qc/
+
+# Temporary / intermediate files
+*.tmp
+*.parquet.tmp
+*.dedupe.tmp
+**/parts_*/
+build/
+*.duckdb
+*.duckdb.wal
