@@ -16,6 +16,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, required=True, help="panel_wide_raw CSV path")
     parser.add_argument("--column-field", default="source_var", help="Column name to pivot (default: source_var)")
     parser.add_argument("--id-cols", default="year,UNITID,reporting_unitid", help="Comma list of identifier columns")
+    parser.add_argument(
+        "--survey-order",
+        default=None,
+        help="Comma list giving the preferred survey sort order (e.g., HD,IC,IC_AY,EF,…)",
+    )
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     return parser.parse_args()
 
@@ -40,6 +45,28 @@ def main() -> int:
     if "reporting_unitid" in df.columns:
         df["reporting_unitid"] = df["reporting_unitid"].fillna(df.get("UNITID"))
     wide = df.pivot_table(index=id_cols, columns=pivot_col, values=value_col, aggfunc="first").reset_index()
+    survey_order = [token.strip().upper() for token in (args.survey_order or "").split(",") if token.strip()]
+    if survey_order:
+        if "survey" not in df.columns:
+            logging.warning("Survey column missing from input; cannot apply survey ordering")
+        else:
+            survey_rank = {survey: idx for idx, survey in enumerate(survey_order)}
+            var_to_survey = (
+                df[[pivot_col, "survey"]]
+                .dropna(subset=[pivot_col, "survey"])
+                .drop_duplicates(subset=[pivot_col], keep="first")
+                .set_index(pivot_col)["survey"]
+                .to_dict()
+            )
+
+            def sort_key(col: str) -> tuple[int, str, str]:
+                survey = var_to_survey.get(col, "")
+                rank = survey_rank.get(survey, len(survey_rank))
+                return (rank, survey, col.lower())
+
+            value_cols = [col for col in wide.columns if col not in id_cols]
+            ordered_value_cols = sorted(value_cols, key=sort_key)
+            wide = wide[id_cols + ordered_value_cols]
     args.output.parent.mkdir(parents=True, exist_ok=True)
     wide.to_csv(args.output, index=False)
     logging.info("Wrote %s rows and %s columns to %s", len(wide), len(wide.columns), args.output)

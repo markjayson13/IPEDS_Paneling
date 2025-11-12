@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import re
 import sys
 from pathlib import Path
 from typing import Iterator, Optional, Set
@@ -12,18 +13,24 @@ from typing import Iterator, Optional, Set
 import pandas as pd
 
 SUPPORTED_SUFFIXES = {".csv", ".tsv", ".txt", ".xlsx", ".xls"}
-SURVEY_TOKENS = {
-    "HD": ["HD"],
-    "IC": ["IC"],
-    "IC_AY": ["IC", "AY"],
-    "IC_PY": ["IC", "PY"],
-    "EF": ["EF", "EFA", "EFB", "EFC", "EFD", "RET", "DIST"],
-    "E12": ["E12", "EFIA", "EFFY", "E1D"],
-    "ADM": ["ADM"],
-    "SFA": ["SFA"],
-    "FIN": ["F1", "F2", "F3"],
-    "GR": ["GR", "GR200"],
-}
+SURVEY_PATTERNS: list[tuple[str, list[str]]] = [
+    ("IC_AY", [r"IC\d{4}_AY", r"ICAY", r"IC[A-Z0-9]*AY"]),
+    ("IC_PY", [r"IC\d{4}_PY", r"ICPY", r"IC[A-Z0-9]*PY"]),
+    ("EFIA", [r"EFIA"]),
+    ("E1D", [r"E1D"]),
+    ("EFFY", [r"EFFY"]),
+    ("GR200", [r"GR200"]),
+    ("F1A", [r"F\d{4}_F1A", r"_F1A"]),
+    ("F2A", [r"F\d{4}_F2A", r"_F2A"]),
+    ("F3A", [r"F\d{4}_F3A", r"_F3A"]),
+    ("HD", [r"HD\d{4}"]),
+    ("IC", [r"IC\d{4}"]),
+    ("EF", [r"EF\d{4}[ABCD]", r"EF\d{4}(RET|DIST)", r"EFDIST", r"EFRET"]),
+    ("E12", [r"E12\d{4}"]),
+    ("SFA", [r"SFA\d{4}"]),
+    ("ADM", [r"ADM\d{4}"]),
+    ("GR", [r"GR\d{4}"]),
+]
 
 
 def infer_year(path: Path) -> int | None:
@@ -35,9 +42,10 @@ def infer_year(path: Path) -> int | None:
 
 def infer_survey(path: Path) -> str:
     stem = path.stem.upper()
-    for survey, tokens in SURVEY_TOKENS.items():
-        if any(token in stem for token in tokens):
-            return survey
+    for survey, patterns in SURVEY_PATTERNS:
+        for pattern in patterns:
+            if re.search(pattern, stem):
+                return survey
     return "UNK"
 
 
