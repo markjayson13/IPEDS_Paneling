@@ -36,6 +36,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional, Sequence
+import io
+import zipfile
 
 try:  # pylint: disable=wrong-import-position
     import pandas as pd
@@ -881,6 +883,76 @@ def locate_data_file(
     return chosen, None
 
 
+ZIP_PREFERRED_SUFFIXES = [".csv", ".tsv", ".txt", ".xlsx", ".xls", ".parquet"]
+
+
+def _find_companion_file(path: Path) -> Optional[Path]:
+    for ext in ZIP_PREFERRED_SUFFIXES:
+        candidate = path.with_suffix(ext)
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    base = path.with_suffix("")
+    if base.exists() and base.is_dir():
+        for ext in ZIP_PREFERRED_SUFFIXES:
+            matches = sorted(base.glob(f"*{ext}"))
+            if matches:
+                return matches[0]
+    return None
+
+
+def _read_dataframe_from_handle(handle, suffix: str) -> pd.DataFrame:
+    suffix = suffix.lower()
+    if suffix in {".csv", ".tsv", ".txt"}:
+        sep = "," if suffix == ".csv" else "\t"
+        if suffix == ".txt":
+            sep = None
+        handle.seek(0)
+        if sep is None:
+            try:
+                return pd.read_csv(handle, dtype=str, sep=None, engine="python", na_filter=False, low_memory=False)
+            except Exception:
+                handle.seek(0)
+                try:
+                    return pd.read_csv(handle, dtype=str, sep="|", na_filter=False, low_memory=False)
+                except Exception:
+                    handle.seek(0)
+                    return pd.read_csv(handle, dtype=str, delim_whitespace=True, na_filter=False, low_memory=False)
+        return pd.read_csv(handle, dtype=str, sep=sep, na_filter=False, low_memory=False)
+    if suffix == ".parquet":
+        handle.seek(0)
+        df = pd.read_parquet(handle)
+        return df.applymap(lambda x: str(x) if not pd.isna(x) else None)
+    if suffix in {".xlsx", ".xls"}:
+        engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
+        handle.seek(0)
+        return pd.read_excel(handle, dtype=str, engine=engine)
+    raise ValueError(f"Unsupported archive member type: {suffix}")
+
+
+def _load_from_zip(path: Path) -> pd.DataFrame:
+    with zipfile.ZipFile(path) as zf:
+        members = zf.namelist()
+        target_member = None
+        for ext in ZIP_PREFERRED_SUFFIXES:
+            for member in members:
+                if member.lower().endswith(ext):
+                    target_member = member
+                    break
+            if target_member:
+                break
+        if not target_member:
+            raise ValueError(f"No supported files found inside archive: {path}")
+        suffix = Path(target_member).suffix.lower()
+        with zf.open(target_member) as extracted:
+            if suffix in {".csv", ".tsv", ".txt"}:
+                text_stream = io.TextIOWrapper(extracted, encoding="utf-8", errors="replace")
+                df = _read_dataframe_from_handle(text_stream, suffix)
+            else:
+                buffer = io.BytesIO(extracted.read())
+                df = _read_dataframe_from_handle(buffer, suffix)
+        return df
+
+
 def load_data_file(path: Path, cache: dict[Path, tuple[pd.DataFrame, Optional[str]]]) -> tuple[pd.DataFrame, Optional[str]]:
     if path in cache:
         return cache[path]
@@ -923,6 +995,36 @@ def load_data_file(path: Path, cache: dict[Path, tuple[pd.DataFrame, Optional[st
     elif suffix in {".xlsx", ".xls"}:
         engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
         df = pd.read_excel(path, dtype=str, engine=engine)
+    elif suffix == ".zip":
+        if zipfile.is_zipfile(path):
+            df = _load_from_zip(path)
+        else:
+            logging.warning(
+                "File %s has .zip extension but is not a zip archive; attempting CSV/TSV parse.",
+                path,
+            )
+            companion = _find_companion_file(path)
+            if companion and companion != path:
+                logging.info("Using companion file %s for %s", companion, path)
+                df, unitid_col = load_data_file(companion, cache)
+                cache[path] = (df, unitid_col)
+                return cache[path]
+            try:
+                df = pd.read_csv(path, dtype=str, na_filter=False, compression=None)
+            except Exception:
+                try:
+                    df = pd.read_csv(
+                        path,
+                        dtype=str,
+                        sep=None,
+                        engine="python",
+                        na_filter=False,
+                        compression=None,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    raise ValueError(
+                        f"{path} has .zip suffix but is neither a zip archive nor a readable delimited file"
+                    ) from exc
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
     df.columns = [str(col).strip() for col in df.columns]
