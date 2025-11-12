@@ -1,119 +1,135 @@
 #!/usr/bin/env python3
-"""Merge multiple per-year panel_wide_raw CSVs into a single dataset."""
-
-from __future__ import annotations
-
-import argparse
-import logging
-import re
+import re, sys
 from pathlib import Path
-from typing import Iterable, List, Sequence
-
 import pandas as pd
+import numpy as np
 
+# Paths: edit only if you moved anything
+OUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections")
+FILES = [
+    OUT_DIR / f"panel_wide_raw_{y}.csv"
+    for y in range(2004, 2025)
+]
 
-PANEL_FILENAME_RE = re.compile(r"panel_wide_raw_(?P<year>\d{4})\.csv$", re.IGNORECASE)
+# 1) Known HD bare-code whitelist (not prefixed with HD/IC)
+HD_BARE = {
+    # identity + contact
+    "UNITID","INSTNM","ADDR","CITY","STABBR","ZIP","FIPS","OBEREG","CHFNM","CHFTITLE",
+    "GENTELE","FINTELE","ADMTELE","EIN","DUNS","OPEID","OPEFLAG","WEBADDR",
+    # classification
+    "SECTOR","ICLEVEL","CONTROL","HLOFFER","UGOFFER","GROFFER","FPOFFER","HDEGOFFR",
+    "DEGGRANT","HBCU","HOSPITAL","MEDICAL","TRIBAL","CARNEGIE","LOCALE","OPENPUBL",
+    # status/admin
+    "ACT","NEWID","DEATHYR","CLOSEDAT","CYACTIVE","POSTSEC","PSEFLAG","PSET4FLG",
+    "RPTMTH","INSTCAT","TENURSYS"
+}
 
+# 2) Component regex map (strongest first)
+COMPONENT_ORDER = ["HD","IC","IC_AY","EF","E12","EFIA","E1D","EFFY","SFA","F1A","F2A","F3A","ADM","GR","GR200","OTHER"]
+COMPONENT_PATTERN = {
+    # IC_AY costs and IC codes
+    "IC_AY": re.compile(r"^(ICAY|IC_AY|COA|TUITION|FEE|ROOM|RMBRD|BOOKS|OTHEREXP)", re.I),
+    "IC":    re.compile(r"^IC", re.I),
+    # EF families
+    "EFIA":  re.compile(r"^EFIA|^EFFY|^E1D", re.I),
+    "E12":   re.compile(r"^E12", re.I),
+    "EF":    re.compile(r"^EF(?!FIA|FY|FY_|FIA_)", re.I),
+    # SFA
+    "SFA":   re.compile(r"^(NPIS|PGRNT|AIDF|AGRNT|GIS|UPGRNT|SFA|DL|PLUS|PRIV|PELL)", re.I),
+    # Finance forms
+    "F1A":   re.compile(r"^F1[A-Z0-9]", re.I),
+    "F2A":   re.compile(r"^F2[A-Z0-9]", re.I),
+    "F3A":   re.compile(r"^F3[A-Z0-9]", re.I),
+    # Admissions
+    "ADM":   re.compile(r"^(APPL|ADMSS|ENRL|SAT|ACT|ADM)", re.I),
+    # Graduation
+    "GR200": re.compile(r"^(GR2|G200)", re.I),
+    "GR":    re.compile(r"^(GRS|GRT|GRADRATE|GR)", re.I),
+}
 
-def parse_years(expr: str | None) -> set[int] | None:
-    if not expr:
-        return None
-    years: set[int] = set()
-    for part in expr.split(","):
-        token = part.strip()
-        if not token:
-            continue
-        if "-" in token:
-            start, end = token.split("-", 1)
-            lo, hi = sorted((int(start), int(end)))
-            years.update(range(lo, hi + 1))
-        else:
-            years.add(int(token))
-    return years or None
+ID_COLS = ["year","UNITID"]
+OPTIONAL_ID_COLS = ["reporting_unitid"]  # include if present
 
+def classify(col: str) -> str:
+    c = col.upper()
+    if c in ID_COLS or c in (x.upper() for x in OPTIONAL_ID_COLS):
+        return "ID"
+    if c in HD_BARE:
+        return "HD"
+    # test patterns in priority order: first hit wins
+    for comp in ["IC_AY","IC","EFIA","E12","EF","SFA","F1A","F2A","F3A","ADM","GR200","GR"]:
+        if COMPONENT_PATTERN[comp].match(c):
+            return comp
+    return "OTHER"
 
-def discover_inputs(input_dir: Path, years: set[int] | None) -> List[tuple[int, Path]]:
-    inputs: List[tuple[int, Path]] = []
-    for path in sorted(input_dir.glob("panel_wide_raw_*.csv")):
-        match = PANEL_FILENAME_RE.search(path.name)
-        if not match:
-            continue
-        year = int(match.group("year"))
-        if years is not None and year not in years:
-            continue
-        inputs.append((year, path))
-    return inputs
+def column_sort_key(col: str):
+    comp = classify(col)
+    if comp == "ID":
+        return (-1, col)  # IDs first
+    return (COMPONENT_ORDER.index(comp), col)
 
-
-def load_panel_csv(path: Path, id_cols: Sequence[str]) -> pd.DataFrame:
-    logging.info("Reading %s", path)
-    df = pd.read_csv(path, dtype=str, low_memory=False)
-    missing = [col for col in id_cols if col not in df.columns]
-    if missing:
-        raise ValueError(f"{path} missing required columns: {missing}")
-    for col in id_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
-    if "reporting_unitid" in df.columns:
-        df["reporting_unitid"].fillna(df["UNITID"], inplace=True)
-    else:
-        df["reporting_unitid"] = df["UNITID"]
-    for col in df.columns:
-        if col in id_cols:
-            continue
-        df[col] = df[col].astype(pd.StringDtype())
+def read_panel(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        return pd.DataFrame()
+    df = pd.read_csv(path, dtype=str)  # keep raw; coerce later
+    # normalize id cols
+    cols = {c.lower(): c for c in df.columns}
+    # fix common case variant/casing issues
+    if "unitid" in cols and "UNITID" not in df.columns:
+        df.rename(columns={cols["unitid"]:"UNITID"}, inplace=True)
+    if "year" in cols and "year" not in df.columns:
+        # unlikely, but keep consistent
+        pass
+    # coerce year numeric if string
+    df["year"] = pd.to_numeric(df["year"], errors="coerce").astype("Int64")
     return df
 
+def main():
+    frames = []
+    for f in FILES:
+        df = read_panel(f)
+        if df.empty:
+            continue
+        frames.append(df)
 
-def merge_panels(paths: Iterable[Path]) -> pd.DataFrame:
-    id_cols = ["year", "UNITID", "reporting_unitid"]
-    frames = [load_panel_csv(path, id_cols) for path in paths]
     if not frames:
-        raise RuntimeError("No input CSVs were provided")
-    merged = pd.concat(frames, ignore_index=True, sort=False)
-    merged["reporting_unitid"].fillna(merged["UNITID"], inplace=True)
-    return merged
+        print("No input files found or all empty.")
+        sys.exit(0)
 
+    # union-all columns, align types
+    wide = pd.concat(frames, ignore_index=True, sort=False)
+    # ensure IDs exist
+    for c in ID_COLS:
+        if c not in wide.columns:
+            wide[c] = pd.NA
+    # order columns by component priority
+    cols = list(wide.columns)
+    # keep optional id cols up front if present
+    id_like = [c for c in OPTIONAL_ID_COLS if c in cols]
+    ordered = ID_COLS + id_like + sorted([c for c in cols if c not in ID_COLS + id_like], key=column_sort_key)
+    wide = wide[ordered]
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Merge panel_wide_raw CSV exports")
-    parser.add_argument(
-        "--input-dir",
-        type=Path,
-        required=True,
-        help="Directory containing panel_wide_raw_<YEAR>.csv files",
-    )
-    parser.add_argument(
-        "--years",
-        type=str,
-        default=None,
-        help="Comma list or ranges (e.g., 2004,2006-2008). Default: all years present",
-    )
-    parser.add_argument("--output", type=Path, required=True, help="Path to the merged CSV output")
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
-    return parser.parse_args()
+    # coerce numeric for purely numeric columns (best-effort)
+    for c in wide.columns:
+        if c in ID_COLS + id_like:
+            continue
+        # try fast numeric coerce where safe (won't break strings)
+        ser = pd.to_numeric(wide[c], errors="ignore")
+        wide[c] = ser
 
+    out_wide = OUT_DIR / "panel_wide_raw_2004_2024_merged.csv"
+    wide.to_csv(out_wide, index=False)
+    print(f"Wrote merged wide: {out_wide} with {wide.shape[0]:,} rows and {wide.shape[1]:,} cols.")
 
-def main() -> int:
-    args = parse_args()
-    logging.basicConfig(
-        level=getattr(logging, args.log_level.upper(), logging.INFO),
-        format="%(levelname)s %(message)s",
-    )
-    if not args.input_dir.exists():
-        logging.error("Input directory %s does not exist", args.input_dir)
-        return 1
-    years = parse_years(args.years)
-    inputs = discover_inputs(args.input_dir, years)
-    if not inputs:
-        logging.error("No panel_wide_raw CSV files found under %s", args.input_dir)
-        return 1
-    logging.info("Merging %s files", len(inputs))
-    merged = merge_panels(path for _, path in inputs)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    merged.to_csv(args.output, index=False)
-    logging.info("Wrote %s rows and %s columns to %s", len(merged), len(merged.columns), args.output)
-    return 0
-
+    # optional: build a long panel (UNITID, year, source_var, value)
+    long = (wide
+            .set_index(ID_COLS + id_like)
+            .stack(dropna=False)
+            .reset_index()
+            .rename(columns={"level_"+str(len(ID_COLS + id_like)):"source_var", 0:"value"}))
+    out_long = OUT_DIR / "panel_long_raw_2004_2024_merged.parquet"
+    long.to_parquet(out_long, index=False)
+    print(f"Wrote merged long (parquet): {out_long} with {len(long):,} rows.")
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
