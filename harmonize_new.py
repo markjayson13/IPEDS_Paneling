@@ -141,9 +141,10 @@ def _slugify(label: Optional[str]) -> str:
 PARQUET_OUTPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets")
 CHECKS_OUTPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks")
 LABEL_CHECK_DIR = CHECKS_OUTPUT_DIR / "Label match"
+ARTIFACTS_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Artifacts")
 LABEL_MATCH_PATH = LABEL_CHECK_DIR / "label_matches.csv"
 VALIDATION_REPORT_PATH = CHECKS_OUTPUT_DIR / "validation_report.csv"
-SUPP_PANEL_DIR = CHECKS_OUTPUT_DIR / "Supp. Panels"
+SUPP_PANEL_DIR = ARTIFACTS_DIR / "Supp. Panels"
 FORM_CONFLICTS_PATH = CHECKS_OUTPUT_DIR / "form_conflicts.csv"
 COVERAGE_SUMMARY_PATH = CHECKS_OUTPUT_DIR / "coverage_summary.csv"
 
@@ -1255,7 +1256,8 @@ def _write_split_surveys(df: pd.DataFrame, base_path: Path, split_dir: Optional[
     if df.empty:
         logging.info("Split-by-survey requested but output is empty; skipping additional files.")
         return
-    destination = split_dir or base_path.parent
+    default_split_dir = ARTIFACTS_DIR / "Split Panels"
+    destination = split_dir or default_split_dir
     destination.mkdir(parents=True, exist_ok=True)
     stem = base_path.stem
     suffix = base_path.suffix or ".parquet"

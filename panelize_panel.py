@@ -198,8 +198,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--outdir",
         type=Path,
-        default=Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets"),
-        help="Directory for per-component CSVs (default: user IPEDS Paneled Datasets folder)",
+        default=Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Artifacts/panel_wide"),
+        help="Directory for per-component CSVs (default: IPEDS Artifacts/panel_wide)",
     )
     parser.add_argument(
         "--templates",
