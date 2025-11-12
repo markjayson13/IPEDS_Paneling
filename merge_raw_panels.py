@@ -2,7 +2,6 @@
 import re, sys
 from pathlib import Path
 import pandas as pd
-import numpy as np
 
 # Paths: edit only if you moved anything
 OUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections")
@@ -124,9 +123,14 @@ def main():
     # optional: build a long panel (UNITID, year, source_var, value)
     long = (wide
             .set_index(ID_COLS + id_like)
-            .stack(dropna=False)
+            .stack(dropna=True)
             .reset_index()
             .rename(columns={"level_"+str(len(ID_COLS + id_like)):"source_var", 0:"value"}))
+
+    if len(long) > 100_000_000:
+        raise SystemExit(f"Refusing to write long output with {len(long):,} rows. Restrict years or columns and retry.")
+
+    long["value"] = long["value"].astype("string")
     out_long = OUT_DIR / "panel_long_raw_2004_2024_merged.parquet"
     long.to_parquet(out_long, index=False)
     print(f"Wrote merged long (parquet): {out_long} with {len(long):,} rows.")
