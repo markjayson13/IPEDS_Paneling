@@ -9,12 +9,14 @@ across years, survey components, and accounting forms.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
 from typing import Iterable, List
 import json
 import hashlib
+import unicodedata
 
 try:  # pylint: disable=wrong-import-position
     import pandas as pd
@@ -112,6 +114,31 @@ LABEL_NORM_RX = [
     (r"[;:.,]", " "),
 ]
 
+LABEL_COLUMN_PRIORITY = [
+    "label",
+    "varlabel",
+    "variable label",
+    "variable_label",
+    "var title",
+    "vartitle",
+    "variable description",
+    "description",
+    "long description",
+    "value label",
+]
+
+
+def _norm_text(value: object) -> str:
+    if value is None:
+        return ""
+    text = unicodedata.normalize("NFKD", str(value))
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = text.lower()
+    for pattern, replacement in LABEL_NORM_RX:
+        text = re.sub(pattern, replacement, text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
 SURVEY_FALLBACK = [
     (r"(?i)\bhd\b", "HD"),
     (r"(?i)\b(ic|ic\d{4}[_-]?ay|ic\d{4}[_-]?py)\b", "IC"),
@@ -139,6 +166,28 @@ SUBSURVEY_HINTS = [
 ]
 
 TABLE_HINT_PATTERN = re.compile(r"(table|part|section|survey|component)", re.IGNORECASE)
+
+CANONICAL_SURVEYS = {
+    "HD": {"HD", "DIR", "DIRECTORY", "IC_HD"},
+    "IC": {"IC", "IC_A", "IC_B", "ICAY", "ICFY"},
+    "EF": {"EF", "EFA", "EFC", "EFRET", "EFDIST", "EFFALL"},
+    "E12": {"E12", "EFIA", "EFFY", "E1D"},
+    "SFA": {"SFA", "SFA_S", "SCFA"},
+    "ADM": {"ADM", "ADMISSIONS"},
+    "F1A": {"F1A", "F1"},
+    "F2A": {"F2A", "F2"},
+    "F3A": {"F3A", "F3"},
+    "FIN": {"FIN", "FINANCE"},
+    "GR": {"GR", "GRS", "GR200"},
+}
+
+
+def canonicalize_survey(value: str) -> str:
+    token = (value or "").upper()
+    for canon, aliases in CANONICAL_SURVEYS.items():
+        if token == canon or token in aliases:
+            return canon
+    return token or "OTHER"
 
 SURVEY_HINT_BY_PREFIX = {
     "F1A": "Finance",
@@ -169,13 +218,7 @@ SURVEY_HINT_BY_PREFIX = {
 
 
 def _normalize_label_text(value: object) -> str:
-    if value is None:
-        return ""
-    text = str(value)
-    for pattern, replacement in LABEL_NORM_RX:
-        text = re.sub(pattern, replacement, text)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip().lower()
+    return _norm_text(value)
 
 
 def normalize_label(series: pd.Series) -> pd.Series:
@@ -455,8 +498,17 @@ def main() -> None:
                     if col not in df.columns:
                         df[col] = pd.NA
                 df["source_var"] = df["source_var"].astype(str).str.strip()
+                df["var_name"] = df["source_var"]
+                df["source_label"] = df["source_label"].where(
+                    df["source_label"].notna() & df["source_label"].astype(str).str.strip().ne(""),
+                    df["source_var"],
+                )
                 df["source_label"] = df["source_label"].astype(str)
-                df["source_label_norm"] = normalize_label(df["source_label"])
+                df["var_name_norm"] = df["var_name"].map(_norm_text)
+                df["source_label_norm"] = df["source_label"].map(_norm_text)
+                df["search_text"] = (
+                    df["source_label_norm"].fillna("") + " || " + df["var_name_norm"].fillna("")
+                ).str.strip()
                 df["source_var_norm"] = df["source_var"].str.lower()
                 df["code_norm"] = df["source_var"].str.upper()
                 df["table_name"] = df["table_name"].astype(str)
@@ -484,7 +536,7 @@ def main() -> None:
                 if survey_from_content:
                     df["survey_hint"] = map_survey_hint(survey_from_content, survey_from_content)
                 df["survey_hint"] = df["survey_hint"].fillna(fallback_mapped)
-                df["survey"] = df["survey_hint"]
+                df["survey"] = df["survey_hint"].apply(canonicalize_survey)
                 df["subsurvey"] = subsurvey
                 df["varname"] = df["source_var"]
                 df["label"] = df["source_label"]
@@ -509,6 +561,15 @@ def main() -> None:
         lake["code_norm"] = lake["source_var"].str.upper()
     else:
         lake["code_norm"] = lake["code_norm"].astype(str).str.strip().str.upper()
+    if "var_name" not in lake.columns:
+        lake["var_name"] = lake["source_var"]
+    lake["var_name"] = lake["var_name"].astype(str).str.strip()
+    if "var_name_norm" not in lake.columns:
+        lake["var_name_norm"] = lake["var_name"].map(_norm_text)
+    if "search_text" not in lake.columns:
+        lake["search_text"] = (
+            lake["source_label_norm"].fillna("") + " || " + lake["var_name_norm"].fillna("")
+        ).str.strip()
     lake["dict_file"] = lake["dict_file"].astype(str)
     if "dict_filename" not in lake.columns:
         lake["dict_filename"] = lake["filename"]
@@ -516,6 +577,9 @@ def main() -> None:
     lake["filename"] = lake["filename"].astype(str)
     lake["prefix_hint"] = lake["prefix_hint"].fillna("").astype(str).str.upper()
     lake["survey_hint"] = lake["survey_hint"].fillna("").astype(str)
+    if "survey" not in lake.columns:
+        lake["survey"] = lake["survey_hint"]
+    lake["survey"] = lake["survey"].apply(canonicalize_survey)
     lake["release"] = lake["release"].fillna("").astype(str)
     lake["year"] = pd.to_numeric(lake["year"], errors="coerce").astype("Int64")
     if "table_name" not in lake.columns:
@@ -536,14 +600,18 @@ def main() -> None:
 
     required_cols = [
         "year",
+        "survey",
         "source_var",
         "source_label",
         "label",
         "source_label_norm",
         "label_norm",
         "varname",
+        "var_name",
+        "var_name_norm",
         "source_var_norm",
         "code_norm",
+        "search_text",
         "table_name",
         "table_name_norm",
         "data_filename",

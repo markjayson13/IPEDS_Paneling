@@ -386,13 +386,29 @@ def load_dictionary_lake(path: Path) -> pd.DataFrame:
     if "year" not in lake.columns:
         raise KeyError("dictionary lake must include a 'year' column")
     lake["year"] = lake["year"].astype(int)
-    for col in ["source_label_norm", "source_label", "prefix_hint", "survey_hint", "release", "dict_file", "filename"]:
+    for col in [
+        "source_label_norm",
+        "source_label",
+        "prefix_hint",
+        "survey_hint",
+        "release",
+        "dict_file",
+        "filename",
+        "search_text",
+        "var_name_norm",
+    ]:
         if col in lake.columns:
             lake[col] = lake[col].astype(str)
     if "code_norm" in lake.columns:
         lake["code_norm"] = lake["code_norm"].astype(str)
     else:
         lake["code_norm"] = lake["source_var"].astype(str).str.upper()
+    if "var_name_norm" not in lake.columns:
+        lake["var_name_norm"] = lake["source_var"].astype(str).str.lower()
+    if "search_text" not in lake.columns:
+        lake["search_text"] = (
+            lake["source_label_norm"].fillna("") + " || " + lake["var_name_norm"].fillna("")
+        ).str.strip()
     return lake
 
 
@@ -484,37 +500,49 @@ def filter_candidates_by_forms(df: pd.DataFrame, forms: Optional[Sequence[str]])
     return df.loc[mask].copy()
 
 
+def expand_forms(concept: dict) -> list[str]:
+    base = concept.get("forms") or []
+    aliases = concept.get("form_aliases") or []
+    combo = []
+    for item in list(base) + list(aliases):
+        if not item:
+            continue
+        upper = str(item).upper()
+        if upper not in combo:
+            combo.append(upper)
+    return combo
+
+
 def score_candidate(row: pd.Series, concept: dict) -> float:
-    label_norm_raw = str(row.get("source_label_norm") or row.get("source_label") or "").strip()
-    label_norm_stripped = re.sub(r"[,;$%]", "", label_norm_raw)
-    label_norm = label_norm_stripped.lower()
-    var_norm = str(row.get("source_var_norm") or row.get("source_var") or "").strip().lower()
+    label_raw = str(row.get("source_label") or "")
+    label_norm = str(row.get("source_label_norm") or "").strip().lower()
+    search_text = str(row.get("search_text") or "").strip().lower()
+    if not search_text:
+        search_text = label_norm
+    var_norm = str(row.get("var_name_norm") or row.get("source_var_norm") or row.get("source_var") or "").strip().lower()
     code_norm = str(row.get("code_norm") or row.get("source_var") or "").strip().upper()
     table_norm = str(row.get("table_name_norm") or row.get("table_name") or "").strip().lower()
 
-    if METADATA_NEGATIVES.match(label_norm_stripped):
+    if METADATA_NEGATIVES.match(label_raw.lower()):
         return -5.0
 
     score = 0.0
-    matched = False
-    for pattern in concept.get("label_regex", []):
+    label_patterns = concept.get("label_regex") or []
+    if not isinstance(label_patterns, (list, tuple, set)):
+        label_patterns = [label_patterns]
+    matched_label = False
+    for pattern in label_patterns:
+        if not pattern:
+            continue
         regex = pattern if hasattr(pattern, "search") else re.compile(pattern, re.IGNORECASE)
-        if (
-            regex.fullmatch(label_norm)
-            or regex.fullmatch(label_norm_stripped)
-            or regex.fullmatch(label_norm_raw)
-        ):
+        if regex.fullmatch(search_text):
             score = max(score, 4.0)
-            matched = True
+            matched_label = True
             break
-        if (
-            regex.search(label_norm)
-            or regex.search(label_norm_stripped)
-            or regex.search(label_norm_raw)
-        ):
-            score = max(score, 2.0)
-            matched = True
-    if not matched:
+        if regex.search(search_text):
+            score = max(score, 2.5)
+            matched_label = True
+    if not matched_label:
         score -= 1.0
 
     required_keywords = [
@@ -522,7 +550,7 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
         for tok in (concept.get("requires_keywords") or [])
         if isinstance(tok, str) and tok.strip()
     ]
-    if required_keywords and not all(tok in label_norm for tok in required_keywords):
+    if required_keywords and not all(tok in search_text for tok in required_keywords):
         score = min(score, 3.0)
 
     varname_exact = concept.get("varname_exact")
@@ -549,26 +577,18 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
         if tregex.search(table_norm):
             score += MATCH_WEIGHTS["table"]
 
-    bonus = 0.0
-    forms = concept.get("forms")
-    prefixes = extract_prefixes(row)
-    if forms:
-        allowed = {f.upper() for f in forms}
-        if prefixes & allowed:
-            bonus = 1.0
-        else:
-            survey_hint = str(row.get("survey_hint", "")).strip().lower()
-            if survey_hint and survey_hint == str(concept.get("survey", "")).strip().lower():
-                bonus = 1.0
-    else:
-        survey_hint = str(row.get("survey_hint", "")).strip().lower()
-        if survey_hint and survey_hint == str(concept.get("survey", "")).strip().lower():
-            bonus = 1.0
-    score += bonus
+    allowed_forms = expand_forms(concept)
+    if allowed_forms:
+        tokens = {str(row.get("survey") or "").upper(), str(row.get("survey_hint") or "").upper()}
+        tokens |= extract_prefixes(row)
+        tokens.discard("")
+        if tokens & set(allowed_forms):
+            score += 1.0
+
     units = _to_lower(str(concept.get("units", "")))
-    money_hint = bool(re.search(r"\b(dollars?|amount|revenue|expenses?|net price)\b|\$", label_norm))
-    count_hint = bool(re.search(r"\bcount|students?|recipients?|headcount|fte\b", label_norm))
-    if units in {"usd", "$"}:
+    money_hint = bool(re.search(r"\b(dollars?|amount|revenue|expenses?|net price)\b|\$", search_text))
+    count_hint = bool(re.search(r"\bcount|students?|recipients?|headcount|fte\b", search_text))
+    if units in {"usd", "$", "currency"}:
         if money_hint:
             score += 0.5
         if count_hint:
@@ -579,7 +599,7 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
         if money_hint:
             score -= 0.5
     if "band_min" in concept or "band_max" in concept:
-        parsed = _parse_income_band(label_norm_raw)
+        parsed = _parse_income_band(label_raw)
         if parsed != (None, None):
             lo = concept.get("band_min")
             hi = concept.get("band_max")
@@ -587,9 +607,12 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
                 score = max(score, 4.0)
             else:
                 score -= 1.0
-    for pattern in concept.get("exclude_regex", []):
-        if re.search(pattern, label_norm, flags=re.IGNORECASE) or re.search(
-            pattern, label_norm_raw, flags=re.IGNORECASE
+    exclude_patterns = concept.get("exclude_regex") or []
+    if not isinstance(exclude_patterns, (list, tuple, set)):
+        exclude_patterns = [exclude_patterns]
+    for pattern in exclude_patterns:
+        if pattern and (
+            re.search(pattern, search_text, flags=re.IGNORECASE) or re.search(pattern, label_raw, flags=re.IGNORECASE)
         ):
             score -= 2.0
     return score
@@ -735,12 +758,12 @@ def resolve_crossform_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
 
 def determine_prefix(row: Optional[pd.Series], concept: dict) -> Optional[str]:
     if row is None:
-        forms = concept.get("forms")
+        forms = expand_forms(concept)
         if forms and len(forms) == 1:
             return forms[0].upper()
         return None
     prefixes = extract_prefixes(row)
-    forms = concept.get("forms")
+    forms = expand_forms(concept)
     if forms:
         allowed = [f.upper() for f in forms]
         for form in allowed:
@@ -1519,7 +1542,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 record_kwargs["accepted"] = True
                 decision_records.append(CandidateSelection(**record_kwargs))
                 continue
-            candidates_df = filter_candidates_by_forms(year_lake, concept.get("forms"))
+            candidates_df = filter_candidates_by_forms(year_lake, expand_forms(concept))
             raw_candidates = len(candidates_df)
             best_row: Optional[pd.Series]
             best_score: float
@@ -1627,7 +1650,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 fam_df = year_lake.copy()
                 if dict_file:
                     fam_df = fam_df[fam_df["dict_file"] == dict_file]
-                fam_df = filter_candidates_by_forms(fam_df, concept.get("forms"))
+                fam_df = filter_candidates_by_forms(fam_df, expand_forms(concept))
                 state_rows: dict[str, pd.Series] = {}
                 for _, fam_row in fam_df.iterrows():
                     label_raw = str(fam_row.get("source_label_norm") or fam_row.get("source_label") or "")
