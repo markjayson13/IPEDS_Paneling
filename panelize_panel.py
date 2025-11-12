@@ -1,567 +1,302 @@
 #!/usr/bin/env python3
 """
-Convert the long-form harmonized panel parquet into a wide CSV with UNITID-year as the panel keys.
+Emit per-component wide panels from the harmonized long-form parquet.
 
-The script keeps the highest-scoring observation per UNITID/year/target_var, pivots targets to columns,
-and writes the result to the requested CSV path.
+For each supported survey family (IC, EF, E12, SFA, ADM, Finance), the script:
+1. normalizes UNITID/reporting_unitid,
+2. pivots target variables into a fixed column order (optionally overridden by templates),
+3. writes a CSV (panel_<COMP>.csv) under the requested output directory, and
+4. reports UNITID-year rows that have multiple reporters.
+
+Example:
+    python panelize_panel.py \\
+        --input panel_long.parquet \\
+        --outdir ./panel_wide_components \\
+        --templates schemas/component_columns/ic_columns.csv
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
+import os
 from pathlib import Path
+from typing import Dict, List
 
 import pandas as pd
 
-DEFAULT_PANEL_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long.parquet")
-DEFAULT_OUTPUT_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/panel_wide.csv")
+SURVEY_CODE_MAP = {
+    "InstitutionalCharacteristics": "IC",
+    "FallEnrollment": "EF",
+    "12MonthEnrollment": "E12",
+    "StudentFinancialAid": "SFA",
+    "Admissions": "ADM",
+    "Finance": "F",
+}
 
-CORE_COLUMNS = ["year", "UNITID", "reporting_unitid"]
-
-INSTITUTIONAL_COLUMNS = [
-    "dir_opeid",
-    "dir_inst_name",
-    "dir_state_abbr",
-    "dir_state_fips",  # placeholder for future coverage
-    "bea_region_code",
-    "ic_sector",
-    "ic_level",
-    "ic_control",
-    "ic_institutional_category",
-    "ic_degree_granting",
-    "carnegie_unified_class",
-    "dir_zip",
-    "dir_city",
-    "dir_opeflag",
-    "ic_active_in_year",
-    "ic_urbanicity",
-    "ic_calendar_system",
-    "dir_csa_code",
-    "dir_cbsa_code",
-    "dir_cbsa_type",
-    "dir_longitude",
-    "dir_latitude",
-    "dir_county_fips",
-    "dir_county_name",
-    "dir_congress_district",
-    "dir_necta_code",
-    "dir_multi_campus_org",
-    "dir_multi_campus_id",
-    "dir_ein",
-    "ic_open_public",
-    "ic_highest_degree_offered",
-    "ic_highest_level_offering",
-    "ic_ug_offering",
-    "ic_gr_offering",
-    "ic_affiliation",
-    "ic_public_control_primary",
-    "ic_public_control_secondary",
-    "ic_religious_affiliation",
-    "ic_parent_unitid",
-    "ic_hbcu_flag",
-    "ic_tribal_flag",
-    "ic_med_school_flag",
-    "ic_distance_programs",
-    "ic_open_admissions",
-    "ic_promise_program_flag",
-    "ic_response_status",
-    "ic_revision_status",
-    "ic_status_when_migrated",
-    "ic_imputation_method",
-]
-
-FALL_ENROLLMENT_COLUMNS = [
-    "ef_total",
-    "ef_ug_total",
-    "ef_grad_total",
-    "ef_ug_degseek_total",
-    "ef_ftft_ug_total",
-    "ef_full_time_total",
-    "ef_part_time_total",
-    "ef_de_exclusive",
-    "ef_de_some",
-    "ef_de_none",
-    "ef_retention_ftft_full_time",
-    "ef_retention_ftft_part_time",
-    "ef_student_faculty_ratio",
-]
-
-E12_COLUMNS = [
-    "e12_undup_total",
-    "e12_ug_undup",
-    "e12_gr_undup",
-    "e12_credit_hours_ug",
-    "e12_credit_hours_gr",
-    "e12_contact_hours_ug",
-    "e12_contact_hours_gr",
-    "e12_fte",
-    "e12_hs_students_for_credit",
-]
-
-COST_COLUMNS = [
-    "ic_coa_off_campus_not_family",
-    "ic_coa_off_campus_with_family",
-    "ic_coa_on_campus",
-    "cst_coa_total_off_campus_not_with_family",
-    "cst_coa_total_off_campus_with_family",
-    "cst_coa_total_on_campus",
-    "ic_coa_food_housing_on_campus",
-    "ic_room_board_on_campus",
-    "ic_room_board_off_campus_not_family",
-    "ic_room_charge_on_campus",
-    "ic_board_charge_on_campus",
-    "ic_room_board_combined_on_campus",
-    "ic_other_exp_on_campus",
-    "ic_other_exp_off_campus_not_family",
-    "ic_other_exp_off_campus_with_family",
-    "ic_books_supplies",
-    "cst_coa_food_housing_on_campus",
-    "cst_coa_food_housing_off_campus_not_with_family",
-    "cst_coa_food_housing_off_campus_with_family",
-    "cst_coa_other_expenses_on_campus",
-    "cst_coa_other_expenses_off_campus_not_with_family",
-    "cst_coa_other_expenses_off_campus_with_family",
-    "ic_tuition_ug_in_district",
-    "ic_tuition_ug_in_state",
-    "ic_tuition_ug_out_state",
-    "ic_tuition_gr_in_district",
-    "ic_tuition_gr_in_state",
-    "ic_tuition_gr_out_state",
-    "cst_tuition_ft_ug_in_district",
-    "cst_fees_ft_ug_in_district",
-    "cst_tuition_ft_ug_in_state",
-    "cst_fees_ft_ug_in_state",
-    "cst_tuition_ft_ug_out_state",
-    "cst_fees_ft_ug_out_state",
-    "cst_tuition_ft_gr_in_district",
-    "cst_fees_ft_gr_in_district",
-    "cst_tuition_ft_gr_in_state",
-    "cst_fees_ft_gr_in_state",
-    "cst_tuition_ft_gr_out_state",
-    "cst_fees_ft_gr_out_state",
-    "ic_tuition_charge_varies",
-    "ic_comprehensive_fee_ug",
-    "ic_comprehensive_fee_gr",
-    "ic_alt_tuition_any",
-    "ic_alt_tuition_guaranteed",
-    "ic_alt_tuition_prepaid",
-    "ic_alt_tuition_payment",
-    "ic_alt_tuition_other",
-    "anp_all",
-    "anp_0_30",
-    "anp_30_48",
-    "anp_48_75",
-    "anp_75_110",
-    "anp_110_plus",
-]
-
-SFA_COLUMNS = [
-    "sfa_ftft_in_district_count",
-    "sfa_ftft_in_state_count",
-    "sfa_ftft_out_state_count",
-    "sfa_ftft_unknown_rate_count",
-    "sfa_any_aid_recip_count",
-    "sfa_any_aid_amount",
-    "sfa_federal_grant_recip_count",
-    "sfa_federal_grant_amount",
-    "sfa_state_local_grant_recip_count",
-    "sfa_state_local_grant_amount",
-    "sfa_institutional_grant_recip_count",
-    "sfa_institutional_grant_amount",
-    "sfa_direct_sub_loan_recip_count",
-    "sfa_direct_sub_loan_amount",
-    "sfa_direct_unsub_loan_recip_count",
-    "sfa_direct_unsub_loan_amount",
-    "sfa_parent_plus_recip_count",
-    "sfa_parent_plus_amount",
-    "sfa_private_loan_recip_count",
-    "sfa_private_loan_amount",
-    "sfa_veterans_benefits_amount",
-    "pell_recip_count",
-    "pell_amount",
-]
-
-FINANCE_COLUMNS = [
-    "fin_total_rev_invest_return",
-    "fin_tuition_fees_net",
-    "fin_federal_grants_contracts",
-    "fin_state_grants_contracts",
-    "fin_local_grants_contracts",
-    "fin_private_gifts_grants_contracts",
-    "fin_sales_ed_activities",
-    "fin_auxiliary_rev",
-    "fin_hospital_rev",
-    "fin_investment_return",
-    "fin_instruction_exp",
-    "fin_research_exp",
-    "fin_public_service_exp",
-    "fin_academic_support_exp",
-    "fin_student_services_exp",
-    "fin_institutional_support_exp",
-    "fin_om_plant_exp",
-    "fin_scholarships_fellowships_exp",
-    "fin_auxiliary_exp",
-    "fin_hospital_exp",
-    "fin_depreciation_exp",
-    "fin_interest_exp",
-    "fin_total_exp",
-    "fin_endowment_assets_boy_eoy",
-]
-
-ADMISSIONS_COLUMNS = [
-    "adm_open_admissions",
-    "adm_applicants_total",
-    "adm_admits_total",
-    "adm_enrolled_ftft",
-    "adm_sat_submit_count",
-    "adm_sat_submit_pct",
-    "adm_act_submit_count",
-    "adm_act_submit_pct",
-    "sat_ebrw_p25",
-    "sat_ebrw_p75",
-    "sat_math_p25",
-    "sat_math_p75",
-    "act_eng_p25",
-    "act_eng_p75",
-    "act_math_p25",
-    "act_math_p75",
-    "act_comp_p25",
-    "act_comp_p75",
-]
-
-COLUMN_GROUP_SPECS = [
-    {"explicit": CORE_COLUMNS},
-    {"explicit": INSTITUTIONAL_COLUMNS, "prefixes": ["dir_"]},
-    {"explicit": FALL_ENROLLMENT_COLUMNS, "prefixes": ["ef_"]},
-    {"explicit": E12_COLUMNS, "prefixes": ["e12_"]},
-    {
-        "explicit": COST_COLUMNS,
-        "prefixes": [
-            "ic_tuition_",
-            "ic_comprehensive_",
-            "ic_coa_",
-            "ic_room_",
-            "ic_other_",
-            "ic_books",
-            "anp_",
-        ],
-    },
-    {"explicit": SFA_COLUMNS, "prefixes": ["sfa_", "pell_"]},
-    {"explicit": FINANCE_COLUMNS, "prefixes": ["fin_"]},
-    {"explicit": ADMISSIONS_COLUMNS, "prefixes": ["adm_", "sat_", "act_"]},
-]
-
-SURVEY_NAME_ALIASES = {
-    "ic": "InstitutionalCharacteristics",
-    "institutionalcharacteristics": "InstitutionalCharacteristics",
-    "hd": "InstitutionalCharacteristics",
-    "finance": "Finance",
-    "fin": "Finance",
-    "fallenrollment": "FallEnrollment",
-    "fall": "FallEnrollment",
-    "ef": "FallEnrollment",
-    "e12": "12MonthEnrollment",
-    "e1d": "12MonthEnrollment",
-    "effy": "12MonthEnrollment",
-    "efia": "12MonthEnrollment",
-    "12monthenrollment": "12MonthEnrollment",
-    "sfa": "StudentFinancialAid",
-    "studentfinancialaid": "StudentFinancialAid",
-    "admissions": "Admissions",
-    "adm": "Admissions",
-    "outcomemeasures": "OutcomeMeasures",
-    "om": "OutcomeMeasures",
-    "graduationrates": "GraduationRates",
-    "gr": "GraduationRates",
-    "grs": "GraduationRates",
-    "pe": "GraduationRates",
-    "humanresources": "HumanResources",
-    "hr": "HumanResources",
-    "academiclibraries": "AcademicLibraries",
-    "al": "AcademicLibraries",
-    "completions": "Completions",
-    "c": "Completions",
+COMPONENT_TARGETS: Dict[str, List[str]] = {
+    "IC": [
+        "dir_opeid",
+        "dir_inst_name",
+        "dir_state_abbr",
+        "dir_state_fips",
+        "bea_region_code",
+        "ic_sector",
+        "ic_level",
+        "ic_control",
+        "ic_institutional_category",
+        "ic_degree_granting",
+        "carnegie_unified_class",
+        "dir_zip",
+        "dir_city",
+        "dir_opeflag",
+        "ic_active_in_year",
+        "ic_urbanicity",
+        "ic_calendar_system",
+        "dir_csa_code",
+        "dir_cbsa_code",
+        "dir_cbsa_type",
+        "dir_longitude",
+        "dir_latitude",
+        "dir_county_fips",
+        "dir_county_name",
+        "dir_congress_district",
+        "dir_necta_code",
+        "dir_multi_campus_org",
+        "dir_multi_campus_id",
+        "dir_ein",
+        "ic_open_public",
+        "ic_highest_degree_offered",
+        "ic_highest_level_offering",
+        "ic_ug_offering",
+        "ic_gr_offering",
+        "ic_affiliation",
+        "ic_public_control_primary",
+        "ic_public_control_secondary",
+        "ic_religious_affiliation",
+        "ic_parent_unitid",
+        "ic_hbcu_flag",
+        "ic_tribal_flag",
+        "ic_med_school_flag",
+        "ic_distance_programs",
+        "ic_open_admissions",
+        "ic_promise_program_flag",
+        "ic_response_status",
+        "ic_revision_status",
+        "ic_status_when_migrated",
+        "ic_imputation_method",
+        "ic_tuition_ug_in_district",
+        "ic_tuition_ug_in_state",
+        "ic_tuition_ug_out_state",
+        "ic_tuition_gr_in_district",
+        "ic_tuition_gr_in_state",
+        "ic_tuition_gr_out_state",
+        "ic_room_charge_on_campus",
+        "ic_board_charge_on_campus",
+        "ic_room_board_combined_on_campus",
+        "ic_alt_tuition_any",
+        "ic_alt_tuition_guaranteed",
+        "ic_alt_tuition_prepaid",
+        "ic_alt_tuition_payment",
+        "ic_alt_tuition_other",
+    ],
+    "EF": [
+        "ef_total",
+        "ef_ug_total",
+        "ef_grad_total",
+        "ef_ug_degseek_total",
+        "ef_ftft_ug_total",
+        "ef_full_time_total",
+        "ef_part_time_total",
+        "ef_de_exclusive",
+        "ef_de_some",
+        "ef_de_none",
+        "ef_retention_ftft_full_time",
+        "ef_retention_ftft_part_time",
+        "ef_student_faculty_ratio",
+    ],
+    "E12": [
+        "e12_undup_total",
+        "e12_ug_undup",
+        "e12_gr_undup",
+        "e12_credit_hours_ug",
+        "e12_credit_hours_gr",
+        "e12_contact_hours_ug",
+        "e12_contact_hours_gr",
+        "e12_fte",
+        "e12_hs_students_for_credit",
+    ],
+    "SFA": [
+        "sfa_ftft_in_district_count",
+        "sfa_ftft_in_state_count",
+        "sfa_ftft_out_state_count",
+        "sfa_ftft_unknown_rate_count",
+        "sfa_any_aid_recip_count",
+        "sfa_any_aid_amount",
+        "sfa_federal_grant_recip_count",
+        "sfa_federal_grant_amount",
+        "sfa_state_local_grant_recip_count",
+        "sfa_state_local_grant_amount",
+        "sfa_institutional_grant_recip_count",
+        "sfa_institutional_grant_amount",
+        "sfa_direct_sub_loan_recip_count",
+        "sfa_direct_sub_loan_amount",
+        "sfa_direct_unsub_loan_recip_count",
+        "sfa_direct_unsub_loan_amount",
+        "sfa_parent_plus_recip_count",
+        "sfa_parent_plus_amount",
+        "sfa_private_loan_recip_count",
+        "sfa_private_loan_amount",
+        "sfa_veterans_benefits_amount",
+        "pell_recip_count",
+        "pell_amount",
+    ],
+    "ADM": [
+        "adm_open_admissions",
+        "adm_applicants_total",
+        "adm_admits_total",
+        "adm_enrolled_ftft",
+        "adm_sat_submit_count",
+        "adm_sat_submit_pct",
+        "adm_act_submit_count",
+        "adm_act_submit_pct",
+    ],
+    "F": [
+        "fin_total_rev_invest_return",
+        "fin_tuition_fees_net",
+        "fin_federal_grants_contracts",
+        "fin_state_grants_contracts",
+        "fin_local_grants_contracts",
+        "fin_private_gifts_grants_contracts",
+        "fin_sales_ed_activities",
+        "fin_auxiliary_rev",
+        "fin_hospital_rev",
+        "fin_investment_return",
+        "fin_instruction_exp",
+        "fin_research_exp",
+        "fin_public_service_exp",
+        "fin_academic_support_exp",
+        "fin_student_services_exp",
+        "fin_institutional_support_exp",
+        "fin_auxiliary_exp",
+        "fin_hospital_exp",
+        "fin_plant_ops_exp",
+        "fin_scholarships_fellowships_exp",
+        "fin_depreciation_exp",
+        "fin_interest_expense",
+        "fin_other_operating_exp",
+        "fin_total_exp",
+        "fin_endowment_assets_boy_eoy",
+        "fin_allowances_tuition",
+    ],
 }
 
 
-def canonicalize_survey_name(value: str | None) -> str:
-    raw = (value or "").strip()
-    if not raw:
-        return ""
-    key = "".join(ch for ch in raw.lower() if ch.isalnum())
-    return SURVEY_NAME_ALIASES.get(key, raw)
-
-
-def parse_survey_list(expr: str | None) -> set[str]:
-    if not expr:
-        return set()
-    surveys = {
-        canonicalize_survey_name(token)
-        for token in expr.split(",")
-        if token and canonicalize_survey_name(token)
-    }
-    return surveys
-
-
-def _slugify(label: str | None) -> str:
-    cleaned = "".join(ch if ch.isalnum() else "_" for ch in (label or "unknown").strip().lower())
-    cleaned = "_".join(filter(None, cleaned.split("_")))
-    return cleaned or "unknown"
-
-
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Pivot the harmonized long panel into a wide CSV.")
+    parser = argparse.ArgumentParser(description="Build per-component wide panels")
+    parser.add_argument("--input", type=Path, required=True, help="panel_long parquet path")
+    parser.add_argument("--outdir", type=Path, required=True, help="Directory for per-component CSVs")
     parser.add_argument(
-        "--source",
-        type=Path,
-        default=DEFAULT_PANEL_PATH,
-        help=f"Long-form panel parquet (default: {DEFAULT_PANEL_PATH})",
+        "--templates",
+        nargs="+",
+        default=[],
+        help="Optional CSV templates (one column named 'column') to override component orders. "
+        "Component inferred from filename prefix before the first '.'.",
     )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=DEFAULT_OUTPUT_PATH,
-        help=f"Destination CSV path (default: {DEFAULT_OUTPUT_PATH})",
-    )
-    parser.add_argument(
-        "--columns-template",
-        type=Path,
-        default=None,
-        help="Optional CSV with a 'target_var' column listing the wide columns to force into the output.",
-    )
-    parser.add_argument(
-        "--survey-filter",
-        type=str,
-        default=None,
-        help="Comma-separated list of surveys/components to retain before pivoting (e.g., 'IC,SFA,Finance').",
-    )
-    parser.add_argument(
-        "--split-by-survey",
-        action="store_true",
-        help="Write additional wide CSVs per survey alongside the combined panel.",
-    )
-    parser.add_argument(
-        "--split-output-dir",
-        type=Path,
-        default=None,
-        help="Destination directory for split-by-survey CSVs (default: same directory as --output).",
-    )
-    parser.add_argument("--log-level", type=str, default="INFO", help="Logging level (e.g., INFO, DEBUG)")
+    parser.add_argument("--log-level", default="INFO", help="Logging level (e.g., INFO, DEBUG)")
     return parser.parse_args()
 
 
-def configure_logging(level: str) -> None:
-    logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
+def load_templates(paths: List[str]) -> Dict[str, List[str]]:
+    templates: Dict[str, List[str]] = {}
+    for path in paths:
+        tpath = Path(path)
+        if not tpath.exists():
+            logging.warning("Template %s does not exist; skipping", tpath)
+            continue
+        frame = pd.read_csv(tpath)
+        column_field = None
+        for candidate in ("column", "columns", "target_var"):
+            if candidate in frame.columns:
+                column_field = candidate
+                break
+        if column_field is None:
+            logging.warning("Template %s missing 'column' header; skipping", tpath)
+            continue
+        comp = tpath.stem.split(".")[0].upper()
+        templates[comp] = frame[column_field].dropna().astype(str).tolist()
+        logging.info("Loaded template for %s with %d columns", comp, len(templates[comp]))
+    return templates
 
 
-def normalize_reporting_ids(df: pd.DataFrame) -> pd.DataFrame:
+def ensure_reporting_unitid(df: pd.DataFrame) -> pd.DataFrame:
     if "reporting_unitid" not in df.columns:
-        df["reporting_unitid"] = df.get("UNITID")
+        df["reporting_unitid"] = pd.NA
     df["reporting_unitid"] = df["reporting_unitid"].replace("", pd.NA)
-    df.loc[df["reporting_unitid"].isna(), "reporting_unitid"] = df["UNITID"]
+    if "UNITID" in df.columns:
+        df["reporting_unitid"] = df["reporting_unitid"].fillna(df["UNITID"])
     return df
 
 
-def enforce_single_reporter(df: pd.DataFrame) -> pd.DataFrame:
+def pivot_component(df: pd.DataFrame, component: str, targets: List[str]) -> pd.DataFrame:
     if df.empty:
-        return df
-    preferred = (
-        df.groupby(["UNITID", "year"])["reporting_unitid"]
-        .transform(lambda s: next((val for val in s if pd.notna(val)), pd.NA))
-    )
-    df = df.copy()
-    df["reporting_unitid"] = preferred.fillna(df["reporting_unitid"])
-    return df
-
-
-def dedupe_panel(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return df
-    work = df.copy()
-    if "release" in work.columns:
-        work["release_rank"] = work["release"].astype(str).str.lower().eq("revised").astype(int)
-    else:
-        work["release_rank"] = 0
-    score = pd.to_numeric(work.get("decision_score"), errors="coerce").fillna(-9e9)
-    work["score_rank"] = score
-    sort_cols = ["UNITID", "year", "target_var", "score_rank", "release_rank"]
-    ascending = [True, True, True, False, False]
-    if "form_family" in work.columns:
-        sort_cols.append("form_family")
-        ascending.append(True)
-    if "source_file" in work.columns:
-        sort_cols.append("source_file")
-        ascending.append(True)
-    work = work.sort_values(sort_cols, ascending=ascending)
-    deduped = work.drop_duplicates(["UNITID", "year", "target_var"], keep="first").copy()
-    deduped.drop(columns=["score_rank", "release_rank"], inplace=True, errors="ignore")
-    return deduped
-
-
-def pivot_panel(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return pd.DataFrame(columns=["UNITID", "year", "reporting_unitid"])
-    wide = (
-        df.pivot(index=["UNITID", "year", "reporting_unitid"], columns="target_var", values="value")
-        .sort_index()
-        .reset_index()
-    )
-    wide.columns = [col if isinstance(col, str) else str(col) for col in wide.columns]
-    wide = wide.sort_values(["UNITID", "year"]).reset_index(drop=True)
-    return wide
-
-
-def order_columns(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return df
-    columns = list(df.columns)
-    ordered: list[str] = []
-    seen: set[str] = set()
-
-    for spec in COLUMN_GROUP_SPECS:
-        for col in spec.get("explicit", []):
-            if col in columns and col not in seen:
-                ordered.append(col)
-                seen.add(col)
-        for prefix in spec.get("prefixes", []):
-            for col in columns:
-                if col not in seen and col.startswith(prefix):
-                    ordered.append(col)
-                    seen.add(col)
-    for col in columns:
-        if col not in seen:
-            ordered.append(col)
-            seen.add(col)
-    return df[ordered]
-
-
-def apply_column_template(df: pd.DataFrame, template: list[str] | None) -> pd.DataFrame:
-    if not template:
-        return df
-    key_cols = [col for col in CORE_COLUMNS if col in df.columns]
-    for col in template:
-        if col not in df.columns:
-            df[col] = pd.NA
-    ordered = key_cols + [col for col in template if col not in key_cols]
-    remaining = [col for col in df.columns if col not in ordered]
-    return df[ordered + remaining]
-
-
-def write_split_wide_panels(
-    df: pd.DataFrame,
-    args: argparse.Namespace,
-    template_cols: list[str] | None,
-) -> None:
-    if df.empty:
-        logging.info("Split-by-survey requested but no rows to write.")
-        return
-    split_dir = args.split_output_dir or args.output.parent
-    split_dir.mkdir(parents=True, exist_ok=True)
-    for survey_value, subset in df.groupby("survey", dropna=False):
-        slug = _slugify(survey_value)
-        wide = pivot_panel(subset)
-        wide = order_columns(wide)
-        wide = apply_column_template(wide, template_cols)
-        out_path = split_dir / f"{args.output.stem}__{slug}{args.output.suffix}"
-        wide.to_csv(out_path, index=False)
-        logging.info(
-            "Split-by-survey wrote %s rows for '%s' to %s",
-            len(wide),
-            survey_value or "unknown",
-            out_path,
+        cols = ["year", "UNITID", "reporting_unitid"] + targets
+        return pd.DataFrame(columns=cols)
+    pivot = (
+        df.pivot_table(
+            index=["UNITID", "year", "reporting_unitid"], columns="target_var", values="value", aggfunc="first"
         )
+        .reset_index()
+        .copy()
+    )
+    for target in targets:
+        if target not in pivot.columns:
+            pivot[target] = pd.NA
+    ordered = ["year", "UNITID", "reporting_unitid"] + targets
+    extras = [col for col in pivot.columns if col not in ordered]
+    return pivot[ordered + extras]
 
 
-def main() -> int:
+def main() -> None:
     args = parse_args()
-    configure_logging(args.log_level)
-    if not args.source.exists():
-        logging.error("Source parquet %s does not exist", args.source)
-        return 1
-    template_cols: list[str] | None = None
-    if args.columns_template:
-        if not args.columns_template.exists():
-            logging.error("Columns template %s does not exist", args.columns_template)
-            return 1
-        tpl_df = pd.read_csv(args.columns_template, dtype=str)
-        if "target_var" not in tpl_df.columns:
-            logging.error("Columns template %s must contain a 'target_var' column", args.columns_template)
-            return 1
-        template_cols = []
-        for col in tpl_df["target_var"]:
-            name = str(col).strip()
-            if name and name.lower() != "nan" and name not in template_cols:
-                template_cols.append(name)
-        logging.info("Loaded %d template columns from %s", len(template_cols), args.columns_template)
-    logging.info("Loading panel parquet from %s", args.source)
-    df = pd.read_parquet(args.source)
-    if "accepted" not in df.columns:
-        logging.error("Input long panel is missing the 'accepted' column; rerun harmonize_new.py.")
-        return 1
-    df = df[df["accepted"] == True].copy()  # noqa: E712
-    if df.empty:
-        logging.warning("No accepted rows found; writing empty wide CSV.")
-        wide = pd.DataFrame(columns=CORE_COLUMNS)
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        wide.to_csv(args.output, index=False)
-        return 0
-    if "survey" not in df.columns:
-        logging.error("Input panel is missing the 'survey' column; rerun harmonize_new.py.")
-        return 1
-    df["survey"] = df["survey"].apply(canonicalize_survey_name)
-    allowed_surveys = parse_survey_list(args.survey_filter)
-    if allowed_surveys:
-        df = df[df["survey"].isin(allowed_surveys)].copy()
-        if df.empty:
-            logging.warning(
-                "Survey filter %s resulted in zero rows; writing empty wide CSV.",
-                ", ".join(sorted(allowed_surveys)),
-            )
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            pd.DataFrame(columns=CORE_COLUMNS).to_csv(args.output, index=False)
-            return 0
-    df["value"] = pd.to_numeric(df["value"], errors="coerce")
-    df = normalize_reporting_ids(df)
-    deduped = dedupe_panel(df)
-    logging.info("After deduplication: %d rows", len(deduped))
-    deduped.drop(columns=[c for c in ["accepted"] if c in deduped.columns], inplace=True, errors="ignore")
-    conflict_path = args.output.with_suffix(".reporting_conflicts.csv")
-    conflict_counts = (
-        deduped.groupby(["UNITID", "year"])["reporting_unitid"]
+    logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO), format="%(levelname)s %(message)s")
+
+    if not args.input.exists():
+        raise FileNotFoundError(f"Input parquet not found: {args.input}")
+
+    df = pd.read_parquet(args.input)
+    df = ensure_reporting_unitid(df)
+    df["survey_code"] = df["survey"].map(SURVEY_CODE_MAP).fillna(df["survey"]).astype(str)
+    args.outdir.mkdir(parents=True, exist_ok=True)
+
+    templates = load_templates(args.templates)
+
+    for comp, default_targets in COMPONENT_TARGETS.items():
+        targets = templates.get(comp, default_targets)
+        comp_df = df[df["survey_code"].str.upper() == comp]
+        wide = pivot_component(comp_df, comp, targets)
+        out_path = args.outdir / f"panel_{comp}.csv"
+        wide.sort_values(["year", "UNITID"]).to_csv(out_path, index=False)
+        logging.info("Wrote %s with %d rows", out_path, len(wide))
+
+    conflicts = (
+        df.groupby(["UNITID", "year"])["reporting_unitid"]
         .nunique(dropna=True)
         .reset_index(name="n_reporters")
     )
-    conflicts = conflict_counts[conflict_counts["n_reporters"] > 1]
-    if not conflicts.empty:
+    conflict_rows = conflicts[conflicts["n_reporters"] > 1]
+    if not conflict_rows.empty:
         offenders = (
-            deduped.merge(conflicts[["UNITID", "year"]], on=["UNITID", "year"], how="inner")
+            df.merge(conflict_rows[["UNITID", "year"]], on=["UNITID", "year"], how="inner")
             [["UNITID", "year", "reporting_unitid"]]
             .drop_duplicates()
-            .sort_values(["UNITID", "year", "reporting_unitid"])
         )
-        conflict_path.parent.mkdir(parents=True, exist_ok=True)
+        conflict_path = args.outdir / "panel_wide.reporting_conflicts.csv"
         offenders.to_csv(conflict_path, index=False)
-        logging.warning(
-            "Multiple reporting_unitid values detected for some UNITID/year pairs; see %s", conflict_path
-        )
-        deduped = enforce_single_reporter(deduped)
-    elif conflict_path.exists():
-        conflict_path.unlink()
-    wide = pivot_panel(deduped)
-    logging.info("Wide panel shape: %s rows x %s columns", wide.shape[0], wide.shape[1])
-    wide = order_columns(wide)
-    wide = apply_column_template(wide, template_cols)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    wide.to_csv(args.output, index=False)
-    logging.info("Panel CSV written to %s", args.output)
-    if args.split_by_survey:
-        write_split_wide_panels(deduped, args, template_cols)
-    return 0
+        logging.warning("Reporting conflicts detected; see %s", conflict_path)
+    else:
+        logging.info("No reporting conflicts detected")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

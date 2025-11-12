@@ -137,13 +137,13 @@ def _slugify(label: Optional[str]) -> str:
     cleaned = re.sub(r"_+", "_", cleaned).strip("_")
     return cleaned or "unknown"
 
-# Default output locations
-PARQUET_OUTPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets")
-CHECKS_OUTPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks")
-LABEL_CHECK_DIR = CHECKS_OUTPUT_DIR / "Label match"
+# Default output locations (relative to the working directory)
+PARQUET_OUTPUT_DIR = Path("artifacts")
+CHECKS_OUTPUT_DIR = PARQUET_OUTPUT_DIR / "checks"
+LABEL_CHECK_DIR = CHECKS_OUTPUT_DIR / "label_match"
 LABEL_MATCH_PATH = LABEL_CHECK_DIR / "label_matches.csv"
 VALIDATION_REPORT_PATH = CHECKS_OUTPUT_DIR / "validation_report.csv"
-SUPP_PANEL_DIR = CHECKS_OUTPUT_DIR / "Supp. Panels"
+SUPP_PANEL_DIR = CHECKS_OUTPUT_DIR / "supp_panels"
 FORM_CONFLICTS_PATH = CHECKS_OUTPUT_DIR / "form_conflicts.csv"
 COVERAGE_SUMMARY_PATH = CHECKS_OUTPUT_DIR / "coverage_summary.csv"
 

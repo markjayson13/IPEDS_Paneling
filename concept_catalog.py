@@ -32,6 +32,10 @@ ANP_EXCLUDE_REGEX = [
     r"\bnon[- ]title iv\b",
 ]
 
+EF_TABLE_HINT = r"(?i)\b(distance education|dist|efdeex|exclusive(ly)? distance|online)\b"
+E12_TABLE_HINT = r"(?i)\b(12[- ]?month|e12|effy|e1d|unduplicated|fte)\b"
+FIN_FORM_HINT = r"(?i)\b(f1[ab]|f2[ab]|f3[ab])\b"
+
 
 CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
     {
@@ -1246,11 +1250,10 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
             "label_regex": [
-                r"^tuition (?:and )?fees,? after deducting (?:discounts|allowances)$",
-                r"^tuition (?:and )?fees.*\(net.*\)$",
-                r"^net tuition (?:and )?fees$",
-                r"^tuition (?:and )?fees[, ]+after deducting .*discounts?.*allowances.*$",
-                r"^tuition (?:and )?fees.*net of (?:scholarship )?allowances.*$",
+                r"(?i)\btuition (?:and )?fees\b.*\bnet\b",
+                r"(?i)\bnet tuition\b",
+                r"(?i)\btuition (?:and )?fees\b.*\(net of .*allowances\)",
+                r"(?i)\btuition (?:and )?fees\b.*\(net.*discounts?.*allowances\)",
             ],
             "exclude_regex": [
                 r"\bgross\b|before deducting|applied to|allowances applied",
@@ -1258,8 +1261,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "notes": "Net revenue line; excludes contra-revenue allowances.",
             "min_accept_score": 3.0,
-            "varname_regex": r"^f1b0?1|^f2b0?1|^f3b0?1",
-            "table_regex": r"\bf\d{2,4}(_|-)?f[123]a\b",
+            "varname_regex": r"(?i)^f[123]b0?1$",
+            "table_regex": FIN_FORM_HINT,
         },
         "fin_federal_grants_contracts": {
             "target_var": "fin_federal_grants_contracts",
@@ -1684,12 +1687,12 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "forms": ["EF"],
             "label_regex": [
-                r"^students?(?: enrolled)? exclusively in distance education.*$",
-                r"^exclusive distance education$",
+                r"(?i)\b(exclusive|exclusively)\b.*\b(distance education|online)\b",
+                r"(?i)\bdistance education students? exclusive\b",
             ],
-            "exclude_regex": [],
+            "exclude_regex": [r"some but not all", r"location of student", r"state of residence", r"retention"],
             "varname_regex": r"efdeex",
-            "table_regex": r"\bdist|de\b",
+            "table_regex": EF_TABLE_HINT,
         },
         "ef_de_some": {
             "target_var": "ef_de_some",
@@ -1849,15 +1852,14 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "forms": ["E12", "E1D", "EFFY", "EFIA"],
             "label_regex": [
-                r"^total 12[- ]?month full[- ]?time equivalent.*$",
-                r"^full[- ]?time equivalent.*12[- ]?month.*$",
-                r"^(?:estimated|reported).*full[- ]?time equivalent.*(undergraduate|graduate).*enrollment.*$",
+                r"(?i)\b(full[- ]?time equivalent|fte)\b.*\b(12[- ]?month|academic year|e12|effy|e1d)\b",
+                r"(?i)\b(e12fte|fteug|ftegd)\b",
             ],
             "exclude_regex": [r"\bfall\b|\bsnapshot\b|unduplicated headcount|residence|race|ethnicity|sex|gender"],
             "notes": "Calculated from credit/clock hours per IPEDS methodology; EFIA often reports UG/GR FTE separately.",
             "min_accept_score": 3.0,
-            "varname_regex": r"efte(ug|gd)",
-            "table_regex": r"\b(e12|effy|efia|e1d)\b",
+            "varname_regex": r"(?i)^(e12fte|efte(ug|gd)|fte(ug|gd)|fte\d+)$",
+            "table_regex": E12_TABLE_HINT,
         },
         "e12_hs_students_for_credit": {
             "target_var": "e12_hs_students_for_credit",

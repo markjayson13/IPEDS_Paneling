@@ -12,7 +12,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, List
 import json
 import hashlib
 
@@ -103,6 +103,43 @@ DATAFILE_CANDIDATES = (
     "dataset",
 )
 
+LABEL_NORM_RX = [
+    (UNICODE_HYPHENS, "-"),
+    (r"[•·◦∙●\uf0b7\uf0a7]+", " "),
+    (r"&", " and "),
+    (r"[“”\"'`]", ""),
+    (r"[(){}\[\]]", " "),
+    (r"[;:.,]", " "),
+]
+
+SURVEY_FALLBACK = [
+    (r"(?i)\bhd\b", "HD"),
+    (r"(?i)\b(ic|ic\d{4}[_-]?ay|ic\d{4}[_-]?py)\b", "IC"),
+    (r"(?i)\b(e12|effy|e1d|efia|efib|efic|efid)\b", "E12"),
+    (r"(?i)\bef(20\d{2})[a-z]*\b", "EF"),
+    (r"(?i)\bf(1|2|3)[ab]\b", "F"),
+    (r"(?i)\badm\b", "ADM"),
+    (r"(?i)\bsfa\b", "SFA"),
+    (r"(?i)\bom\b", "OM"),
+    (r"(?i)\bgrs?\b", "GR"),
+]
+
+SUBSURVEY_HINTS = [
+    (r"(?i)\bf1a\b", "F1A"),
+    (r"(?i)\bf2a\b", "F2A"),
+    (r"(?i)\bf3a\b", "F3A"),
+    (r"(?i)\befia\b", "EFIA"),
+    (r"(?i)\befib\b", "EFIB"),
+    (r"(?i)\befic\b", "EFIC"),
+    (r"(?i)\befid\b", "EFID"),
+    (r"(?i)\beffy\b", "EFFY"),
+    (r"(?i)\bgr200\b", "GR200"),
+    (r"(?i)\bic[_-]?ay\b", "IC_AY"),
+    (r"(?i)\bic[_-]?py\b", "IC_PY"),
+]
+
+TABLE_HINT_PATTERN = re.compile(r"(table|part|section|survey|component)", re.IGNORECASE)
+
 SURVEY_HINT_BY_PREFIX = {
     "F1A": "Finance",
     "F2A": "Finance",
@@ -135,13 +172,10 @@ def _normalize_label_text(value: object) -> str:
     if value is None:
         return ""
     text = str(value)
-    text = re.sub(UNICODE_HYPHENS, "-", text)
-    text = text.replace("•", " ").replace("&", " and ")
-    text = re.sub(r"[“”\"'`]", "", text)
-    text = re.sub(r"[(){}\[\]]", " ", text)
-    text = re.sub(r"[;:.,]", " ", text)
-    text = re.sub(r"\s+", " ", text).strip().lower()
-    return text
+    for pattern, replacement in LABEL_NORM_RX:
+        text = re.sub(pattern, replacement, text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip().lower()
 
 
 def normalize_label(series: pd.Series) -> pd.Series:
@@ -201,6 +235,47 @@ def report_duplicate_modules() -> None:
             print(f"REMOVE_AFTER_REVIEW duplicate module found: {dup}")
 
 
+def _infer_year_from_any(value: object) -> int | None:
+    if value is None:
+        return None
+    match = re.search(r"(20\d{2})", str(value))
+    return int(match.group(1)) if match else None
+
+
+def _infer_subsurvey(*values: object) -> str | None:
+    haystack = " ".join(str(v) for v in values if v)
+    for pattern, name in SUBSURVEY_HINTS:
+        if re.search(pattern, haystack):
+            return name
+    return None
+
+
+def _infer_survey_from_content(df: pd.DataFrame | None, filename: str, sheet_name: str, table_title: str) -> str | None:
+    tokens: List[str] = [filename or "", sheet_name or "", table_title or ""]
+    if df is not None:
+        if "table_name" in df.columns:
+            tokens.append(" ".join(df["table_name"].astype(str).dropna().head(5).tolist()))
+        if "source_var" in df.columns:
+            tokens.append(" ".join(df["source_var"].astype(str).dropna().head(50).tolist()))
+    haystack = " ".join(tokens)
+    for pattern, survey in SURVEY_FALLBACK:
+        if re.search(pattern, haystack):
+            return survey
+    return None
+
+
+def _infer_table_title(df: pd.DataFrame) -> str:
+    if df.empty:
+        return ""
+    head = df.head(5)
+    for col in head.columns[:5]:
+        series = head[col].dropna().astype(str)
+        for value in series:
+            if TABLE_HINT_PATTERN.search(value):
+                return value.strip()
+    return ""
+
+
 def parse_file_meta(path: Path) -> dict | None:
     match = RE_FILE.search(path.stem)
     if not match:
@@ -242,46 +317,49 @@ def first_match(columns: Iterable[str], candidates: Iterable[str]) -> str | None
     return None
 
 
-def read_any_dictionary(path: Path) -> pd.DataFrame:
+def load_dictionary_frames(path: Path) -> list[pd.DataFrame]:
     suffix = path.suffix.lower()
+    frames: list[pd.DataFrame] = []
     if suffix in {".xlsx", ".xls"}:
         engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
         xls = pd.ExcelFile(path, engine=engine)
-        extracted = None
         for sheet in xls.sheet_names:
-            candidate = extract_columns(xls.parse(sheet_name=sheet, dtype=str))
-            if candidate is not None:
-                extracted = candidate
-                break
-        if extracted is None:
-            df = xls.parse(sheet_name=0, dtype=str)
-            extracted = extract_columns(df) or df.iloc[:, :2].copy()
-            extracted.columns = ["source_var", "source_label"]
-        return extracted
+            try:
+                raw = xls.parse(sheet_name=sheet, dtype=str)
+            except Exception:  # noqa: BLE001
+                continue
+            candidate = extract_columns(raw)
+            if candidate is None:
+                continue
+            candidate["sheet_name"] = sheet
+            candidate["table_title"] = _infer_table_title(raw)
+            frames.append(candidate)
+        if frames:
+            return frames
+        # fall back to first sheet even if heuristics failed
+        raw = xls.parse(sheet_name=0, dtype=str)
+        fallback = extract_columns(raw) or raw.iloc[:, :2].copy()
+        fallback.columns = ["source_var", "source_label"]
+        fallback["sheet_name"] = xls.sheet_names[0]
+        fallback["table_title"] = _infer_table_title(raw)
+        return [fallback]
+
     if suffix == ".csv":
         df = pd.read_csv(path, dtype=str, encoding_errors="ignore", low_memory=False)
-        extracted = extract_columns(df)
-        if extracted is None:
-            extracted = df.iloc[:, :2].copy()
-            extracted.columns = ["source_var", "source_label"]
-        return extracted
-    if suffix == ".txt":
+    elif suffix == ".txt":
         df = read_txt(path)
         if df is None:
             raise ValueError(f"Unable to parse TXT dictionary {path}")
-        extracted = extract_columns(df)
-        if extracted is None:
-            extracted = df.iloc[:, :2].copy()
-            extracted.columns = ["source_var", "source_label"]
-        return extracted
-    # Fallback to Excel reader for anything else
-    engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
-    df = pd.read_excel(path, sheet_name=0, dtype=str, engine=engine)
-    extracted = extract_columns(df)
-    if extracted is None:
-        extracted = df.iloc[:, :2].copy()
-        extracted.columns = ["source_var", "source_label"]
-    return extracted
+    else:
+        engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
+        df = pd.read_excel(path, sheet_name=0, dtype=str, engine=engine)
+    candidate = extract_columns(df)
+    if candidate is None:
+        candidate = df.iloc[:, :2].copy()
+        candidate.columns = ["source_var", "source_label"]
+    candidate["sheet_name"] = path.stem
+    candidate["table_title"] = _infer_table_title(df)
+    return [candidate]
 
 
 def derive_prefix(path: Path) -> str:
@@ -341,59 +419,83 @@ def main() -> None:
 
     rows: list[pd.DataFrame] = []
     for year_dir in sorted(p for p in root.iterdir() if p.is_dir() and p.name.isdigit()):
-        year = int(year_dir.name)
+        default_year = int(year_dir.name)
         for path in iter_dictionary_files(year_dir):
             try:
-                df = read_any_dictionary(path)
+                frame_list = load_dictionary_frames(path)
             except Exception as exc:  # noqa: BLE001
                 print(f"SKIP {path} ({exc})")
                 continue
 
-            df = df.dropna(how="all", subset=["source_var", "source_label"])
-            if df.empty:
-                continue
-
             meta = parse_file_meta(path) or {}
-            df["year"] = meta.get("year", year)
-            df["dict_file"] = str(path)
-            df["dict_filename"] = path.name
-            df["filename"] = path.name
-            for col in ("table_name", "data_filename"):
-                if col not in df.columns:
-                    df[col] = pd.NA
-            df["source_var"] = df["source_var"].astype(str).str.strip()
-            df["source_label"] = df["source_label"].astype(str)
-            df["source_label_norm"] = normalize_label(df["source_label"])
-            df["source_var_norm"] = df["source_var"].str.lower()
-            df["table_name"] = df["table_name"].astype(str)
-            df["table_name_norm"] = df["table_name"].str.strip().str.lower()
-            df["data_filename"] = df["data_filename"].astype(str)
-            df["prefix_hint"] = (
-                df["source_var"]
-                .astype(str)
-                .str.extract(VAR_PREFIX_RE, expand=False)
-                .str.upper()
-                .fillna("")
-            )
-            meta_prefix = meta.get("prefix_token", "")
-            if meta_prefix:
-                df.loc[df["prefix_hint"].eq(""), "prefix_hint"] = meta_prefix.upper()
-            fallback = derive_prefix(path)
-            if fallback:
-                df.loc[df["prefix_hint"].eq(""), "prefix_hint"] = fallback
-            df["prefix_token"] = df["prefix_hint"]
-            df["release"] = derive_release(path.name)
-            path_hint = re.findall(r"/([A-Z]{1,4})[_-]", "/" + path.stem.upper() + "_")
-            fallback_hint = meta.get("survey_hint") or (path_hint[0] if path_hint else "")
-            df["survey_hint"] = df["prefix_hint"].apply(lambda p: map_survey_hint(p, fallback_hint))
-            df["dict_row_sha256"] = (
-                df["source_var_norm"].fillna("")
-                + "|"
-                + df["source_label_norm"].fillna("")
-                + "|"
-                + df["table_name_norm"].fillna("")
-            ).map(lambda s: hashlib.sha256(s.encode("utf-8")).hexdigest())
-            rows.append(df)
+            for df in frame_list:
+                df = df.dropna(how="all", subset=["source_var", "source_label"])
+                if df.empty:
+                    continue
+
+                sheet_value = str(df.get("sheet_name", pd.Series([path.stem])).iloc[0])
+                table_title = str(df.get("table_title", pd.Series([""])).iloc[0])
+                survey_from_content = _infer_survey_from_content(df, path.name, sheet_value, table_title)
+                subsurvey = _infer_subsurvey(sheet_value, table_title, path.name)
+                inferred_year = (
+                    meta.get("year")
+                    or _infer_year_from_any(table_title)
+                    or _infer_year_from_any(sheet_value)
+                    or default_year
+                )
+
+                df = df.copy()
+                df["sheet_name"] = sheet_value
+                df["table_title"] = table_title
+                df["year"] = inferred_year
+                df["dict_file"] = str(path)
+                df["dict_filename"] = path.name
+                df["filename"] = path.name
+                for col in ("table_name", "data_filename"):
+                    if col not in df.columns:
+                        df[col] = pd.NA
+                df["source_var"] = df["source_var"].astype(str).str.strip()
+                df["source_label"] = df["source_label"].astype(str)
+                df["source_label_norm"] = normalize_label(df["source_label"])
+                df["source_var_norm"] = df["source_var"].str.lower()
+                df["table_name"] = df["table_name"].astype(str)
+                df["table_name_norm"] = df["table_name"].str.strip().str.lower()
+                df["data_filename"] = df["data_filename"].astype(str)
+                df["prefix_hint"] = (
+                    df["source_var"]
+                    .astype(str)
+                    .str.extract(VAR_PREFIX_RE, expand=False)
+                    .str.upper()
+                    .fillna("")
+                )
+                meta_prefix = meta.get("prefix_token", "")
+                if meta_prefix:
+                    df.loc[df["prefix_hint"].eq(""), "prefix_hint"] = meta_prefix.upper()
+                fallback = derive_prefix(path)
+                if fallback:
+                    df.loc[df["prefix_hint"].eq(""), "prefix_hint"] = fallback
+                df["prefix_token"] = df["prefix_hint"]
+                df["release"] = derive_release(path.name)
+                path_hint = re.findall(r"/([A-Z]{1,4})[_-]", "/" + path.stem.upper() + "_")
+                fallback_hint_token = meta.get("survey_hint") or (path_hint[0] if path_hint else "")
+                fallback_mapped = map_survey_hint(fallback_hint_token, fallback_hint_token)
+                df["survey_hint"] = df["prefix_hint"].apply(lambda p: map_survey_hint(p, fallback_mapped))
+                if survey_from_content:
+                    df["survey_hint"] = map_survey_hint(survey_from_content, survey_from_content)
+                df["survey_hint"] = df["survey_hint"].fillna(fallback_mapped)
+                df["survey"] = df["survey_hint"]
+                df["subsurvey"] = subsurvey
+                df["varname"] = df["source_var"]
+                df["label"] = df["source_label"]
+                df["label_norm"] = df["source_label_norm"]
+                df["dict_row_sha256"] = (
+                    df["source_var_norm"].fillna("")
+                    + "|"
+                    + df["source_label_norm"].fillna("")
+                    + "|"
+                    + df["table_name_norm"].fillna("")
+                ).map(lambda s: hashlib.sha256(s.encode("utf-8")).hexdigest())
+                rows.append(df)
 
     if not rows:
         sys.exit("No dictionary files found. Did you run the downloader?")
@@ -431,7 +533,10 @@ def main() -> None:
         "year",
         "source_var",
         "source_label",
+        "label",
         "source_label_norm",
+        "label_norm",
+        "varname",
         "source_var_norm",
         "table_name",
         "table_name_norm",
@@ -442,7 +547,11 @@ def main() -> None:
         "dict_row_sha256",
         "release",
         "prefix_hint",
+        "sheet_name",
+        "table_title",
+        "survey",
         "survey_hint",
+        "subsurvey",
     ]
     missing = [col for col in required_cols if col not in lake.columns]
     if missing:
@@ -490,6 +599,19 @@ def main() -> None:
     profile_path = args.output.with_name("dictionary_lake_columns_profile.json")
     profile.to_json(profile_path, orient="records", indent=2)
     print(f"Dictionary profile written to {profile_path}")
+
+    ingest_profile = (
+        lake.groupby(["year", "survey"], dropna=False)
+        .size()
+        .reset_index(name="n_rows")
+    )
+    ingest_profile.to_csv(args.output.with_name("ingest_profile.csv"), index=False)
+
+    ingest_dupes = (
+        lake.sort_values(["year", "survey", "label_norm", "varname"])
+        .drop_duplicates(["year", "survey", "label_norm", "varname"], keep=False)
+    )
+    ingest_dupes.to_csv(args.output.with_name("ingest_possible_dupes.csv"), index=False)
 
 
 if __name__ == "__main__":
