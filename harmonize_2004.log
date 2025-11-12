@@ -1,0 +1,205 @@
+/Users/runner/work/crossbow/crossbow/arrow/cpp/src/arrow/util/cpu_info.cc:239: IOError: sysctlbyname failed for 'hw.l1dcachesize'. Detail: [errno 1] Operation not permitted
+/Users/runner/work/crossbow/crossbow/arrow/cpp/src/arrow/util/cpu_info.cc:239: IOError: sysctlbyname failed for 'hw.l2cachesize'. Detail: [errno 1] Operation not permitted
+/Users/runner/work/crossbow/crossbow/arrow/cpp/src/arrow/util/cpu_info.cc:239: IOError: sysctlbyname failed for 'hw.l3cachesize'. Detail: [errno 1] Operation not permitted
+/Users/runner/work/crossbow/crossbow/arrow/cpp/src/arrow/util/cpu_info.cc:239: IOError: sysctlbyname failed for 'hw.optional.neon'. Detail: [errno 1] Operation not permitted
+2025-11-11 16:21:17,933 WARNING Weak or no match for dir_inst_name in 2004 (score=0.00; candidates=31)
+2025-11-11 16:21:17,958 WARNING Weak or no match for dir_city in 2004 (score=0.00; candidates=31)
+2025-11-11 16:21:17,985 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:18,048 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:18,082 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:18,118 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:18,151 WARNING Weak or no match for dir_opeid in 2004 (score=0.00; candidates=31)
+2025-11-11 16:21:18,175 WARNING Weak or no match for dir_multi_campus_org in 2004 (score=0.00; candidates=31)
+2025-11-11 16:21:18,198 WARNING Weak or no match for dir_cbsa_code in 2004 (score=0.00; candidates=31)
+2025-11-11 16:21:18,222 WARNING Weak or no match for dir_cbsa_type in 2004 (score=0.00; candidates=31)
+2025-11-11 16:21:18,245 WARNING Weak or no match for dir_csa_code in 2004 (score=0.00; candidates=31)
+2025-11-11 16:21:18,268 WARNING Weak or no match for dir_necta_code in 2004 (score=0.00; candidates=31)
+2025-11-11 16:21:18,301 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:18,343 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:18,387 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:18,428 WARNING Manifest pointed to C2004_A.zip but file missing; falling back
+2025-11-11 16:21:18,473 WARNING Manifest pointed to IC2004.zip but file missing; falling back
+2025-11-11 16:21:18,528 WARNING UNITID column missing in /Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/HD2004_Dict/hd2004.xlsx
+2025-11-11 16:21:18,529 WARNING Skipping concept ic_level year 2004 due to missing UNITID in /Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/HD2004_Dict/hd2004.xlsx
+2025-11-11 16:21:18,565 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:18,609 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:18,657 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:18,721 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:18,764 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:18,809 WARNING Manifest pointed to GR2004.zip but file missing; falling back
+2025-11-11 16:21:18,825 WARNING Source var GROFFER not present in /Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/GR2004_ATH_AID/gr2004_ath_aid_rv.csv for concept ic_gr_offering year 2004
+2025-11-11 16:21:18,861 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:18,904 WARNING Manifest pointed to C2004_A.zip but file missing; falling back
+2025-11-11 16:21:19,001 WARNING Manifest pointed to IC2004.zip but file missing; falling back
+2025-11-11 16:21:19,046 WARNING Manifest pointed to IC2004.zip but file missing; falling back
+2025-11-11 16:21:19,091 WARNING Manifest pointed to IC2004.zip but file missing; falling back
+2025-11-11 16:21:19,135 WARNING Weak or no match for ic_response_status in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,170 WARNING Manifest pointed to FLAGS2004.zip but file missing; falling back
+2025-11-11 16:21:19,242 WARNING Manifest pointed to FLAGS2004.zip but file missing; falling back
+2025-11-11 16:21:19,288 WARNING Weak or no match for ic_tuition_ug_in_district in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,325 WARNING Weak or no match for ic_tuition_ug_in_state in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,362 WARNING Weak or no match for ic_tuition_ug_out_state in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,399 WARNING Weak or no match for ic_tuition_gr_in_district in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,436 WARNING Weak or no match for ic_tuition_gr_in_state in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,474 WARNING Weak or no match for ic_tuition_gr_out_state in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,508 WARNING Weak or no match for ic_comprehensive_fee_ug in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,541 WARNING Weak or no match for ic_comprehensive_fee_gr in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,590 WARNING Weak or no match for ic_coa_on_campus in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,624 WARNING Weak or no match for ic_coa_off_campus_not_family in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,658 WARNING Weak or no match for ic_coa_off_campus_with_family in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,692 WARNING Weak or no match for ic_room_board_on_campus in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,725 WARNING Manifest pointed to IC2004.zip but file missing; falling back
+2025-11-11 16:21:19,767 WARNING Manifest pointed to IC2004.zip but file missing; falling back
+2025-11-11 16:21:19,809 WARNING Manifest pointed to IC2004.zip but file missing; falling back
+2025-11-11 16:21:19,850 WARNING Weak or no match for ic_room_board_off_campus_not_family in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,883 WARNING Weak or no match for ic_other_exp_on_campus in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,915 WARNING Weak or no match for ic_other_exp_off_campus_not_family in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,947 WARNING Weak or no match for ic_other_exp_off_campus_with_family in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:19,978 WARNING Weak or no match for ic_books_supplies in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:20,014 WARNING Manifest pointed to C2004_A.zip but file missing; falling back
+2025-11-11 16:21:20,062 WARNING Manifest pointed to IC2004.zip but file missing; falling back
+2025-11-11 16:21:20,104 WARNING Weak or no match for ic_distance_programs in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:20,138 WARNING Weak or no match for ic_parent_unitid in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:20,173 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:20,217 WARNING Manifest pointed to HD2004.zip but file missing; falling back
+2025-11-11 16:21:20,259 WARNING Weak or no match for ic_med_school_flag in 2004 (score=0.00; candidates=1056)
+2025-11-11 16:21:20,286 WARNING Weak or no match for fin_total_rev_invest_return in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,312 WARNING Weak or no match for fin_tuition_fees_net in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,338 WARNING Weak or no match for fin_federal_grants_contracts in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,364 WARNING Weak or no match for fin_state_grants_contracts in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,390 WARNING Weak or no match for fin_local_grants_contracts in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,415 WARNING Weak or no match for fin_private_gifts_grants_contracts in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,442 WARNING Weak or no match for fin_sales_ed_activities in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,468 WARNING Weak or no match for fin_auxiliary_rev in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,493 WARNING Weak or no match for fin_hospital_rev in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,521 WARNING Manifest pointed to F0304_F1A.zip but file missing; falling back
+2025-11-11 16:21:20,555 WARNING Weak or no match for fin_instruction_exp in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,581 WARNING Weak or no match for fin_research_exp in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,607 WARNING Weak or no match for fin_public_service_exp in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,634 WARNING Weak or no match for fin_academic_support_exp in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,660 WARNING Weak or no match for fin_student_services_exp in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,686 WARNING Weak or no match for fin_institutional_support_exp in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,712 WARNING Weak or no match for fin_om_plant_exp in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,738 WARNING Weak or no match for fin_scholarships_fellowships_exp in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,764 WARNING Weak or no match for fin_auxiliary_exp in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,790 WARNING Weak or no match for fin_hospital_exp in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,816 WARNING Weak or no match for fin_depreciation_exp in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,842 WARNING Weak or no match for fin_interest_exp in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,869 WARNING Manifest pointed to F0304_F1A.zip but file missing; falling back
+2025-11-11 16:21:20,902 WARNING Weak or no match for fin_allowances_tuition in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,932 WARNING Weak or no match for fin_allowances_aux in 2004 (score=0.50; candidates=85)
+2025-11-11 16:21:20,959 WARNING Weak or no match for fin_endowment_assets_boy_eoy in 2004 (score=0.50; candidates=81)
+2025-11-11 16:21:20,998 WARNING Weak or no match for fin_reporting_standard in 2004 (score=0.00; candidates=85)
+2025-11-11 16:21:21,040 WARNING Weak or no match for fin_fy_begin_date in 2004 (score=0.00; candidates=85)
+2025-11-11 16:21:21,076 WARNING Weak or no match for fin_fy_end_date in 2004 (score=0.00; candidates=85)
+2025-11-11 16:21:21,104 WARNING Weak or no match for fin_response_status in 2004 (score=0.00; candidates=85)
+2025-11-11 16:21:21,133 WARNING Weak or no match for fin_revision_status in 2004 (score=0.00; candidates=85)
+2025-11-11 16:21:21,160 WARNING Weak or no match for fin_parent_child_indicator in 2004 (score=0.00; candidates=85)
+2025-11-11 16:21:21,188 WARNING Weak or no match for fin_parent_unitid in 2004 (score=0.00; candidates=85)
+2025-11-11 16:21:21,215 WARNING Manifest pointed to EFFY2004.zip but file missing; falling back
+2025-11-11 16:21:21,693 WARNING Weak or no match for ef_ug_total in 2004 (score=0.50; candidates=50)
+2025-11-11 16:21:21,721 WARNING Weak or no match for ef_grad_total in 2004 (score=0.50; candidates=50)
+2025-11-11 16:21:21,748 WARNING Weak or no match for ef_ug_degseek_total in 2004 (score=0.50; candidates=50)
+2025-11-11 16:21:21,776 WARNING Weak or no match for ef_ftft_ug_total in 2004 (score=0.50; candidates=50)
+2025-11-11 16:21:21,806 WARNING Manifest pointed to EFFY2004.zip but file missing; falling back
+2025-11-11 16:21:22,080 WARNING Manifest pointed to EFFY2004.zip but file missing; falling back
+2025-11-11 16:21:22,190 WARNING Weak or no match for ef_de_exclusive in 2004 (score=0.50; candidates=50)
+2025-11-11 16:21:22,214 WARNING Weak or no match for ef_de_some in 2004 (score=0.50; candidates=50)
+2025-11-11 16:21:22,239 WARNING Weak or no match for ef_de_none in 2004 (score=0.50; candidates=50)
+2025-11-11 16:21:22,264 WARNING Weak or no match for ef_retention_ftft_full_time in 2004 (score=0.00; candidates=50)
+2025-11-11 16:21:22,289 WARNING Weak or no match for ef_retention_ftft_part_time in 2004 (score=0.00; candidates=50)
+2025-11-11 16:21:22,313 WARNING Weak or no match for ef_student_faculty_ratio in 2004 (score=0.00; candidates=50)
+2025-11-11 16:21:22,338 WARNING Weak or no match for ef_residence_state_ftft in 2004 (score=0.50; candidates=50)
+2025-11-11 16:21:22,364 WARNING Manifest pointed to EFFY2004.zip but file missing; falling back
+2025-11-11 16:21:22,443 WARNING Weak or no match for e12_ug_undup in 2004 (score=0.50; candidates=34)
+2025-11-11 16:21:22,467 WARNING Weak or no match for e12_gr_undup in 2004 (score=0.50; candidates=34)
+2025-11-11 16:21:22,491 WARNING Weak or no match for e12_credit_hours_ug in 2004 (score=0.00; candidates=34)
+2025-11-11 16:21:22,515 WARNING Weak or no match for e12_credit_hours_gr in 2004 (score=0.00; candidates=34)
+2025-11-11 16:21:22,539 WARNING Weak or no match for e12_contact_hours_ug in 2004 (score=0.00; candidates=34)
+2025-11-11 16:21:22,563 WARNING Weak or no match for e12_contact_hours_gr in 2004 (score=0.00; candidates=34)
+2025-11-11 16:21:22,589 WARNING Manifest pointed to EFIA2004.zip but file missing; falling back
+2025-11-11 16:21:22,627 WARNING Weak or no match for e12_response_status in 2004 (score=nan; candidates=0)
+2025-11-11 16:21:22,650 WARNING Weak or no match for e12_revision_status in 2004 (score=nan; candidates=0)
+2025-11-11 16:21:22,672 WARNING Weak or no match for e12_parent_child_indicator in 2004 (score=nan; candidates=0)
+2025-11-11 16:21:22,694 WARNING Weak or no match for e12_parent_unitid in 2004 (score=nan; candidates=0)
+2025-11-11 16:21:22,716 WARNING Weak or no match for e12_imputation_method in 2004 (score=nan; candidates=0)
+2025-11-11 16:21:22,739 WARNING Weak or no match for e12_reporting_period in 2004 (score=nan; candidates=0)
+2025-11-11 16:21:22,762 WARNING Weak or no match for adm_applicants_total in 2004 (score=0.00; candidates=12)
+2025-11-11 16:21:22,788 WARNING No files found matching prefix ADM in /Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004
+2025-11-11 16:21:22,789 WARNING No data file found for concept adm_admits_total year 2004 prefix ADM
+2025-11-11 16:21:22,811 WARNING Weak or no match for adm_enrolled_ftft in 2004 (score=0.00; candidates=12)
+2025-11-11 16:21:22,834 WARNING Weak or no match for adm_sat_submit_count in 2004 (score=0.00; candidates=12)
+2025-11-11 16:21:22,856 WARNING Weak or no match for adm_sat_submit_pct in 2004 (score=0.00; candidates=12)
+2025-11-11 16:21:22,879 WARNING Weak or no match for adm_act_submit_count in 2004 (score=0.00; candidates=12)
+2025-11-11 16:21:22,902 WARNING Weak or no match for adm_act_submit_pct in 2004 (score=0.00; candidates=12)
+2025-11-11 16:21:22,925 WARNING Weak or no match for act_comp_p25 in 2004 (score=0.00; candidates=12)
+2025-11-11 16:21:22,948 WARNING Weak or no match for act_comp_p75 in 2004 (score=0.00; candidates=12)
+2025-11-11 16:21:22,970 WARNING Weak or no match for act_eng_p25 in 2004 (score=0.00; candidates=12)
+2025-11-11 16:21:22,993 WARNING Weak or no match for act_eng_p75 in 2004 (score=0.00; candidates=12)
+2025-11-11 16:21:23,016 WARNING Weak or no match for act_math_p25 in 2004 (score=0.00; candidates=12)
+2025-11-11 16:21:23,040 WARNING Weak or no match for act_math_p75 in 2004 (score=0.00; candidates=12)
+2025-11-11 16:21:23,090 WARNING Manifest pointed to IC2004.zip but file missing; falling back
+2025-11-11 16:21:23,122 WARNING Weak or no match for sfa_any_aid_recip_count in 2004 (score=0.50; candidates=28)
+2025-11-11 16:21:23,146 WARNING Weak or no match for sfa_any_aid_amount in 2004 (score=0.00; candidates=28)
+2025-11-11 16:21:23,170 WARNING Weak or no match for sfa_federal_grant_amount in 2004 (score=0.00; candidates=28)
+2025-11-11 16:21:23,194 WARNING Weak or no match for sfa_federal_grant_recip_count in 2004 (score=0.50; candidates=28)
+2025-11-11 16:21:23,218 WARNING Weak or no match for sfa_state_local_grant_amount in 2004 (score=0.00; candidates=28)
+2025-11-11 16:21:23,242 WARNING Weak or no match for sfa_state_local_grant_recip_count in 2004 (score=0.50; candidates=28)
+2025-11-11 16:21:23,265 WARNING Weak or no match for sfa_institutional_grant_amount in 2004 (score=0.00; candidates=28)
+2025-11-11 16:21:23,289 WARNING Weak or no match for sfa_institutional_grant_recip_count in 2004 (score=0.50; candidates=28)
+2025-11-11 16:21:23,313 WARNING Weak or no match for sfa_direct_sub_loan_amount in 2004 (score=0.00; candidates=28)
+2025-11-11 16:21:23,337 WARNING Weak or no match for sfa_direct_sub_loan_recip_count in 2004 (score=0.50; candidates=28)
+2025-11-11 16:21:23,361 WARNING Weak or no match for sfa_direct_unsub_loan_amount in 2004 (score=0.00; candidates=28)
+2025-11-11 16:21:23,384 WARNING Weak or no match for sfa_direct_unsub_loan_recip_count in 2004 (score=0.50; candidates=28)
+2025-11-11 16:21:23,407 WARNING Weak or no match for sfa_parent_plus_amount in 2004 (score=0.00; candidates=28)
+2025-11-11 16:21:23,431 WARNING Weak or no match for sfa_parent_plus_recip_count in 2004 (score=0.50; candidates=28)
+2025-11-11 16:21:23,455 WARNING Weak or no match for sfa_private_loan_amount in 2004 (score=0.00; candidates=28)
+2025-11-11 16:21:23,478 WARNING Weak or no match for sfa_private_loan_recip_count in 2004 (score=0.50; candidates=28)
+2025-11-11 16:21:23,502 WARNING Weak or no match for sfa_veterans_benefits_amount in 2004 (score=0.00; candidates=28)
+2025-11-11 16:21:23,526 WARNING Weak or no match for sfa_ftft_in_district_count in 2004 (score=0.50; candidates=28)
+2025-11-11 16:21:23,550 WARNING Weak or no match for sfa_ftft_in_state_count in 2004 (score=0.50; candidates=28)
+2025-11-11 16:21:23,574 WARNING Weak or no match for sfa_ftft_out_state_count in 2004 (score=0.50; candidates=28)
+2025-11-11 16:21:23,597 WARNING Weak or no match for sfa_ftft_unknown_rate_count in 2004 (score=0.50; candidates=28)
+/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/harmonize_new.py:673: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  key_frame = df[key].astype(object).fillna("__NA__")
+/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/harmonize_new.py:687: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  key_nonnull = work[key].astype(object).fillna("__NA__")
+Traceback (most recent call last):
+  File "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/harmonize_new.py", line 1727, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/harmonize_new.py", line 1621, in main
+    conflicts_df.to_csv(FORM_CONFLICTS_PATH, index=False)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/pandas/util/_decorators.py", line 333, in wrapper
+    return func(*args, **kwargs)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/pandas/core/generic.py", line 3967, in to_csv
+    return DataFrameRenderer(formatter).to_csv(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        path_or_buf,
+        ^^^^^^^^^^^^
+    ...<14 lines>...
+        storage_options=storage_options,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/pandas/io/formats/format.py", line 1014, in to_csv
+    csv_formatter.save()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/pandas/io/formats/csvs.py", line 251, in save
+    with get_handle(
+         ~~~~~~~~~~^
+        self.filepath_or_buffer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+        storage_options=self.storage_options,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ) as handles:
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/pandas/io/common.py", line 873, in get_handle
+    handle = open(
+        handle,
+    ...<3 lines>...
+        newline="",
+    )
+PermissionError: [Errno 1] Operation not permitted: '/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks/form_conflicts.csv'

@@ -47,6 +47,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["HD"],
             "label_regex": [r"^institution.*name$|^name of institution$"],
             "exclude_regex": [r"contact|mission|website|alias|short name|athletic|library"],
+            "varname_exact": "instnm",
+            "table_regex": r"\b(hd|ic)\b",
         },
         "dir_city": {
             "target_var": "dir_city",
@@ -57,6 +59,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["HD"],
             "label_regex": [r"^city(?: location of institution)?$"],
             "exclude_regex": [r"mailing|county|country"],
+            "varname_exact": "city",
+            "table_regex": r"\b(hd|ic)\b",
         },
         "dir_state_abbr": {
             "target_var": "dir_state_abbr",
@@ -67,6 +71,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["HD"],
             "label_regex": [r"^state abbreviation$|^state$"],
             "exclude_regex": [r"fips|county"],
+            "varname_exact": "stabbr",
+            "table_regex": r"\b(hd|ic)\b",
         },
         "dir_zip": {
             "target_var": "dir_zip",
@@ -77,6 +83,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["HD"],
             "label_regex": [r"^zip code$|^zip$"],
             "exclude_regex": [r"plus|mailing"],
+            "varname_exact": "zip",
+            "table_regex": r"\b(hd|ic)\b",
         },
         "dir_ein": {
             "target_var": "dir_ein",
@@ -254,6 +262,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^sector of institution$|^sector$"],
             "exclude_regex": [],
+            "varname_exact": "sector",
+            "table_regex": r"\b(hd|ic)\b",
         },
         "ic_control": {
             "target_var": "ic_control",
@@ -263,6 +273,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^control of institution$|^control$"],
             "exclude_regex": [],
+            "varname_exact": "control",
+            "table_regex": r"\b(hd|ic)\b",
         },
         "ic_level": {
             "target_var": "ic_level",
@@ -272,6 +284,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^level of institution$|^institution level$"],
             "exclude_regex": [],
+            "varname_exact": "iclevel",
+            "table_regex": r"\b(hd|ic)\b",
         },
         "ic_degree_granting": {
             "target_var": "ic_degree_granting",
@@ -281,6 +295,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^degree[- ]granting status$"],
             "exclude_regex": [],
+            "varname_exact": "deggrant",
+            "table_regex": r"\b(hd|ic)\b",
         },
         "ic_highest_degree_offered": {
             "target_var": "ic_highest_degree_offered",
@@ -291,6 +307,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^highest degree offered.*$"],
             "exclude_regex": [],
             "notes": "Label revised in 2009-10; regex tolerates both versions.",
+            "varname_exact": "hdegoffr1",
+            "table_regex": r"\b(hd|ic)\b",
         },
         "ic_institutional_category": {
             "target_var": "ic_institutional_category",
@@ -300,6 +318,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^institutional category$"],
             "exclude_regex": [],
+            "varname_exact": "instcat",
+            "table_regex": r"\b(hd|ic)\b",
         },
         "ic_highest_level_offering": {
             "target_var": "ic_highest_level_offering",
@@ -309,6 +329,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^highest level of offering$"],
             "exclude_regex": [],
+            "varname_exact": "hloffer",
+            "table_regex": r"\b(hd|ic)\b",
         },
         "ic_ug_offering": {
             "target_var": "ic_ug_offering",
@@ -318,6 +340,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^undergraduate offering$"],
             "exclude_regex": [],
+            "varname_exact": "ugoffer",
+            "table_regex": r"\b(hd|ic)\b",
         },
         "ic_gr_offering": {
             "target_var": "ic_gr_offering",
@@ -327,6 +351,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^graduate offering$"],
             "exclude_regex": [],
+            "varname_exact": "groffer",
+            "table_regex": r"\b(hd|ic)\b",
         },
         "ic_urbanicity": {
             "target_var": "ic_urbanicity",
@@ -1232,6 +1258,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "notes": "Net revenue line; excludes contra-revenue allowances.",
             "min_accept_score": 3.0,
+            "varname_regex": r"^f1b0?1|^f2b0?1|^f3b0?1",
+            "table_regex": r"\bf\d{2,4}(_|-)?f[123]a\b",
         },
         "fin_federal_grants_contracts": {
             "target_var": "fin_federal_grants_contracts",
@@ -1580,6 +1608,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"by race|ethnicity|sex|gender|age|residence|major field|program|level detail",
             ],
             "notes": "Fall snapshot grand total only.",
+            "varname_exact": "eftotlt",
+            "table_regex": r"\bef\b",
         },
         "ef_ug_total": {
             "target_var": "ef_ug_total",
@@ -1590,6 +1620,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["EF"],
             "label_regex": [r"^undergraduate total$|^total undergraduate students$"],
             "exclude_regex": [r"graduate|by race|ethnicity|sex|gender|age|residence|major field"],
+            "varname_exact": "efugt",
+            "table_regex": r"\bef\b",
         },
         "ef_grad_total": {
             "target_var": "ef_grad_total",
@@ -1656,6 +1688,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^exclusive distance education$",
             ],
             "exclude_regex": [],
+            "varname_regex": r"efdeex",
+            "table_regex": r"\bdist|de\b",
         },
         "ef_de_some": {
             "target_var": "ef_de_some",
@@ -1669,6 +1703,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^some distance education$",
             ],
             "exclude_regex": [],
+            "varname_regex": r"efdesome",
+            "table_regex": r"\bdist|de\b",
         },
         "ef_de_none": {
             "target_var": "ef_de_none",
@@ -1682,6 +1718,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^no distance education$",
             ],
             "exclude_regex": [],
+            "varname_exact": "efdenon",
+            "table_regex": r"\bdist|de\b",
         },
         "ef_retention_ftft_full_time": {
             "target_var": "ef_retention_ftft_full_time",
@@ -1818,6 +1856,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [r"\bfall\b|\bsnapshot\b|unduplicated headcount|residence|race|ethnicity|sex|gender"],
             "notes": "Calculated from credit/clock hours per IPEDS methodology; EFIA often reports UG/GR FTE separately.",
             "min_accept_score": 3.0,
+            "varname_regex": r"efte(ug|gd)",
+            "table_regex": r"\b(e12|effy|efia|e1d)\b",
         },
         "e12_hs_students_for_credit": {
             "target_var": "e12_hs_students_for_credit",

@@ -59,6 +59,7 @@ METADATA_NEGATIVES = re.compile(
     r"^(unitid(_p)?|unit id|instnm|institution name|year|state|zip|fips|sector)$",
     re.IGNORECASE,
 )
+MATCH_WEIGHTS = {"label": 1.0, "varname": 1.5, "table": 0.5}
 
 SENTINEL_VALUES = {-1, -2, -3, -8, -9}
 SENTINEL_PREFIXES = ("ef_", "e12_", "sfa_", "anp_", "fin_")
@@ -471,6 +472,8 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
     label_norm_raw = str(row.get("source_label_norm") or row.get("source_label") or "").strip()
     label_norm_stripped = re.sub(r"[,;$%]", "", label_norm_raw)
     label_norm = label_norm_stripped.lower()
+    var_norm = str(row.get("source_var_norm") or row.get("source_var") or "").strip().lower()
+    table_norm = str(row.get("table_name_norm") or row.get("table_name") or "").strip().lower()
 
     if METADATA_NEGATIVES.match(label_norm_stripped):
         return -5.0
@@ -478,8 +481,12 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
     score = 0.0
     matched = False
     for pattern in concept.get("label_regex", []):
-        regex = re.compile(pattern, re.IGNORECASE)
-        if regex.fullmatch(label_norm) or regex.fullmatch(label_norm_stripped) or regex.fullmatch(label_norm_raw):
+        regex = pattern if hasattr(pattern, "search") else re.compile(pattern, re.IGNORECASE)
+        if (
+            regex.fullmatch(label_norm)
+            or regex.fullmatch(label_norm_stripped)
+            or regex.fullmatch(label_norm_raw)
+        ):
             score = max(score, 4.0)
             matched = True
             break
@@ -492,6 +499,7 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
             matched = True
     if not matched:
         score -= 1.0
+
     required_keywords = [
         tok.strip().lower()
         for tok in (concept.get("requires_keywords") or [])
@@ -499,6 +507,22 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
     ]
     if required_keywords and not all(tok in label_norm for tok in required_keywords):
         score = min(score, 3.0)
+
+    varname_exact = concept.get("varname_exact")
+    if varname_exact and var_norm == str(varname_exact).lower():
+        score += MATCH_WEIGHTS["varname"]
+    varname_regex = concept.get("varname_regex")
+    if varname_regex:
+        vregex = varname_regex if hasattr(varname_regex, "search") else re.compile(varname_regex, re.IGNORECASE)
+        if vregex.search(var_norm):
+            score += MATCH_WEIGHTS["varname"]
+
+    table_regex = concept.get("table_regex")
+    if table_regex:
+        tregex = table_regex if hasattr(table_regex, "search") else re.compile(table_regex, re.IGNORECASE)
+        if tregex.search(table_norm):
+            score += MATCH_WEIGHTS["table"]
+
     bonus = 0.0
     forms = concept.get("forms")
     prefixes = extract_prefixes(row)

@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 from typing import Iterable
 import json
+import hashlib
 
 try:  # pylint: disable=wrong-import-position
     import pandas as pd
@@ -34,6 +35,32 @@ VAR_PREFIX_RE = re.compile(
     r"^(F[123]A|EFFY|EFIA?|EFIB|EFIC|EFID|E1D|OM|HR|IC|SFA|GRS?|PE|AL|ADM|HD|C)",
     re.IGNORECASE,
 )
+RE_FILE = re.compile(
+    r"(?i)(?P<prefix>[a-z]{1,4})?"
+    r"(?P<y1>\d{2})(?P<y2>\d{2})?"
+    r"(?:[_-])?(?P<suffix>[a-z0-9]+)?"
+)
+SURVEY_HINT_TOKENS = {
+    "ef": "EF",
+    "efia": "E12",
+    "e12": "E12",
+    "effy": "E12",
+    "e1d": "E12",
+    "f1a": "F1A",
+    "f2a": "F2A",
+    "f3a": "F3A",
+    "f": "F",
+    "ic": "IC",
+    "hd": "HD",
+    "adm": "ADM",
+    "gr": "GR",
+    "grs": "GRS",
+    "pe": "PE",
+    "om": "OM",
+    "sfa": "SFA",
+    "al": "AL",
+    "c": "C",
+}
 UNICODE_HYPHENS = r"[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]"
 
 VAR_CANDIDATES = (
@@ -58,6 +85,22 @@ LABEL_CANDIDATES = (
     "long description",
     "valuelabel",
     "unique identification number of the institution",
+)
+TABLE_CANDIDATES = (
+    "table",
+    "tablenm",
+    "worksheet",
+    "sheet",
+    "tab",
+    "section",
+)
+DATAFILE_CANDIDATES = (
+    "data_file",
+    "datafile",
+    "data filename",
+    "filename",
+    "file",
+    "dataset",
 )
 
 SURVEY_HINT_BY_PREFIX = {
@@ -88,19 +131,21 @@ SURVEY_HINT_BY_PREFIX = {
 }
 
 
+def _normalize_label_text(value: object) -> str:
+    if value is None:
+        return ""
+    text = str(value)
+    text = re.sub(UNICODE_HYPHENS, "-", text)
+    text = text.replace("•", " ").replace("&", " and ")
+    text = re.sub(r"[“”\"'`]", "", text)
+    text = re.sub(r"[(){}\[\]]", " ", text)
+    text = re.sub(r"[;:.,]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip().lower()
+    return text
+
+
 def normalize_label(series: pd.Series) -> pd.Series:
-    return (
-        series.fillna("")
-        .astype(str)
-        .str.strip()
-        .str.lower()
-        .str.replace(UNICODE_HYPHENS, "-", regex=True)
-        .str.replace(r"[•·●\u2022]", " ", regex=True)
-        .str.replace(r"&", " and ", regex=True)
-        .str.replace(r"[^\w\s\(\)/%-]", "", regex=True)
-        .str.replace(r"\s+", " ", regex=True)
-        .str.strip()
-    )
+    return series.map(_normalize_label_text)
 
 
 def extract_columns(df: pd.DataFrame) -> pd.DataFrame | None:
@@ -109,8 +154,16 @@ def extract_columns(df: pd.DataFrame) -> pd.DataFrame | None:
     var_col = first_match(df.columns, VAR_CANDIDATES)
     label_col = first_match(df.columns, LABEL_CANDIDATES)
     if var_col and label_col:
-        out = df[[var_col, label_col]].copy()
-        out.columns = ["source_var", "source_label"]
+        table_col = first_match(df.columns, TABLE_CANDIDATES)
+        data_col = first_match(df.columns, DATAFILE_CANDIDATES)
+        out = pd.DataFrame(
+            {
+                "source_var": df[var_col],
+                "source_label": df[label_col],
+                "table_name": df[table_col] if table_col else pd.NA,
+                "data_filename": df[data_col] if data_col else pd.NA,
+            }
+        )
         return out
     return None
 
@@ -146,6 +199,21 @@ def report_duplicate_modules() -> None:
         ]
         for dup in duplicates:
             print(f"REMOVE_AFTER_REVIEW duplicate module found: {dup}")
+
+
+def parse_file_meta(path: Path) -> dict | None:
+    match = RE_FILE.search(path.stem)
+    if not match:
+        return None
+    gd = match.groupdict()
+    year_token = gd.get("y2") or gd.get("y1")
+    if not year_token:
+        return None
+    year = int(f"20{year_token}")
+    prefix_token = (gd.get("prefix") or "").lower()
+    suffix = (gd.get("suffix") or "").lower()
+    hint = SURVEY_HINT_TOKENS.get(prefix_token) or SURVEY_HINT_TOKENS.get(suffix) or prefix_token.upper()
+    return {"year": year, "prefix_token": prefix_token.upper(), "survey_hint": hint}
 
 
 def parse_args() -> argparse.Namespace:
@@ -285,9 +353,21 @@ def main() -> None:
             if df.empty:
                 continue
 
-            df["year"] = year
+            meta = parse_file_meta(path) or {}
+            df["year"] = meta.get("year", year)
             df["dict_file"] = str(path)
+            df["dict_filename"] = path.name
             df["filename"] = path.name
+            for col in ("table_name", "data_filename"):
+                if col not in df.columns:
+                    df[col] = pd.NA
+            df["source_var"] = df["source_var"].astype(str).str.strip()
+            df["source_label"] = df["source_label"].astype(str)
+            df["source_label_norm"] = normalize_label(df["source_label"])
+            df["source_var_norm"] = df["source_var"].str.lower()
+            df["table_name"] = df["table_name"].astype(str)
+            df["table_name_norm"] = df["table_name"].str.strip().str.lower()
+            df["data_filename"] = df["data_filename"].astype(str)
             df["prefix_hint"] = (
                 df["source_var"]
                 .astype(str)
@@ -295,35 +375,71 @@ def main() -> None:
                 .str.upper()
                 .fillna("")
             )
+            meta_prefix = meta.get("prefix_token", "")
+            if meta_prefix:
+                df.loc[df["prefix_hint"].eq(""), "prefix_hint"] = meta_prefix.upper()
             fallback = derive_prefix(path)
             if fallback:
                 df.loc[df["prefix_hint"].eq(""), "prefix_hint"] = fallback
+            df["prefix_token"] = df["prefix_hint"]
             df["release"] = derive_release(path.name)
             path_hint = re.findall(r"/([A-Z]{1,4})[_-]", "/" + path.stem.upper() + "_")
-            fallback_hint = path_hint[0] if path_hint else ""
+            fallback_hint = meta.get("survey_hint") or (path_hint[0] if path_hint else "")
             df["survey_hint"] = df["prefix_hint"].apply(lambda p: map_survey_hint(p, fallback_hint))
+            df["dict_row_sha256"] = (
+                df["source_var_norm"].fillna("")
+                + "|"
+                + df["source_label_norm"].fillna("")
+                + "|"
+                + df["table_name_norm"].fillna("")
+            ).map(lambda s: hashlib.sha256(s.encode("utf-8")).hexdigest())
             rows.append(df)
 
     if not rows:
         sys.exit("No dictionary files found. Did you run the downloader?")
 
     lake = pd.concat(rows, ignore_index=True)
-    lake["source_label_norm"] = normalize_label(lake["source_label"])
+    lake["source_label_norm"] = normalize_label(lake.get("source_label"))
     lake["source_var"] = lake["source_var"].astype(str).str.strip()
+    lake["source_var_norm"] = lake["source_var"].str.lower()
     lake["dict_file"] = lake["dict_file"].astype(str)
+    if "dict_filename" not in lake.columns:
+        lake["dict_filename"] = lake["filename"]
+    lake["dict_filename"] = lake["dict_filename"].astype(str)
     lake["filename"] = lake["filename"].astype(str)
     lake["prefix_hint"] = lake["prefix_hint"].fillna("").astype(str).str.upper()
     lake["survey_hint"] = lake["survey_hint"].fillna("").astype(str)
     lake["release"] = lake["release"].fillna("").astype(str)
     lake["year"] = pd.to_numeric(lake["year"], errors="coerce").astype("Int64")
+    if "table_name" not in lake.columns:
+        lake["table_name"] = pd.NA
+    lake["table_name"] = lake["table_name"].astype(str)
+    lake["table_name_norm"] = lake["table_name"].str.strip().str.lower()
+    if "data_filename" not in lake.columns:
+        lake["data_filename"] = pd.NA
+    lake["data_filename"] = lake["data_filename"].astype(str)
+    if "dict_row_sha256" not in lake.columns:
+        lake["dict_row_sha256"] = (
+            lake["source_var_norm"].fillna("")
+            + "|"
+            + lake["source_label_norm"].fillna("")
+            + "|"
+            + lake["table_name_norm"].fillna("")
+        ).map(lambda s: hashlib.sha256(s.encode("utf-8")).hexdigest())
 
     required_cols = [
         "year",
         "source_var",
         "source_label",
         "source_label_norm",
+        "source_var_norm",
+        "table_name",
+        "table_name_norm",
+        "data_filename",
         "dict_file",
+        "dict_filename",
         "filename",
+        "dict_row_sha256",
         "release",
         "prefix_hint",
         "survey_hint",
@@ -332,7 +448,7 @@ def main() -> None:
     if missing:
         raise RuntimeError(f"Dictionary lake missing required columns: {missing}")
 
-    dedup_key = ["year", "dict_file", "source_var", "source_label_norm"]
+    dedup_key = ["year", "dict_row_sha256"]
     dup_rows = lake[lake.duplicated(dedup_key, keep=False)].copy()
     lake = (
         lake.sort_values(["year", "survey_hint", "prefix_hint", "dict_file", "source_var"])
@@ -348,6 +464,7 @@ def main() -> None:
         dup_path = args.output.with_name("dictionary_lake_duplicates.csv")
         dup_rows.sort_values(dedup_key).to_csv(dup_path, index=False)
         print(f"Duplicate rows written to {dup_path}")
+        dup_rows.to_csv(args.output.with_name("dictionary_duplicates.csv"), index=False)
 
     top_labels = (
         lake.groupby(["year", "survey_hint", "source_label_norm"], dropna=False)
@@ -368,6 +485,8 @@ def main() -> None:
         .size()
         .reset_index(name="row_count")
     )
+    profile_csv_path = args.output.with_name("dictionary_profile.csv")
+    profile.to_csv(profile_csv_path, index=False)
     profile_path = args.output.with_name("dictionary_lake_columns_profile.json")
     profile.to_json(profile_path, orient="records", indent=2)
     print(f"Dictionary profile written to {profile_path}")
