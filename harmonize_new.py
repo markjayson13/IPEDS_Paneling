@@ -59,7 +59,7 @@ METADATA_NEGATIVES = re.compile(
     r"^(unitid(_p)?|unit id|instnm|institution name|year|state|zip|fips|sector)$",
     re.IGNORECASE,
 )
-MATCH_WEIGHTS = {"label": 1.0, "varname": 1.5, "table": 0.5}
+MATCH_WEIGHTS = {"label": 1.0, "varname": 1.5, "code": 1.5, "table": 0.5}
 
 SENTINEL_VALUES = {-1, -2, -3, -8, -9}
 SENTINEL_PREFIXES = ("ef_", "e12_", "sfa_", "anp_", "fin_")
@@ -387,6 +387,10 @@ def load_dictionary_lake(path: Path) -> pd.DataFrame:
     for col in ["source_label_norm", "source_label", "prefix_hint", "survey_hint", "release", "dict_file", "filename"]:
         if col in lake.columns:
             lake[col] = lake[col].astype(str)
+    if "code_norm" in lake.columns:
+        lake["code_norm"] = lake["code_norm"].astype(str)
+    else:
+        lake["code_norm"] = lake["source_var"].astype(str).str.upper()
     return lake
 
 
@@ -462,10 +466,19 @@ def filter_candidates_by_forms(df: pd.DataFrame, forms: Optional[Sequence[str]])
     if not forms:
         return df.copy()
     allowed = {f.upper() for f in forms}
-    mask = []
-    for _, row in df.iterrows():
-        prefixes = extract_prefixes(row)
-        mask.append(bool(prefixes & allowed))
+
+    def _candidate_tokens(row: pd.Series) -> set[str]:
+        tokens: set[str] = set()
+        for col in ("survey", "survey_hint", "prefix_hint"):
+            val = str(row.get(col, "") or "").strip()
+            if val and val.lower() not in {"nan", "none"}:
+                tokens.add(val.upper())
+        tokens |= extract_prefixes(row)
+        return tokens
+
+    mask = df.apply(lambda r: bool(_candidate_tokens(r) & allowed), axis=1)
+    if not mask.any():
+        return df.copy()
     return df.loc[mask].copy()
 
 
@@ -474,6 +487,7 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
     label_norm_stripped = re.sub(r"[,;$%]", "", label_norm_raw)
     label_norm = label_norm_stripped.lower()
     var_norm = str(row.get("source_var_norm") or row.get("source_var") or "").strip().lower()
+    code_norm = str(row.get("code_norm") or row.get("source_var") or "").strip().upper()
     table_norm = str(row.get("table_name_norm") or row.get("table_name") or "").strip().lower()
 
     if METADATA_NEGATIVES.match(label_norm_stripped):
@@ -517,6 +531,15 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
         vregex = varname_regex if hasattr(varname_regex, "search") else re.compile(varname_regex, re.IGNORECASE)
         if vregex.search(var_norm):
             score += MATCH_WEIGHTS["varname"]
+
+    code_patterns = concept.get("code_regex")
+    if code_patterns:
+        patterns = code_patterns if isinstance(code_patterns, (list, tuple, set)) else [code_patterns]
+        for pattern in patterns:
+            cregex = pattern if hasattr(pattern, "search") else re.compile(pattern, re.IGNORECASE)
+            if cregex.search(code_norm):
+                score += MATCH_WEIGHTS["code"]
+                break
 
     table_regex = concept.get("table_regex")
     if table_regex:

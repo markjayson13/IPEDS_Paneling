@@ -458,6 +458,7 @@ def main() -> None:
                 df["source_label"] = df["source_label"].astype(str)
                 df["source_label_norm"] = normalize_label(df["source_label"])
                 df["source_var_norm"] = df["source_var"].str.lower()
+                df["code_norm"] = df["source_var"].str.upper()
                 df["table_name"] = df["table_name"].astype(str)
                 df["table_name_norm"] = df["table_name"].str.strip().str.lower()
                 df["data_filename"] = df["data_filename"].astype(str)
@@ -504,6 +505,10 @@ def main() -> None:
     lake["source_label_norm"] = normalize_label(lake.get("source_label"))
     lake["source_var"] = lake["source_var"].astype(str).str.strip()
     lake["source_var_norm"] = lake["source_var"].str.lower()
+    if "code_norm" not in lake.columns:
+        lake["code_norm"] = lake["source_var"].str.upper()
+    else:
+        lake["code_norm"] = lake["code_norm"].astype(str).str.strip().str.upper()
     lake["dict_file"] = lake["dict_file"].astype(str)
     if "dict_filename" not in lake.columns:
         lake["dict_filename"] = lake["filename"]
@@ -538,6 +543,7 @@ def main() -> None:
         "label_norm",
         "varname",
         "source_var_norm",
+        "code_norm",
         "table_name",
         "table_name_norm",
         "data_filename",
