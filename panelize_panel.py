@@ -195,7 +195,12 @@ COMPONENT_TARGETS: Dict[str, List[str]] = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build per-component wide panels")
     parser.add_argument("--input", type=Path, required=True, help="panel_long parquet path")
-    parser.add_argument("--outdir", type=Path, required=True, help="Directory for per-component CSVs")
+    parser.add_argument(
+        "--outdir",
+        type=Path,
+        default=Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets"),
+        help="Directory for per-component CSVs (default: user IPEDS Paneled Datasets folder)",
+    )
     parser.add_argument(
         "--templates",
         nargs="+",
