@@ -1,0 +1,6 @@
+*.parquet
+artifacts/checks/validation_report.csv
+*.csv
+*.csv
+*.csv
+*.csv
