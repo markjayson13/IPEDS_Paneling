@@ -20,9 +20,9 @@ SURVEY_PATTERNS: list[tuple[str, list[str]]] = [
     ("E1D", [r"E1D"]),
     ("EFFY", [r"EFFY"]),
     ("GR200", [r"GR200"]),
-    ("F1A", [r"F\d{4}_F1A", r"_F1A"]),
-    ("F2A", [r"F\d{4}_F2A", r"_F2A"]),
-    ("F3A", [r"F\d{4}_F3A", r"_F3A"]),
+    ("F1A", [r"F\d{4}_F1A", r"F\d{4}_F1\b", r"_F1A", r"_F1$"]),
+    ("F2A", [r"F\d{4}_F2A?", r"F\d{4}_F2\b", r"_F2A?", r"_F2$"]),
+    ("F3A", [r"F\d{4}_F3A?", r"F\d{4}_F3\b", r"_F3A?", r"_F3$"]),
     ("HD", [r"HD\d{4}"]),
     ("IC", [r"IC\d{4}"]),
     ("EF", [r"EF\d{4}[ABCD]", r"EF\d{4}(RET|DIST)", r"EFDIST", r"EFRET"]),
@@ -99,6 +99,9 @@ def iter_data_files(root: Path, years: Optional[Set[int]], surveys: Optional[Set
             continue
         survey = infer_survey(path)
         if surveys is not None and survey not in surveys:
+            continue
+        if survey in {"F1A", "F2A", "F3A"} and "rv" not in path.stem.lower():
+            # Finance directories often contain provisional and revised files; keep only *_rv.*
             continue
         yield path, year, survey
 

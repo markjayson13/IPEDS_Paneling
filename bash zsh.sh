@@ -65,14 +65,14 @@ done
 python3 build_raw_panel.py \
   --root "$ROOT" \
   --years 2024 \
-  --surveys HD,IC,EF,E12,SFA,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
+r
+d  --surveys HD,IC,EF,E12,SFA,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
   --output "$PARQ/panel_long_raw_2024.parquet"
 
 python3 panelize_raw.py \
   --input "$PARQ/panel_long_raw_2024.parquet" \
   --output "$OUT/panel_wide_raw_2024.csv" \
-  --column-field source_var
-
+  --column-field source_vaone
 
 
 

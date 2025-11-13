@@ -143,7 +143,10 @@ def pivot_finance(chosen: pd.DataFrame) -> pd.DataFrame:
     wide = values.merge(flags, on=id_cols, how="left")
     dominant = (
         chosen.groupby(id_cols + ["finance_form_used"]).size().reset_index(name="n")
-        .sort_values(id_cols + ["n"], ascending=[True, True, False])
+        .sort_values(
+            by=id_cols + ["n"],
+            ascending=[True] * len(id_cols) + [False],
+        )
         .drop_duplicates(subset=id_cols)
         .drop(columns=["n"])
     )
