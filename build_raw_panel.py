@@ -41,11 +41,13 @@ def infer_year(path: Path) -> int | None:
 
 
 def infer_survey(path: Path) -> str:
-    stem = path.stem.upper()
-    for survey, patterns in SURVEY_PATTERNS:
-        for pattern in patterns:
-            if re.search(pattern, stem):
-                return survey
+    candidates = [path.stem] + [parent.name for parent in path.parents]
+    for candidate in candidates:
+        stem = str(candidate).upper()
+        for survey, patterns in SURVEY_PATTERNS:
+            for pattern in patterns:
+                if re.search(pattern, stem):
+                    return survey
     return "UNK"
 
 
