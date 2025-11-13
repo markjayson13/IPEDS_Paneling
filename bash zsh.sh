@@ -90,3 +90,4 @@ python3 merge_raw_panels.py \
 
 #Running Finance Unification
 python3 /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/unify_finance.py
+python3 merge_raw_panels.py

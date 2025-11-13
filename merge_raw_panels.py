@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-import re, sys
+import os
+import re
+import sys
 from pathlib import Path
 import pandas as pd
 
@@ -9,6 +11,8 @@ FILES = [
     OUT_DIR / f"panel_wide_raw_{y}.csv"
     for y in range(2004, 2025)
 ]
+
+BUILD_LONG = os.environ.get("MERGE_BUILD_LONG", "0") not in {"0", "false", "False", ""}
 
 # 1) Known HD bare-code whitelist (not prefixed with HD/IC)
 HD_BARE = {
@@ -120,20 +124,25 @@ def main():
     wide.to_csv(out_wide, index=False)
     print(f"Wrote merged wide: {out_wide} with {wide.shape[0]:,} rows and {wide.shape[1]:,} cols.")
 
-    # optional: build a long panel (UNITID, year, source_var, value)
-    long = (wide
-            .set_index(ID_COLS + id_like)
+    if BUILD_LONG:
+        long = (
+            wide.set_index(ID_COLS + id_like)
             .stack(dropna=True)
             .reset_index()
-            .rename(columns={"level_"+str(len(ID_COLS + id_like)):"source_var", 0:"value"}))
+            .rename(columns={"level_" + str(len(ID_COLS + id_like)): "source_var", 0: "value"})
+        )
 
-    if len(long) > 100_000_000:
-        raise SystemExit(f"Refusing to write long output with {len(long):,} rows. Restrict years or columns and retry.")
+        if len(long) > 100_000_000:
+            raise SystemExit(
+                f"Refusing to write long output with {len(long):,} rows. Restrict years or columns and retry."
+            )
 
-    long["value"] = long["value"].astype("string")
-    out_long = OUT_DIR / "panel_long_raw_2004_2024_merged.parquet"
-    long.to_parquet(out_long, index=False)
-    print(f"Wrote merged long (parquet): {out_long} with {len(long):,} rows.")
+        long["value"] = long["value"].astype("string")
+        out_long = OUT_DIR / "panel_long_raw_2004_2024_merged.parquet"
+        long.to_parquet(out_long, index=False)
+        print(f"Wrote merged long (parquet): {out_long} with {len(long):,} rows.")
+    else:
+        print("Skipping long output (set MERGE_BUILD_LONG=1 to enable).")
 
 if __name__ == "__main__":
     main()
