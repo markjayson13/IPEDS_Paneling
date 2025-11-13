@@ -4,6 +4,7 @@ import re
 import sys
 from pathlib import Path
 import pandas as pd
+from collections import OrderedDict
 
 # Paths: edit only if you moved anything
 OUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections")
@@ -50,8 +51,8 @@ COMPONENT_PATTERN = {
     "GR":    re.compile(r"^(GRS|GRT|GRADRATE|GR)", re.I),
 }
 
-ID_COLS = ["year","UNITID"]
-OPTIONAL_ID_COLS = ["reporting_unitid"]  # include if present
+ID_COLS = ["YEAR", "UNITID"]
+OPTIONAL_ID_COLS = ["REPORTING_UNITID"]  # include if present
 
 def classify(col: str) -> str:
     c = col.upper()
@@ -74,18 +75,32 @@ def column_sort_key(col: str):
 def read_panel(path: Path) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame()
-    df = pd.read_csv(path, dtype=str)  # keep raw; coerce later
-    # normalize id cols
-    cols = {c.lower(): c for c in df.columns}
-    # fix common case variant/casing issues
-    if "unitid" in cols and "UNITID" not in df.columns:
-        df.rename(columns={cols["unitid"]:"UNITID"}, inplace=True)
-    if "year" in cols and "year" not in df.columns:
-        # unlikely, but keep consistent
-        pass
-    # coerce year numeric if string
-    df["year"] = pd.to_numeric(df["year"], errors="coerce").astype("Int64")
+    df = pd.read_csv(path, dtype=str)
+    df.columns = pd.Index(str(c).strip().upper() for c in df.columns)
+    df = df.loc[:, ~df.columns.duplicated()]
+    if "YEAR" in df.columns:
+        df["YEAR"] = pd.to_numeric(df["YEAR"], errors="coerce").astype("Int64")
     return df
+
+
+def coalesce_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
+    groups: "OrderedDict[str, list[str]]" = OrderedDict()
+    for col in df.columns:
+        groups.setdefault(col, []).append(col)
+
+    result_frames = []
+    new_cols = []
+    for col, duplicates in groups.items():
+        if len(duplicates) == 1:
+            series = df[duplicates[0]]
+        else:
+            series = df[duplicates].bfill(axis=1).iloc[:, 0]
+        result_frames.append(series)
+        new_cols.append(col)
+
+    merged = pd.concat(result_frames, axis=1)
+    merged.columns = new_cols
+    return merged
 
 def main():
     frames = []
@@ -105,6 +120,8 @@ def main():
     for c in ID_COLS:
         if c not in wide.columns:
             wide[c] = pd.NA
+
+    wide = coalesce_duplicate_columns(wide)
     # order columns by component priority
     cols = list(wide.columns)
     # keep optional id cols up front if present
