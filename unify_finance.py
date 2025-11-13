@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 import sys
+import argparse
 from pathlib import Path
 
 import pandas as pd
@@ -149,8 +150,15 @@ def pivot_finance(chosen: pd.DataFrame) -> pd.DataFrame:
     return wide.merge(dominant, on=id_cols, how="left")
 
 
-def main(input_path: str | Path = DEFAULT_INPUT) -> None:
-    src = Path(input_path)
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Unify IPEDS finance forms into base codes")
+    parser.add_argument("--input", type=Path, default=None, help="panel_wide_raw CSV (default: merged 2004-2024)")
+    parser.add_argument("--year", type=str, default=None, help="Optional year label to append to outputs")
+    return parser.parse_args()
+
+
+def main(input_path: str | Path | None = None, year: str | None = None) -> None:
+    src = Path(input_path or DEFAULT_INPUT)
     if not src.exists():
         print(f"Input file not found: {src}")
         sys.exit(2)
@@ -169,16 +177,19 @@ def main(input_path: str | Path = DEFAULT_INPUT) -> None:
     vlong = melt_finance(wide)
     chosen, conflicts = coalesce_finance(vlong)
 
-    conflict_path = CONFLICT_DIR / "finance_form_conflicts.csv"
+    suffix = f"_{year}" if year else ""
+
+    conflict_path = CONFLICT_DIR / f"finance_form_conflicts{suffix}.csv"
     conflict_path.parent.mkdir(parents=True, exist_ok=True)
     conflicts.to_csv(conflict_path, index=False)
     print(f"Wrote conflicts: {conflict_path} ({len(conflicts):,} rows)")
 
     fin_wide = pivot_finance(chosen)
 
-    long_path = PARQUET_DIR / "finance_unified_long.parquet"
+    long_path = PARQUET_DIR / f"finance_unified_long{suffix}.parquet"
     long_path.parent.mkdir(parents=True, exist_ok=True)
-    wide_path = OUT_DIR / "finance_unified_wide.csv"
+    wide_path = OUT_DIR / f"finance_unified_wide{suffix}.csv"
+    wide_path.parent.mkdir(parents=True, exist_ok=True)
     chosen.to_parquet(long_path, index=False)
     fin_wide.to_csv(wide_path, index=False)
 
@@ -187,5 +198,5 @@ def main(input_path: str | Path = DEFAULT_INPUT) -> None:
 
 
 if __name__ == "__main__":
-    inp = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_INPUT
-    main(inp)
+    cli_args = parse_args()
+    main(cli_args.input, cli_args.year)
