@@ -203,3 +203,5 @@ def main(input_path: str | Path | None = None, year: str | None = None) -> None:
 if __name__ == "__main__":
     cli_args = parse_args()
     main(cli_args.input, cli_args.year)
+
+
