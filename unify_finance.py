@@ -19,6 +19,8 @@ DEFAULT_INPUT = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_2004_2024_merged.csv"
 )
 OUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel")
+CONFLICT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks/Conflicts")
+PARQUET_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/UnifyingParquets")
 
 
 def classify_columns(cols: list[str]) -> tuple[dict[str, tuple[str, str, str]], dict[str, tuple[str, str, str]]]:
@@ -167,13 +169,15 @@ def main(input_path: str | Path = DEFAULT_INPUT) -> None:
     vlong = melt_finance(wide)
     chosen, conflicts = coalesce_finance(vlong)
 
-    conflict_path = OUT_DIR / "finance_form_conflicts.csv"
+    conflict_path = CONFLICT_DIR / "finance_form_conflicts.csv"
+    conflict_path.parent.mkdir(parents=True, exist_ok=True)
     conflicts.to_csv(conflict_path, index=False)
     print(f"Wrote conflicts: {conflict_path} ({len(conflicts):,} rows)")
 
     fin_wide = pivot_finance(chosen)
 
-    long_path = OUT_DIR / "finance_unified_long.parquet"
+    long_path = PARQUET_DIR / "finance_unified_long.parquet"
+    long_path.parent.mkdir(parents=True, exist_ok=True)
     wide_path = OUT_DIR / "finance_unified_wide.csv"
     chosen.to_parquet(long_path, index=False)
     fin_wide.to_csv(wide_path, index=False)
