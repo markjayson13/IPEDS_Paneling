@@ -16,7 +16,7 @@ VAL_RE = re.compile(r"^(F[123])([A-Z])(\d+[A-Z]?)$")
 FLAG_RE = re.compile(r"^X(F[123])([A-Z])(\d+[A-Z]?)$")
 
 DEFAULT_INPUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/panel_wide_raw_2004_2024_merged.csv"
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_2004_2024_merged.csv"
 )
 OUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel")
 
