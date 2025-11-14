@@ -23,6 +23,37 @@ DEFAULT_COVERAGE = Path("finance_concepts_coverage.csv")
 ID_COLS = ["YEAR", "UNITID"]
 OPTIONAL_ID_COLS = ["REPORTING_UNITID"]
 
+ALLOWED_CONCEPTS = {
+    "BS_ASSETS_TOTAL",
+    "BS_LIABILITIES_TOTAL",
+    "BS_NET_ASSETS_TOTAL",
+    "BS_NET_ASSETS_WODR",
+    "BS_NET_ASSETS_WDR",
+    "BS_ASSETS_CASH",
+    "BS_ASSETS_INVESTMENTS_TOTAL",
+    "BS_LIAB_DEBT_LONGTERM",
+    "BS_ASSETS_CAPITAL_NET",
+    "BS_ENDOWMENT_FMV",
+    "IS_REVENUES_TOTAL",
+    "IS_EXPENSES_TOTAL",
+    "IS_NET_INCOME",
+    "REV_TUITION_NET",
+    "REV_GOV_APPROPS_TOTAL",
+    "REV_GRANTS_CONTRACTS_TOTAL",
+    "REV_PRIVATE_GIFTS",
+    "REV_INVESTMENT_RETURN",
+    "REV_AUXILIARY_NET",
+    "EXP_INSTRUCTION",
+    "EXP_RESEARCH",
+    "EXP_PUBLIC_SERVICE",
+    "EXP_ACADEMIC_SUPPORT",
+    "EXP_STUDENT_SERVICES",
+    "EXP_INSTITUTIONAL_SUPPORT",
+    "EXP_OPERATIONS_PLANT",
+    "EXP_SCHOLARSHIPS_NET",
+    "DISCOUNT_TUITION",
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -44,6 +75,21 @@ def load_crosswalk(path: Path) -> pd.DataFrame:
     cw["year_start"] = pd.to_numeric(cw.get("year_start"), errors="coerce").fillna(-10_000).astype(int)
     cw["year_end"] = pd.to_numeric(cw.get("year_end"), errors="coerce").fillna(10_000).astype(int)
     cw["weight"] = pd.to_numeric(cw.get("weight", 1.0), errors="coerce").fillna(0.0)
+    unique_concepts = set(cw["concept_key"].unique())
+    invalid = unique_concepts - ALLOWED_CONCEPTS
+    if invalid:
+        raise ValueError(f"Crosswalk contains unknown concept_keys: {sorted(invalid)}")
+
+    overlap = []
+    for (fam, key, concept), group in cw.groupby(["form_family", "base_key", "concept_key"], dropna=False):
+        sorted_group = group.sort_values("year_start")
+        prev_end = None
+        for _, row in sorted_group.iterrows():
+            if prev_end is not None and row["year_start"] <= prev_end:
+                overlap.append((fam, key, concept, int(row["year_start"]), int(prev_end)))
+            prev_end = max(prev_end or row["year_end"], row["year_end"])
+    if overlap:
+        raise ValueError(f"Overlapping year ranges detected in crosswalk: {overlap[:5]}")
     return cw
 
 
@@ -94,6 +140,8 @@ def build_coverage(merged: pd.DataFrame) -> pd.DataFrame:
 def main() -> None:
     args = parse_args()
     step0 = pd.read_parquet(args.step0)
+    if "YEAR" in step0.columns:
+        step0["YEAR"] = pd.to_numeric(step0["YEAR"], errors="coerce").astype("Int64")
     crosswalk = load_crosswalk(args.crosswalk)
     merged = apply_crosswalk(step0, crosswalk)
 

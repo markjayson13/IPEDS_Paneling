@@ -22,24 +22,42 @@ def parse_args() -> argparse.Namespace:
 
 def check_income_statement(df: pd.DataFrame, tol: float) -> pd.DataFrame:
     required = ["IS_REVENUES_TOTAL", "IS_EXPENSES_TOTAL", "IS_NET_INCOME"]
-    if not set(required).issubset(df.columns):
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        print(f"Skipping income statement check, missing columns: {missing}")
         return pd.DataFrame()
     sample = df.dropna(subset=required).copy()
     sample["diff"] = sample["IS_REVENUES_TOTAL"] - sample["IS_EXPENSES_TOTAL"] - sample["IS_NET_INCOME"]
-    outliers = sample.loc[sample["diff"].abs() > tol, ["YEAR", "UNITID", "diff"]]
+    outliers = sample.loc[
+        sample["diff"].abs() > tol,
+        ["YEAR", "UNITID", "IS_REVENUES_TOTAL", "IS_EXPENSES_TOTAL", "IS_NET_INCOME", "diff"],
+    ]
     return outliers
 
 
 def check_net_assets(df: pd.DataFrame, tol: float) -> pd.DataFrame:
     cols = ["YEAR", "UNITID", "BS_NET_ASSETS_TOTAL", "IS_NET_INCOME"]
-    if not set(cols[1:]).issubset(df.columns):
+    missing = [c for c in cols[2:] if c not in df.columns]
+    if missing:
+        print(f"Skipping net asset check, missing columns: {missing}")
         return pd.DataFrame()
     df = df.sort_values(["UNITID", "YEAR"])
     df["bs_lag"] = df.groupby("UNITID")["BS_NET_ASSETS_TOTAL"].shift(1)
     df["delta_bs"] = df["BS_NET_ASSETS_TOTAL"] - df["bs_lag"]
     sample = df.dropna(subset=["delta_bs", "IS_NET_INCOME"])
     sample["gap"] = sample["delta_bs"] - sample["IS_NET_INCOME"]
-    return sample.loc[sample["gap"].abs() > tol, ["YEAR", "UNITID", "gap"]]
+    return sample.loc[
+        sample["gap"].abs() > tol,
+        [
+            "YEAR",
+            "UNITID",
+            "bs_lag",
+            "BS_NET_ASSETS_TOTAL",
+            "delta_bs",
+            "IS_NET_INCOME",
+            "gap",
+        ],
+    ]
 
 
 def year_totals(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
@@ -82,7 +100,10 @@ def main() -> None:
     )
     if not totals.empty:
         print("\nYearly aggregates (selected columns):")
-        print(totals.head())
+        print(totals)
+        totals_path = panel_path.with_suffix(panel_path.suffix + "_yearly_totals.csv")
+        totals.to_csv(totals_path, index=False)
+        print(f"Saved yearly totals to {totals_path}")
 
 
 if __name__ == "__main__":

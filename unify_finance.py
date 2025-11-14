@@ -100,6 +100,9 @@ def melt_finance(df: pd.DataFrame) -> pd.DataFrame:
         flag_long["flag"] = flag_long["flag"].apply(
             lambda x: 1 if pd.notna(x) and str(x).strip() not in {"", "0"} else 0
         )
+        flag_long = (
+            flag_long.groupby(id_cols + ["form_family", "base_key"], as_index=False)["flag"].max()
+        )
         long = long.merge(
             flag_long[id_cols + ["form_family", "base_key", "flag"]],
             on=id_cols + ["form_family", "base_key"],
@@ -171,6 +174,8 @@ def main() -> None:
     wide.columns = pd.Index(str(c).strip().upper() for c in wide.columns)
 
     long = melt_finance(wide)
+    if "YEAR" in long.columns:
+        long["YEAR"] = pd.to_numeric(long["YEAR"], errors="coerce").astype("Int64")
     logging.info("Extracted %s finance rows", len(long))
 
     write_long(long, args.output_long)

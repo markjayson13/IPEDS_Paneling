@@ -1,5 +1,12 @@
 bash zsh
 
+
+#Build Dictionaries
+python3 01_ingest_dictionaries.py \
+  --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
+  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet"
+
+
 #==============================================================================
 # 2004-2007
 #==============================================================================

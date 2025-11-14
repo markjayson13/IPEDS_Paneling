@@ -600,10 +600,7 @@ def main() -> None:
         ).map(lambda s: hashlib.sha256(s.encode("utf-8")).hexdigest())
 
     # Finance-friendly metadata -------------------------------------------------
-    finance_mask = (
-        lake["survey"].eq("FIN")
-        & lake["source_var"].astype(str).str.upper().str.match(FINANCE_VAR_RE)
-    )
+    finance_mask = lake["source_var"].astype(str).str.upper().str.match(FINANCE_VAR_RE)
     lake["is_finance"] = finance_mask
     for col in ["form_family", "section", "line_code", "base_key"]:
         if col not in lake.columns:
@@ -651,7 +648,6 @@ def main() -> None:
         "prefix_hint",
         "sheet_name",
         "table_title",
-        "survey",
         "survey_hint",
         "subsurvey",
         "is_finance",
@@ -714,9 +710,10 @@ def main() -> None:
     )
     ingest_profile.to_csv(args.output.with_name("ingest_profile.csv"), index=False)
 
+    dup_mask = lake.duplicated(["year", "survey", "label_norm", "varname"], keep=False)
     ingest_dupes = (
-        lake.sort_values(["year", "survey", "label_norm", "varname"])
-        .drop_duplicates(["year", "survey", "label_norm", "varname"], keep=False)
+        lake.loc[dup_mask]
+        .sort_values(["year", "survey", "label_norm", "varname"])
     )
     ingest_dupes.to_csv(args.output.with_name("ingest_possible_dupes.csv"), index=False)
 
