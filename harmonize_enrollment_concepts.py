@@ -50,16 +50,25 @@ def apply_crosswalk(step0: pd.DataFrame, cw: pd.DataFrame) -> pd.DataFrame:
     cw["year_start"] = pd.to_numeric(cw["year_start"], errors="coerce").fillna(-10_000).astype(int)
     cw["year_end"] = pd.to_numeric(cw["year_end"], errors="coerce").fillna(10_000).astype(int)
 
+    merge_left_keys = ["source_var_upper"]
+    merge_right_keys = ["source_var_upper"]
+    cw_merge_cols = ["concept_key", "source_var_upper", "year_start", "year_end", "weight"]
+    if "survey" in step0.columns and "survey" in cw.columns:
+        merge_left_keys.append("survey")
+        merge_right_keys.append("survey")
+        cw_merge_cols.append("survey")
+
     merged = step0.merge(
-        cw[["concept_key", "source_var_upper", "year_start", "year_end", "weight"]],
-        on="source_var_upper",
+        cw[cw_merge_cols],
+        left_on=merge_left_keys,
+        right_on=merge_right_keys,
         how="inner",
     )
     merged = merged.loc[
         (merged["YEAR"] >= merged["year_start"]) & (merged["YEAR"] <= merged["year_end"])
     ].copy()
     merged["value_weighted"] = merged["value"] * merged["weight"]
-    return merged
+    return merged[["YEAR", "UNITID", "concept_key", "value_weighted"]]
 
 
 def main() -> None:

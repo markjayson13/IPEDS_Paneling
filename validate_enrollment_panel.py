@@ -11,7 +11,9 @@ from typing import List
 
 import pandas as pd
 
-# Concept placeholders (adjust as your schema evolves)
+# ==============================
+# CONFIG: concept column names
+# ==============================
 GENDER_TOTAL = "EF_HEAD_ALL_UG_TOT_ALL"
 GENDER_MEN = "EF_HEAD_ALL_UG_MEN_ALL"
 GENDER_WOMEN = "EF_HEAD_ALL_UG_WOMEN_ALL"
@@ -132,7 +134,9 @@ def main() -> None:
         raise RuntimeError("Panel must include YEAR and UNITID columns.")
 
     check_gender(df, args.output_dir)
+    check_gender_coverage(df, args.output_dir)
     check_race(df, args.output_dir)
+    check_race_coverage(df, args.output_dir)
     check_e12_gte_ef(df, args.output_dir)
     totals_by_year(df, args.output_dir)
 
@@ -143,3 +147,41 @@ if __name__ == "__main__":
     except Exception as exc:  # noqa: BLE001
         logging.error("validate_enrollment_panel failed: %s", exc)
         sys.exit(1)
+def check_gender_coverage(df: pd.DataFrame, output: Path) -> None:
+    required = [GENDER_TOTAL, GENDER_MEN, GENDER_WOMEN]
+    missing = [col for col in required if col not in df.columns]
+    if missing:
+        logging.info("Gender coverage check skipped: missing columns %s", ", ".join(missing))
+        return
+
+    subset = df[["YEAR", "UNITID"] + required].copy()
+    mask = subset[GENDER_TOTAL].notna() & subset[[GENDER_MEN, GENDER_WOMEN]].isna().any(axis=1)
+    issues = subset.loc[mask]
+    if issues.empty:
+        logging.info("No gender coverage gaps detected.")
+        return
+    out_path = output / "enrollment_validation_gender_coverage_gaps.csv"
+    issues.to_csv(out_path, index=False)
+    logging.warning("Gender coverage gaps written to %s", out_path)
+
+
+def check_race_coverage(df: pd.DataFrame, output: Path) -> None:
+    if RACE_TOTAL not in df.columns:
+        logging.info("Race coverage check skipped: %s not found", RACE_TOTAL)
+        return
+    missing_parts = [col for col in RACE_PARTS if col not in df.columns]
+    if missing_parts:
+        logging.info(
+            "Race coverage check skipped: missing detail columns %s",
+            ", ".join(missing_parts),
+        )
+        return
+    subset = df[["YEAR", "UNITID", RACE_TOTAL] + RACE_PARTS].copy()
+    mask = subset[RACE_TOTAL].notna() & subset[RACE_PARTS].isna().any(axis=1)
+    issues = subset.loc[mask]
+    if issues.empty:
+        logging.info("No race coverage gaps detected.")
+        return
+    out_path = output / "enrollment_validation_race_coverage_gaps.csv"
+    issues.to_csv(out_path, index=False)
+    logging.warning("Race coverage gaps written to %s", out_path)

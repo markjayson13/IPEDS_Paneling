@@ -56,6 +56,8 @@ def select_enrollment_vars(lake: pd.DataFrame, years: Iterable[int]) -> pd.DataF
     subset = lake.loc[mask].copy()
     if subset.empty:
         raise RuntimeError("No enrollment variables found in dictionary_lake for requested years.")
+    if "source_var" in subset.columns:
+        subset = subset.drop_duplicates(subset=["year", "source_var"])
     return subset
 
 
