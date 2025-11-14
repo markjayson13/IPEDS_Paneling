@@ -10,11 +10,11 @@ python3 01_ingest_dictionaries.py \
 #==============================================================================
 # 2004-2007
 #==============================================================================
-# Aggregate F1 components for 2004-2007
-python3 scripts/aggregate_f1_components.py \
-  --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
-  --years 2004-2007 \
-  --log-level INFO
+# aggregate_f1_components.py is deprecated; component aggregation now happens via the finance crosswalk
+# python3 scripts/aggregate_f1_components.py \
+#   --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
+#   --years 2004-2007 \
+#   --log-level INFO
 
 # Build raw panel parquet files for 2004-2007
 for YEAR in 2004 2005 2006 2007; do
@@ -166,6 +166,5 @@ python3 merge_raw_panels.py \
   --pattern "panel_wide_raw_*.csv" \
   --output-wide "$OUT/panel_wide_raw_2004_2024_merged.csv" \
   --component-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,ADM,GR,GR200"
-
 
 

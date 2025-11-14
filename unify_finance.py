@@ -13,7 +13,7 @@ import pandas as pd
 
 ID_COLS = ["YEAR", "UNITID"]
 OPTIONAL_ID_COLS = ["REPORTING_UNITID"]
-VAL_RE = re.compile(r"^(F[123])([A-Z])(\d+[A-Z]?)$", re.IGNORECASE)
+VAL_RE = re.compile(r"^(F[123])([A-Z]{1,2})(\d+[A-Z]?)$", re.IGNORECASE)
 FLAG_RE = re.compile(r"^X(F[123])([A-Z])(\d+[A-Z]?)$", re.IGNORECASE)
 
 DEFAULT_INPUT = Path(
@@ -81,10 +81,18 @@ def melt_finance(df: pd.DataFrame) -> pd.DataFrame:
         .dropna(subset=["source_var"], how="any")
     )
     parsed = long["source_var"].str.extract(VAL_RE)
-    long["form_family"] = parsed[0].str.upper()
-    long["section"] = parsed[1].str.upper()
-    long["line_code"] = parsed[2].str.upper()
+    form_family = parsed[0].str.upper()
+    sec_comp = parsed[1].str.upper()
+    line_code = parsed[2].str.upper()
+    long["section"] = sec_comp.str[0]
+    long["line_code"] = line_code
     long["base_key"] = long["section"] + long["line_code"]
+    component_suffix = sec_comp.str[1:].fillna("")
+    long["form_family"] = form_family
+    mask = component_suffix.ne("")
+    long.loc[mask, "form_family"] = (
+        long.loc[mask, "form_family"] + "_COMP_" + component_suffix[mask]
+    )
 
     if flag_cols:
         flag_long = (

@@ -45,11 +45,33 @@ def main() -> None:
         "source_label_norm",
     ]].copy()
 
-    subset["concept_key"] = ""
-    subset["year_start"] = subset["year"]
-    subset["year_end"] = subset["year"]
-    subset["weight"] = 1.0
-    subset["notes"] = ""
+    def first_label(series: pd.Series) -> str:
+        for val in series:
+            if isinstance(val, str) and val.strip():
+                return val
+        return str(series.iloc[0]) if not series.empty else ""
+
+    grouped = (
+        subset.groupby([
+            "form_family",
+            "base_key",
+            "section",
+            "line_code",
+            "source_label_norm",
+            "survey",
+        ])
+        .agg(
+            year_start=("year", "min"),
+            year_end=("year", "max"),
+            source_var=("source_var", lambda s: ";".join(sorted(set(s.astype(str))))),
+            source_label=("source_label", first_label),
+        )
+        .reset_index()
+    )
+
+    grouped["concept_key"] = ""
+    grouped["weight"] = 1.0
+    grouped["notes"] = ""
 
     cols = [
         "concept_key",
@@ -67,11 +89,8 @@ def main() -> None:
         "notes",
     ]
     template = (
-        subset[cols]
-        .drop_duplicates(
-            subset=["form_family", "base_key", "source_var", "year_start"], keep="first"
-        )
-        .sort_values(["form_family", "base_key", "year_start", "source_var"])
+        grouped[cols]
+        .sort_values(["form_family", "base_key", "year_start", "source_label_norm"])
         .reset_index(drop=True)
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)

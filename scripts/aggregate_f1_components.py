@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Aggregate early F1A finance parent and component files into a single total per UNITID."""
+"""DEPRECATED: no longer part of the production pipeline; kept for reference only."""
 
 from __future__ import annotations
 

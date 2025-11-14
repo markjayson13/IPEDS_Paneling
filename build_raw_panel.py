@@ -33,6 +33,31 @@ SURVEY_PATTERNS: list[tuple[str, list[str]]] = [
     ("GR", [r"GR\d{4}"]),
 ]
 
+F1_COMPONENT_YEARS = {2004, 2005, 2006, 2007}
+
+
+def detect_f1_component_suffix(path: Path) -> str | None:
+    for part in path.parts:
+        token = part.upper()
+        if "F1A_F" in token:
+            return "F"
+        if "F1A_G" in token:
+            return "G"
+    return None
+
+
+def rename_f1_component_columns(df: pd.DataFrame, component: str) -> pd.DataFrame:
+    rename_map: dict[str, str] = {}
+    for col in df.columns:
+        name = str(col).strip().upper()
+        match = re.match(r"^(X?F1)([A-Z])([0-9].*)$", name)
+        if match:
+            prefix, section, rest = match.groups()
+            rename_map[col] = f"{prefix}{section}{component}{rest}"
+    if rename_map:
+        df = df.rename(columns=rename_map)
+    return df
+
 
 def infer_year(path: Path) -> int | None:
     for parent in path.parents:
@@ -150,6 +175,11 @@ def build_raw_panel(root: Path, years: Optional[Set[int]], surveys: Optional[Set
             logging.debug("Skipping %s (UNITID column missing)", file_path)
             continue
         df = df.copy()
+        component_suffix = None
+        if year in F1_COMPONENT_YEARS:
+            component_suffix = detect_f1_component_suffix(file_path)
+        if component_suffix:
+            df = rename_f1_component_columns(df, component_suffix)
         df[unitid_col] = pd.to_numeric(df[unitid_col], errors="coerce")
         df.dropna(subset=[unitid_col], inplace=True)
         if df.empty:
