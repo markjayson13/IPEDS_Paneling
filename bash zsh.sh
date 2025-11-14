@@ -36,7 +36,7 @@ python3 merge_raw_panels.py \
 
 # 4. Finance Step 0: form-level extraction (F1/F2/F3 + components)
 python3 unify_finance.py \
-  --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/panel_wide_raw_2004_2024_merged.csv" \
+  --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_2004_2024_merged.csv" \
   --output-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_step0_long.parquet" \
   --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/Final/finance_step0_wide.csv"
 
