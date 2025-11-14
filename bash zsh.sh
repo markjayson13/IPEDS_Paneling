@@ -129,7 +129,9 @@ python3 /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/unify_enrollmen
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/enrollment_build_crosswalk_template.py" \
   --dictionary "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet" \
   --years "2004-2024" \
-  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/enrollment_crosswalk_template.csv"
+  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/enrollment_crosswalk_template.csv"
+
+
 
 
 python3 /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/harmonize_enrollment_concepts.py \
