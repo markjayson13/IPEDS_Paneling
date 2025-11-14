@@ -14,7 +14,7 @@ for YEAR in 2004 2005 2006 2007; do
   python3 build_raw_panel.py \
     --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
     --years "$YEAR" \
-    --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
+    --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
     --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet"
 done
 
@@ -31,7 +31,7 @@ done
 for YEAR in 2004 2005 2006 2007; do
   python3 unify_finance.py \
     --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
-    --year "$YEAR" \ 
+    --year "$YEAR" 
 done
 
 #Check Finance Unification Logs before proceeding to the next steps
@@ -51,17 +51,19 @@ for YEAR in 2008 2009 2010; do
   python3 build_raw_panel.py \
     --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
     --years "$YEAR" \
-    --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
+    --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
     --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet"
 done
+
 # Panelize long -> wide per year
 for YEAR in 2008 2009 2010; do
   python3 panelize_raw.py \
     --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet" \
     --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
     --column-field source_var \
-    --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,ADM,GR,GR200,ADM,OM,CST"
+    --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,ADM,GR,GR200,ADM,OM,CST"
 done
+
 # Finance Unification for 2008-2010
   python3 unify_finance.py \
     --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
@@ -76,23 +78,24 @@ for YEAR in 2011 2012 2013; do
   python3 build_raw_panel.py \
     --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
     --years "$YEAR" \
-    --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
+    --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
     --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet"
 done
+
 # Panelize long -> wide per year
 for YEAR in 2011 2012 2013; do
   python3 panelize_raw.py \
     --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet" \
     --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
     --column-field source_var \
-    --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,ADM,GR,GR200,ADM,OM,CST"
+    --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,ADM,GR,GR200,ADM,OM,CST"
 done
+
 # Finance Unification for 2011-2013
   python3 unify_finance.py \
     --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
     --year "$YEAR"
 done
-
 
 #==============================================================================
 # 2014-2023
@@ -102,17 +105,19 @@ for YEAR in 2014 2015 2016 2017 2018 2019 2020 2021 2022 2023; do
   python3 build_raw_panel.py \
     --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
     --years "$YEAR" \
-    --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
+    --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
     --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet"
 done
+
 # Panelize long -> wide per year
 for YEAR in 2014 2015 2016 2017 2018 2019 2020 2021 2022 2023; do
   python3 panelize_raw.py \
     --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet" \
     --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
     --column-field source_var \
-    --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,ADM,GR,GR200,ADM,OM,CST"
+    --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,ADM,GR,GR200,ADM,OM,CST"
 done
+
 # Finance Unification for 2014-2023
   python3 unify_finance.py \
     --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
