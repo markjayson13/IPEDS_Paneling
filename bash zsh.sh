@@ -10,11 +10,6 @@ python3 01_ingest_dictionaries.py \
 #==============================================================================
 # 2004-2007
 #==============================================================================
-# aggregate_f1_components.py is deprecated; component aggregation now happens via the finance crosswalk
-# python3 scripts/aggregate_f1_components.py \
-#   --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
-#   --years 2004-2007 \
-#   --log-level INFO
 
 # Build raw panel parquet files for 2004-2007
 for YEAR in 2004 2005 2006 2007; do
