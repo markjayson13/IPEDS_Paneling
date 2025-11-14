@@ -84,17 +84,18 @@ def aggregate_year(root: Path, year: int) -> Path:
     if comp_paths:
         comps = [coerce_numeric(pd.read_csv(p, dtype=str)) for p in comp_paths]
         components = pd.concat(comps, ignore_index=True)
-        missing_ids = components[ID_COL].isna()
-        if missing_ids.any():
-            components = components.loc[~missing_ids]
+        components = components.dropna(subset=[ID_COL])
         value_cols = sorted({c for c in components.columns if c not in {ID_COL}})
-        grouped = components.groupby(ID_COL, as_index=False)[value_cols].sum()
+        grouped = components.groupby(ID_COL)[value_cols].sum()
+
+        parent = parent.set_index(ID_COL)
+        grouped = grouped.reindex(parent.index, fill_value=0)
         for col in grouped.columns:
-            if col == ID_COL:
-                continue
-            if col not in parent.columns:
-                parent[col] = 0
-            parent[col] = parent[col].fillna(0) + grouped[col]
+            if col in parent.columns:
+                parent[col] = parent[col].fillna(0) + grouped[col]
+            else:
+                parent[col] = grouped[col]
+        parent = parent.reset_index()
     backup_path = parent_path.with_suffix(parent_path.suffix + ".bak")
     if not backup_path.exists():
         parent_path.replace(backup_path)
