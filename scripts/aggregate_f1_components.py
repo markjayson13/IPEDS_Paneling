@@ -53,6 +53,10 @@ def pick_csv(folder: Path, label: str) -> Path:
     return candidates[0]
 
 
+def read_finance_csv(path: Path) -> pd.DataFrame:
+    return pd.read_csv(path, dtype=str, encoding="latin-1", encoding_errors="ignore")
+
+
 def coerce_numeric(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     for col in out.columns:
@@ -76,13 +80,13 @@ def aggregate_year(root: Path, year: int) -> Path:
     parent_path = pick_csv(parent_dir, "parent")
     comp_paths = [pick_csv(d, label) for d, label in ((comp_f_dir, "component F"), (comp_g_dir, "component G")) if d]
 
-    parent = pd.read_csv(parent_path, dtype=str)
+    parent = read_finance_csv(parent_path)
     if ID_COL not in parent.columns:
         raise RuntimeError(f"UNITID missing in {parent_path}")
     parent = coerce_numeric(parent)
 
     if comp_paths:
-        comps = [coerce_numeric(pd.read_csv(p, dtype=str)) for p in comp_paths]
+        comps = [coerce_numeric(read_finance_csv(p)) for p in comp_paths]
         components = pd.concat(comps, ignore_index=True)
         components = components.dropna(subset=[ID_COL])
         value_cols = sorted({c for c in components.columns if c not in {ID_COL}})

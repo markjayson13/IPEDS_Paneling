@@ -37,6 +37,7 @@ VAR_PREFIX_RE = re.compile(
     r"^(F[123]A|EFFY|EFIA?|EFIB|EFIC|EFID|E1D|OM|HR|IC|SFA|GRS?|PE|AL|ADM|HD|C)",
     re.IGNORECASE,
 )
+FINANCE_VAR_RE = re.compile(r"^(F[123])([A-Z])(\d+[A-Z]?)$", re.IGNORECASE)
 RE_FILE = re.compile(
     r"(?i)(?P<prefix>[a-z]{1,4})?"
     r"(?P<y1>\d{2})(?P<y2>\d{2})?"
@@ -598,6 +599,33 @@ def main() -> None:
             + lake["table_name_norm"].fillna("")
         ).map(lambda s: hashlib.sha256(s.encode("utf-8")).hexdigest())
 
+    # Finance-friendly metadata -------------------------------------------------
+    finance_mask = (
+        lake["survey"].eq("FIN")
+        & lake["source_var"].astype(str).str.upper().str.match(FINANCE_VAR_RE)
+    )
+    lake["is_finance"] = finance_mask
+    for col in ["form_family", "section", "line_code", "base_key"]:
+        if col not in lake.columns:
+            lake[col] = pd.NA
+
+    if finance_mask.any():
+        extracted = (
+            lake.loc[finance_mask, "source_var"]
+            .astype(str)
+            .str.upper()
+            .str.extract(FINANCE_VAR_RE)
+        )
+        lake.loc[finance_mask, "form_family"] = extracted[0].str.upper()
+        lake.loc[finance_mask, "section"] = extracted[1].str.upper()
+        lake.loc[finance_mask, "line_code"] = extracted[2].str.upper()
+        lake.loc[finance_mask, "base_key"] = (
+            lake.loc[finance_mask, "section"].astype(str).str.upper()
+            + lake.loc[finance_mask, "line_code"].astype(str).str.upper()
+        )
+
+    lake["is_finance"] = lake["is_finance"].fillna(False)
+
     required_cols = [
         "year",
         "survey",
@@ -626,6 +654,11 @@ def main() -> None:
         "survey",
         "survey_hint",
         "subsurvey",
+        "is_finance",
+        "form_family",
+        "section",
+        "line_code",
+        "base_key",
     ]
     missing = [col for col in required_cols if col not in lake.columns]
     if missing:

@@ -1,78 +1,104 @@
 #!/usr/bin/env python3
-"""Unify IPEDS finance data across F1/F2/F3 form families."""
+"""Finance Step 0 – Form-level coalescer for IPEDS F1/F2/F3 data."""
 
 from __future__ import annotations
 
-import re
-import sys
 import argparse
+import logging
+import re
 from pathlib import Path
+from typing import Sequence
 
 import pandas as pd
 
 ID_COLS = ["YEAR", "UNITID"]
 OPTIONAL_ID_COLS = ["REPORTING_UNITID"]
-
-VAL_RE = re.compile(r"^(F[123])([A-Z])(\d+[A-Z]?)$")
-FLAG_RE = re.compile(r"^X(F[123])([A-Z])(\d+[A-Z]?)$")
+VAL_RE = re.compile(r"^(F[123])([A-Z])(\d+[A-Z]?)$", re.IGNORECASE)
+FLAG_RE = re.compile(r"^X(F[123])([A-Z])(\d+[A-Z]?)$", re.IGNORECASE)
 
 DEFAULT_INPUT = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_2004_2024_merged.csv"
 )
-OUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel")
-CONFLICT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks/Conflicts")
-PARQUET_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/UnifyingParquets")
+DEFAULT_LONG = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/UnifyingParquets/finance_step0_long.parquet"
+)
+DEFAULT_WIDE = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/finance_step0_wide.csv"
+)
 
 
-def classify_columns(cols: list[str]) -> tuple[dict[str, tuple[str, str, str]], dict[str, tuple[str, str, str]]]:
-    values: dict[str, tuple[str, str, str]] = {}
-    flags: dict[str, tuple[str, str, str]] = {}
-    for col in cols:
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Extract raw IPEDS finance variables (F1/F2/F3) into a canonical long form. "
+            "This script does NOT harmonize concepts."
+        )
+    )
+    parser.add_argument("--input", type=Path, default=DEFAULT_INPUT, help="panel_wide_raw CSV/Parquet path")
+    parser.add_argument("--output-long", type=Path, default=DEFAULT_LONG, help="finance_step0_long.parquet path")
+    parser.add_argument(
+        "--output-wide",
+        type=Path,
+        default=DEFAULT_WIDE,
+        help="Optional debug wide output with columns per form/base_key",
+    )
+    parser.add_argument("--log-level", default="INFO")
+    return parser.parse_args()
+
+
+def _ensure_id_cols(df: pd.DataFrame) -> Sequence[str]:
+    for col in ID_COLS:
+        if col not in df.columns:
+            df[col] = pd.NA
+    optional = [col for col in OPTIONAL_ID_COLS if col in df.columns]
+    return list(ID_COLS) + optional
+
+
+def _classify_columns(columns: Sequence[str]) -> tuple[list[str], list[str]]:
+    value_cols: list[str] = []
+    flag_cols: list[str] = []
+    for col in columns:
         name = str(col).strip().upper()
-        if match := VAL_RE.match(name):
-            values[name] = match.groups()
-        elif match := FLAG_RE.match(name):
-            flags[name] = match.groups()
-    return values, flags
+        if VAL_RE.match(name):
+            value_cols.append(name)
+        elif FLAG_RE.match(name):
+            flag_cols.append(name)
+    return value_cols, flag_cols
 
 
 def melt_finance(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    df.columns = pd.Index([str(c).strip().upper() for c in df.columns])
-    for col in ID_COLS:
-        if col not in df.columns:
-            df[col] = pd.NA
-    id_like = [col for col in OPTIONAL_ID_COLS if col in df.columns]
-    id_cols = ID_COLS + id_like
+    df.columns = pd.Index(str(c).strip().upper() for c in df.columns)
+    id_cols = _ensure_id_cols(df)
 
-    value_cols, flag_cols = classify_columns(df.columns.tolist())
+    value_cols, flag_cols = _classify_columns(df.columns)
     if not value_cols:
-        raise SystemExit("No finance columns detected (F1/F2/F3).")
+        raise SystemExit("No finance columns detected (look for F1*/F2*/F3* headers).")
 
     long = (
-        df[id_cols + list(value_cols.keys())]
-        .melt(id_vars=id_cols, var_name="raw_code", value_name="value")
-        .dropna(subset=["raw_code"], how="any")
+        df[id_cols + value_cols]
+        .melt(id_vars=id_cols, var_name="source_var", value_name="value")
+        .dropna(subset=["source_var"], how="any")
     )
-    parsed = long["raw_code"].str.extract(VAL_RE)
-    long["form_family"] = parsed[0]
-    long["section"] = parsed[1]
-    long["base_code"] = parsed[2]
-    long["base_key"] = long["section"] + long["base_code"]
+    parsed = long["source_var"].str.extract(VAL_RE)
+    long["form_family"] = parsed[0].str.upper()
+    long["section"] = parsed[1].str.upper()
+    long["line_code"] = parsed[2].str.upper()
+    long["base_key"] = long["section"] + long["line_code"]
 
     if flag_cols:
         flag_long = (
-            df[id_cols + list(flag_cols.keys())]
-            .melt(id_vars=id_cols, var_name="raw_flag", value_name="flag")
-            .dropna(subset=["raw_flag"], how="any")
+            df[id_cols + flag_cols]
+            .melt(id_vars=id_cols, var_name="flag_var", value_name="flag")
+            .dropna(subset=["flag_var"], how="any")
         )
-        fparsed = flag_long["raw_flag"].str.extract(FLAG_RE)
-        flag_long["form_family"] = fparsed[0]
-        flag_long["section"] = fparsed[1]
-        flag_long["base_code"] = fparsed[2]
-        flag_long["base_key"] = flag_long["section"] + flag_long["base_code"]
+        fparsed = flag_long["flag_var"].str.extract(FLAG_RE)
+        flag_long["form_family"] = fparsed[0].str.upper()
+        flag_long["section"] = fparsed[1].str.upper()
+        flag_long["line_code"] = fparsed[2].str.upper()
+        flag_long["base_key"] = flag_long["section"] + flag_long["line_code"]
         flag_long["flag"] = flag_long["flag"].apply(
-            lambda x: 1 if pd.notna(x) and str(x).strip() not in {"", "0"} else pd.NA
+            lambda x: 1 if pd.notna(x) and str(x).strip() not in {"", "0"} else 0
         )
         long = long.merge(
             flag_long[id_cols + ["form_family", "base_key", "flag"]],
@@ -81,127 +107,79 @@ def melt_finance(df: pd.DataFrame) -> pd.DataFrame:
         )
         long.rename(columns={"flag": "imputed_flag"}, inplace=True)
     else:
-        long["imputed_flag"] = pd.NA
+        long["imputed_flag"] = 0
 
     long["value"] = pd.to_numeric(long["value"], errors="coerce")
+    long = long.dropna(subset=["value"], how="all")
+
+    sort_cols = id_cols + ["form_family", "base_key", "source_var"]
+    long = (
+        long.sort_values(sort_cols)
+        .drop_duplicates(id_cols + ["form_family", "base_key"], keep="first")
+        .reset_index(drop=True)
+    )
     return long
 
 
-def coalesce_finance(long: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    id_cols = [col for col in ["YEAR", "UNITID", "REPORTING_UNITID"] if col in long.columns]
-    counts = (
-        long.dropna(subset=["value"])
-        .groupby(id_cols + ["form_family"])
-        .size()
-        .reset_index(name="nnz")
-    )
-    merged = long.merge(counts, on=id_cols + ["form_family"], how="left")
-    merged["nnz"] = merged["nnz"].fillna(0)
-    form_rank = {"F1": 3, "F2": 2, "F3": 1}
-    merged["pref_rank"] = merged["form_family"].map(form_rank).fillna(0)
+def write_long(long: pd.DataFrame, path: Path) -> None:
+    cols = [
+        *[col for col in ID_COLS if col in long.columns],
+        *[col for col in OPTIONAL_ID_COLS if col in long.columns],
+        "form_family",
+        "section",
+        "line_code",
+        "base_key",
+        "source_var",
+        "value",
+        "imputed_flag",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    long[cols].to_parquet(path, index=False)
 
-    def pick(group: pd.DataFrame) -> pd.Series:
-        g = group.sort_values(
-            by=["value", "nnz", "pref_rank"], ascending=[False, False, False]
+
+def write_wide(long: pd.DataFrame, path: Path) -> None:
+    id_cols = [col for col in ID_COLS if col in long.columns]
+    id_cols += [col for col in OPTIONAL_ID_COLS if col in long.columns if col not in id_cols]
+    pivot = (
+        long.pivot_table(
+            index=id_cols,
+            columns=["form_family", "base_key"],
+            values="value",
+            aggfunc="first",
         )
-        return g.iloc[0][["value", "form_family", "imputed_flag"]]
-
-    chosen = (
-        merged.groupby(id_cols + ["base_key"], as_index=False)
-        .apply(pick)
-        .reset_index()
+        .sort_index(axis=1)
     )
-    chosen.rename(
-        columns={
-            "value": "coalesced_value",
-            "form_family": "finance_form_used",
-            "imputed_flag": "X_base",
-        },
-        inplace=True,
-    )
-
-    nonnull_counts = (
-        merged.groupby(id_cols + ["base_key"]) ["value"].apply(lambda s: s.notna().sum()).reset_index(name="nnz_forms")
-    )
-    conflicts = nonnull_counts[nonnull_counts["nnz_forms"] > 1]
-    return chosen, conflicts
+    pivot.columns = [f"{fam}_{key}" for fam, key in pivot.columns]
+    pivot = pivot.reset_index()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pivot.to_csv(path, index=False)
 
 
-def pivot_finance(chosen: pd.DataFrame) -> pd.DataFrame:
-    id_cols = [col for col in ["YEAR", "UNITID", "REPORTING_UNITID"] if col in chosen.columns]
-    values = (
-        chosen[id_cols + ["base_key", "coalesced_value"]]
-        .pivot_table(index=id_cols, columns="base_key", values="coalesced_value", aggfunc="first")
-        .reset_index()
-    )
-    flags = (
-        chosen[id_cols + ["base_key", "X_base"]]
-        .pivot_table(index=id_cols, columns="base_key", values="X_base", aggfunc="max")
-        .reset_index()
-    )
-    flags.columns = [col if col in id_cols else f"X_{col}" for col in flags.columns]
-    wide = values.merge(flags, on=id_cols, how="left")
-    dominant = (
-        chosen.groupby(id_cols + ["finance_form_used"]).size().reset_index(name="n")
-        .sort_values(
-            by=id_cols + ["n"],
-            ascending=[True] * len(id_cols) + [False],
-        )
-        .drop_duplicates(subset=id_cols)
-        .drop(columns=["n"])
-    )
-    return wide.merge(dominant, on=id_cols, how="left")
+def main() -> None:
+    args = parse_args()
+    logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
 
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Unify IPEDS finance forms into base codes")
-    parser.add_argument("--input", type=Path, default=None, help="panel_wide_raw CSV (default: merged 2004-2024)")
-    parser.add_argument("--year", type=str, default=None, help="Optional year label to append to outputs")
-    return parser.parse_args()
-
-
-def main(input_path: str | Path | None = None, year: str | None = None) -> None:
-    src = Path(input_path or DEFAULT_INPUT)
+    src = args.input
     if not src.exists():
-        print(f"Input file not found: {src}")
-        sys.exit(2)
+        raise SystemExit(f"Input file not found: {src}")
 
-    print(f"Reading merged wide file: {src}")
-    wide = pd.read_csv(src, dtype=str)
-    wide.columns = [str(c).strip().upper() for c in wide.columns]
-    if "YEAR" in wide.columns:
-        wide["YEAR"] = pd.to_numeric(wide["YEAR"], errors="coerce").astype("Int64")
-    if "UNITID" in wide.columns:
-        try:
-            wide["UNITID"] = pd.to_numeric(wide["UNITID"], errors="raise").astype("Int64")
-        except Exception:
-            wide["UNITID"] = wide["UNITID"].astype("string")
+    logging.info("Reading %s", src)
+    if src.suffix.lower() == ".parquet":
+        wide = pd.read_parquet(src)
+    else:
+        wide = pd.read_csv(src, dtype=str)
+    wide.columns = pd.Index(str(c).strip().upper() for c in wide.columns)
 
-    vlong = melt_finance(wide)
-    chosen, conflicts = coalesce_finance(vlong)
+    long = melt_finance(wide)
+    logging.info("Extracted %s finance rows", len(long))
 
-    suffix = f"_{year}" if year else ""
+    write_long(long, args.output_long)
+    logging.info("Wrote step0 long parquet to %s", args.output_long)
 
-    conflict_path = CONFLICT_DIR / f"finance_form_conflicts{suffix}.csv"
-    conflict_path.parent.mkdir(parents=True, exist_ok=True)
-    conflicts.to_csv(conflict_path, index=False)
-    print(f"Wrote conflicts: {conflict_path} ({len(conflicts):,} rows)")
-
-    fin_wide = pivot_finance(chosen)
-
-    long_path = PARQUET_DIR / f"finance_unified_long{suffix}.parquet"
-    long_path.parent.mkdir(parents=True, exist_ok=True)
-    wide_path = OUT_DIR / f"finance_unified_wide{suffix}.csv"
-    wide_path.parent.mkdir(parents=True, exist_ok=True)
-    chosen.to_parquet(long_path, index=False)
-    fin_wide.to_csv(wide_path, index=False)
-
-    print(f"Wrote finance long: {long_path} ({len(chosen):,} rows)")
-    print(f"Wrote finance wide: {wide_path} ({len(fin_wide):,} rows, {len(fin_wide.columns):,} cols)")
+    if args.output_wide:
+        write_wide(long, args.output_wide)
+        logging.info("Wrote debug wide CSV to %s", args.output_wide)
 
 
 if __name__ == "__main__":
-    cli_args = parse_args()
-    main(cli_args.input, cli_args.year)
-
-
+    main()

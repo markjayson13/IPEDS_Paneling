@@ -161,18 +161,4 @@ python3 merge_raw_panels.py \
   --component-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,ADM,GR,GR200"
 
 
-/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F2 
-/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F3
 
-/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F2/f0304_f2_rv.csv
-/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F3/f0304_f3_rv.csv
-
-ls "/Users/.../2004/F0304_F2" "/Users/.../2004/F0304_F3"
-head -n2 "/Users/.../2004/F0304_F2/f0304_f2_rv.csv"
-
-
-ls "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F2" "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F3"
-head -n2 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F2/f0304_f2_rv.csv"
-
-ls "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F2" "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F3"
-head -n2 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F3/f0304_f3_rv.csv"
