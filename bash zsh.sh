@@ -35,10 +35,22 @@ python3 merge_raw_panels.py \
   --component-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,ADM,GR,GR200,OM,CST"
 
 # 4. Finance Step 0: form-level extraction (F1/F2/F3 + components)
-python3 unify_finance.py \
-  --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_2004_2024_merged.csv" \
-  --output-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_step0_long.parquet" \
-  --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/Final/finance_step0_wide.csv"
+for YEAR in {2004..2024}; do
+  echo "Running unify_finance for YEAR=${YEAR}..."
+
+  python3 unify_finance.py \
+    --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
+    --output-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_step0_long_${YEAR}.parquet" \
+    --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/Final/finance_step0_wide_${YEAR}.csv"
+
+done
+python3 - <<'PY'
+import pandas as pd, glob, os
+root = "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long"
+paths = sorted(glob.glob(os.path.join(root, "finance_step0_long_*.parquet")))
+df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
+df.to_parquet(os.path.join(root, "finance_step0_long.parquet"), index=False)
+PY
 
 # quick coverage check
 python3 - <<'PY'
