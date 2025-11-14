@@ -132,8 +132,8 @@ def iter_data_files(root: Path, years: Optional[Set[int]], surveys: Optional[Set
             continue
         if survey in {"F1A", "F2A", "F3A", "FIN"}:
             stem = path.stem.lower()
-            if not re.search(r"_rv\d*(?:_|$)", stem):
-                # keep only revised finance files (rv, rv1, rv2, ...)
+            if "_rv" in stem and not re.search(r"_rv\d*(?:_|$)", stem):
+                # malformed rv tag, skip
                 continue
         yield path, year, survey
 
