@@ -1,165 +1,74 @@
-#Code runs
+# Code Runs
+# 01_ingest_dictionaries.py 
+# build_raw_panel.py panelize_raw.py 
+# merge_raw_panels.py 
+# unify_finance.py
+# finance_build_crosswalk_template.py 
+# harmonize_finance_concepts.py
+# finance_validate_panel.py
 
-
-#Build Dictionaries
+# 1. Build dictionary lake (run once, or when dictionaries change)
 python3 01_ingest_dictionaries.py \
   --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
   --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet"
 
-
-#==============================================================================
-# 2004-2007
-#==============================================================================
-
-# Build raw panel parquet files for 2004-2007
-for YEAR in 2004 2005 2006 2007; do
+# 2. Build per-year long + wide panels (2004–2024)
+for YEAR in {2004..2024}; do
   python3 build_raw_panel.py \
     --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
     --years "$YEAR" \
     --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
     --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet"
-done
 
-# Panelize long -> wide per year
-for YEAR in 2004 2005 2006 2007; do
   python3 panelize_raw.py \
     --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet" \
     --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
     --column-field source_var \
-    --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,ADM,GR,GR200,ADM,OM,CST"
+    --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,ADM,GR,GR200,OM,CST"
 done
 
-# Finance Unification for 2004-2007
-for YEAR in 2004 2005 2006 2007; do
-  python3 unify_finance.py \
-    --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
-    --year "$YEAR" 
-done
+# 3. Merge all yearly wides into one big wide panel
+python3 merge_raw_panels.py \
+  --input-dir "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections" \
+  --pattern "panel_wide_raw_*.csv" \
+  --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/panel_wide_raw_2004_2024_merged.csv" \
+  --component-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,ADM,GR,GR200,OM,CST"
 
-#Check Finance Unification Logs before proceeding to the next steps
+# 4. Finance Step 0: form-level extraction (F1/F2/F3 + components)
+python3 unify_finance.py \
+  --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/panel_wide_raw_2004_2024_merged.csv" \
+  --output-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/UnifyingParquets/finance_step0_long.parquet" \
+  --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/finance_step0_wide.csv"
+
+# quick coverage check
 python3 - <<'PY'
 import pandas as pd
-path = "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/finance_unified_wide_2004.csv"
-df = pd.read_csv(path, dtype=str)
-forms = df["finance_form_used"].value_counts(dropna=False).to_dict() if "finance_form_used" in df.columns else {}
-print(path.split("/")[-1], "rows", len(df), "forms", forms)
+from pathlib import Path
+step0 = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/UnifyingParquets/finance_step0_long.parquet")
+df = pd.read_parquet(step0)
+summary = df.groupby(["YEAR", "form_family"]).size().reset_index(name="n_rows")
+print(summary.head())
 PY
 
-#==============================================================================
-# 2008-2010
-#==============================================================================
-# Build raw panel parquet files for 2008-2010
-for YEAR in 2008 2009 2010; do
-  python3 build_raw_panel.py \
-    --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
-    --years "$YEAR" \
-    --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
-    --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet"
-done
+# 5. Build crosswalk template (then edit manually)
+python3 finance_build_crosswalk_template.py \
+  --dict-lake "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet" \
+  --output "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/finance_crosswalk_template.csv" \
+  --year-min 2004 \
+  --year-max 2024
 
-# Panelize long -> wide per year
-for YEAR in 2008 2009 2010; do
-  python3 panelize_raw.py \
-    --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet" \
-    --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
-    --column-field source_var \
-    --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,ADM,GR,GR200,ADM,OM,CST"
-done
+# [MANUAL STEP] Edit finance_crosswalk_template.csv to fill concept_key, year ranges, weights.
 
-# Finance Unification for 2008-2010
-  python3 unify_finance.py \
-    --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
-    --year "$YEAR"
-done
+# 6. Apply crosswalk to create concept-level finance panel
+python3 harmonize_finance_concepts.py \
+  --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/UnifyingParquets/finance_step0_long.parquet" \
+  --crosswalk "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/finance_crosswalk_template.csv" \
+  --output-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/finance_concepts_long.parquet" \
+  --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/finance_concepts_wide.parquet" \
+  --coverage "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/finance_concepts_coverage.csv"
 
-#==============================================================================
-# 2011-2013
-#==============================================================================
-# Build raw panel parquet files for 2011-2013
-for YEAR in 2011 2012 2013; do
-  python3 build_raw_panel.py \
-    --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
-    --years "$YEAR" \
-    --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
-    --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet"
-done
-
-# Panelize long -> wide per year
-for YEAR in 2011 2012 2013; do
-  python3 panelize_raw.py \
-    --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet" \
-    --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
-    --column-field source_var \
-    --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,ADM,GR,GR200,ADM,OM,CST"
-done
-
-# Finance Unification for 2011-2013
-  python3 unify_finance.py \
-    --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
-    --year "$YEAR"
-done
-
-#==============================================================================
-# 2014-2023
-#==============================================================================
-# Build raw panel parquet files for 2014-2023
-for YEAR in 2014 2015 2016 2017 2018 2019 2020 2021 2022 2023; do
-  python3 build_raw_panel.py \
-    --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
-    --years "$YEAR" \
-    --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
-    --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet"
-done
-
-# Panelize long -> wide per year
-for YEAR in 2014 2015 2016 2017 2018 2019 2020 2021 2022 2023; do
-  python3 panelize_raw.py \
-    --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet" \
-    --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
-    --column-field source_var \
-    --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,ADM,GR,GR200,ADM,OM,CST"
-done
-
-# Finance Unification for 2014-2023
-  python3 unify_finance.py \
-    --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
-    --year "$YEAR"
-done
-
-#==============================================================================
-# 2024 (Cost moves to CST; keep SFA for non-cost items)
-#==============================================================================
-# Build raw panel parquet files for 2024
-for YEAR in 2024; do
-  python3 build_raw_panel.py \
-    --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
-    --years "$YEAR" \
-    --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
-    --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet"
-done
-# Panelize long -> wide per year
-for YEAR in 2024; do
-  python3 panelize_raw.py \
-    --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet" \
-    --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
-    --column-field source_var \
-    --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,ADM,GR,GR200,ADM,OM,CST"
-done
-# Finance Unification for 2014-2023
-  python3 unify_finance.py \
-    --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
-    --year "$YEAR"
-done
-
-#==============================================================================
-# Merge all years 2004-2024
-#==============================================================================
-
-# Wide only
-python3 merge_raw_panels.py \
-  --input-dir "$OUT" \
-  --pattern "panel_wide_raw_*.csv" \
-  --output-wide "$OUT/panel_wide_raw_2004_2024_merged.csv" \
-  --component-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,ADM,GR,GR200"
-
-
+# 7. Validate the concept-wide panel
+python3 finance_validate_panel.py \
+  --panel "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/finance_concepts_wide.parquet" \
+  --tolerance 100000 \
+  --tol-rel 0.05
