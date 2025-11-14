@@ -14,7 +14,7 @@ import pandas as pd
 ID_COLS = ["YEAR", "UNITID"]
 OPTIONAL_ID_COLS = ["REPORTING_UNITID"]
 VAL_RE = re.compile(r"^(F[123])([A-Z]{1,2})(\d+[A-Z]?)$", re.IGNORECASE)
-FLAG_RE = re.compile(r"^X(F[123])([A-Z])(\d+[A-Z]?)$", re.IGNORECASE)
+FLAG_RE = re.compile(r"^X(F[123])([A-Z]{1,2})(\d+[A-Z]?)$", re.IGNORECASE)
 
 DEFAULT_INPUT = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_2004_2024_merged.csv"
@@ -101,10 +101,18 @@ def melt_finance(df: pd.DataFrame) -> pd.DataFrame:
             .dropna(subset=["flag_var"], how="any")
         )
         fparsed = flag_long["flag_var"].str.extract(FLAG_RE)
-        flag_long["form_family"] = fparsed[0].str.upper()
-        flag_long["section"] = fparsed[1].str.upper()
-        flag_long["line_code"] = fparsed[2].str.upper()
+        ff = fparsed[0].str.upper()
+        sec_comp = fparsed[1].str.upper()
+        line_code = fparsed[2].str.upper()
+        flag_long["section"] = sec_comp.str[0]
+        flag_long["line_code"] = line_code
         flag_long["base_key"] = flag_long["section"] + flag_long["line_code"]
+        comp_suffix = sec_comp.str[1:].fillna("")
+        flag_long["form_family"] = ff
+        mask = comp_suffix.ne("")
+        flag_long.loc[mask, "form_family"] = (
+            flag_long.loc[mask, "form_family"] + "_COMP_" + comp_suffix[mask]
+        )
         flag_long["flag"] = flag_long["flag"].apply(
             lambda x: 1 if pd.notna(x) and str(x).strip() not in {"", "0"} else 0
         )

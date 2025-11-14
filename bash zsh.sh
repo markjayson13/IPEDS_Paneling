@@ -1,4 +1,4 @@
-bash zsh
+#Code runs
 
 
 #Build Dictionaries

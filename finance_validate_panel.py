@@ -17,10 +17,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--panel", type=Path, default=DEFAULT_PANEL)
     parser.add_argument("--tolerance", type=float, default=1e5, help="allowed absolute error when comparing flows")
+    parser.add_argument("--tol-rel", type=float, default=0.05, help="allowed relative error (fraction)")
     return parser.parse_args()
 
 
-def check_income_statement(df: pd.DataFrame, tol: float) -> pd.DataFrame:
+def check_income_statement(df: pd.DataFrame, tol_abs: float, tol_rel: float) -> pd.DataFrame:
     required = ["IS_REVENUES_TOTAL", "IS_EXPENSES_TOTAL", "IS_NET_INCOME"]
     missing = [c for c in required if c not in df.columns]
     if missing:
@@ -28,14 +29,25 @@ def check_income_statement(df: pd.DataFrame, tol: float) -> pd.DataFrame:
         return pd.DataFrame()
     sample = df.dropna(subset=required).copy()
     sample["diff"] = sample["IS_REVENUES_TOTAL"] - sample["IS_EXPENSES_TOTAL"] - sample["IS_NET_INCOME"]
+    scale = sample[["IS_REVENUES_TOTAL", "IS_EXPENSES_TOTAL"]].abs().max(axis=1).replace(0, 1)
+    sample["rel_diff"] = sample["diff"] / scale
+    mask = (sample["diff"].abs() > tol_abs) & (sample["rel_diff"].abs() > tol_rel)
     outliers = sample.loc[
-        sample["diff"].abs() > tol,
-        ["YEAR", "UNITID", "IS_REVENUES_TOTAL", "IS_EXPENSES_TOTAL", "IS_NET_INCOME", "diff"],
+        mask,
+        [
+            "YEAR",
+            "UNITID",
+            "IS_REVENUES_TOTAL",
+            "IS_EXPENSES_TOTAL",
+            "IS_NET_INCOME",
+            "diff",
+            "rel_diff",
+        ],
     ]
     return outliers
 
 
-def check_net_assets(df: pd.DataFrame, tol: float) -> pd.DataFrame:
+def check_net_assets(df: pd.DataFrame, tol_abs: float, tol_rel: float) -> pd.DataFrame:
     cols = ["YEAR", "UNITID", "BS_NET_ASSETS_TOTAL", "IS_NET_INCOME"]
     missing = [c for c in cols[2:] if c not in df.columns]
     if missing:
@@ -46,8 +58,11 @@ def check_net_assets(df: pd.DataFrame, tol: float) -> pd.DataFrame:
     df["delta_bs"] = df["BS_NET_ASSETS_TOTAL"] - df["bs_lag"]
     sample = df.dropna(subset=["delta_bs", "IS_NET_INCOME"])
     sample["gap"] = sample["delta_bs"] - sample["IS_NET_INCOME"]
+    scale = sample[["BS_NET_ASSETS_TOTAL", "bs_lag"]].abs().max(axis=1).replace(0, 1)
+    sample["rel_gap"] = sample["gap"] / scale
+    mask = (sample["gap"].abs() > tol_abs) & (sample["rel_gap"].abs() > tol_rel)
     return sample.loc[
-        sample["gap"].abs() > tol,
+        mask,
         [
             "YEAR",
             "UNITID",
@@ -56,6 +71,7 @@ def check_net_assets(df: pd.DataFrame, tol: float) -> pd.DataFrame:
             "delta_bs",
             "IS_NET_INCOME",
             "gap",
+            "rel_gap",
         ],
     ]
 
@@ -78,13 +94,17 @@ def main() -> None:
     else:
         df = pd.read_csv(panel_path)
 
-    income_outliers = check_income_statement(df, args.tolerance)
-    print(f"Income statement mismatches (> {args.tolerance}): {len(income_outliers)} rows")
+    income_outliers = check_income_statement(df, args.tolerance, args.tol_rel)
+    print(
+        f"Income statement mismatches (> {args.tolerance} abs & > {args.tol_rel:.2f} rel): {len(income_outliers)} rows"
+    )
     if not income_outliers.empty:
         print(income_outliers.head())
 
-    net_outliers = check_net_assets(df, args.tolerance)
-    print(f"Net asset change mismatches (> {args.tolerance}): {len(net_outliers)} rows")
+    net_outliers = check_net_assets(df, args.tolerance, args.tol_rel)
+    print(
+        f"Net asset change mismatches (> {args.tolerance} abs & > {args.tol_rel:.2f} rel): {len(net_outliers)} rows"
+    )
     if not net_outliers.empty:
         print(net_outliers.head())
 

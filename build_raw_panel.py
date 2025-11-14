@@ -70,7 +70,7 @@ def infer_survey(path: Path) -> str:
     candidates = [path.stem] + [parent.name for parent in path.parents]
     for candidate in candidates:
         stem = str(candidate).upper()
-        if stem.startswith("F") and not stem.startswith("FALL"):
+        if re.match(r"^F\d{4}_", stem) and not stem.startswith("FALL"):
             return "FIN"
         for survey, patterns in SURVEY_PATTERNS:
             for pattern in patterns:
@@ -132,7 +132,7 @@ def iter_data_files(root: Path, years: Optional[Set[int]], surveys: Optional[Set
             continue
         if survey in {"F1A", "F2A", "F3A", "FIN"}:
             stem = path.stem.lower()
-            if not re.search(r"_rv\d*$", stem):
+            if not re.search(r"_rv\d*(?:_|$)", stem):
                 # keep only revised finance files (rv, rv1, rv2, ...)
                 continue
         yield path, year, survey
