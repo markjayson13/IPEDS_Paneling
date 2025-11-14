@@ -114,3 +114,31 @@ python3 finance_validate_panel.py \
     --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_2023.csv" \
     --column-field source_var \
     --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,ADM,GR,GR200,OM,CST"
+
+
+
+# Enrollment Step 0: unify enrollment data across years
+python3 /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/unify_enrollment.py \
+  --dictionary "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet" \
+  --panel-root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections" \
+  --years "2004-2024" \
+  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Enrollment0/enrollment_step0_long.parquet"
+
+
+# Enrollment Crosswalk
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/enrollment_build_crosswalk_template.py" \
+  --dictionary "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet" \
+  --years "2004-2024" \
+  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/enrollment_crosswalk_template.csv"
+
+
+python3 /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/harmonize_enrollment_concepts.py \
+  --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Enrollment0/enrollment_step0_long.parquet" \
+  --crosswalk "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/enrollment_crosswalk_template.csv" \
+  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Wide/Enrollment/enrollment_concepts_wide.parquet"
+
+cd "/Users/markjaysonfarol13/Higher Ed research/IPEDS"
+
+python3 validate_enrollment_panel.py \
+  --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/enrollment_concepts_wide.parquet" \
+  --output-dir "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/validation_enrollment"
