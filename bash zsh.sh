@@ -7,7 +7,8 @@ bash zsh
 python3 scripts/aggregate_f1_components.py \
   --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
   --years 2004-2007 \
-  --log-level INFO \
+  --log-level INFO
+
 # Build raw panel parquet files for 2004-2007
 for YEAR in 2004 2005 2006 2007; do
   python3 build_raw_panel.py \
@@ -16,6 +17,7 @@ for YEAR in 2004 2005 2006 2007; do
     --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
     --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_${YEAR}.parquet"
 done
+
 # Panelize long -> wide per year
 for YEAR in 2004 2005 2006 2007; do
   python3 panelize_raw.py \
@@ -24,12 +26,12 @@ for YEAR in 2004 2005 2006 2007; do
     --column-field source_var \
     --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,ADM,GR,GR200,ADM,OM,CST"
 done
+
 # Finance Unification for 2004-2007
 for YEAR in 2004 2005 2006 2007; do
   python3 unify_finance.py \
     --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
     --year "$YEAR" \ 
-    --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/finance_unified_wide_${YEAR}.csv"
 done
 
 #Check Finance Unification Logs before proceeding to the next steps
@@ -154,3 +156,18 @@ python3 merge_raw_panels.py \
   --component-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,F1A,F2A,F3A,ADM,GR,GR200"
 
 
+/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F2 
+/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F3
+
+/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F2/f0304_f2_rv.csv
+/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F3/f0304_f3_rv.csv
+
+ls "/Users/.../2004/F0304_F2" "/Users/.../2004/F0304_F3"
+head -n2 "/Users/.../2004/F0304_F2/f0304_f2_rv.csv"
+
+
+ls "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F2" "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F3"
+head -n2 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F2/f0304_f2_rv.csv"
+
+ls "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F2" "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F3"
+head -n2 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas/2004/F0304_F3/f0304_f3_rv.csv"
