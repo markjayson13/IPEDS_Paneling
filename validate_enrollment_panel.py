@@ -123,6 +123,46 @@ def totals_by_year(df: pd.DataFrame, output: Path) -> None:
     logging.info("Sample totals:\n%s", totals.head())
 
 
+def check_gender_coverage(df: pd.DataFrame, output: Path) -> None:
+    required = [GENDER_TOTAL, GENDER_MEN, GENDER_WOMEN]
+    missing = [col for col in required if col not in df.columns]
+    if missing:
+        logging.info("Gender coverage check skipped: missing columns %s", ", ".join(missing))
+        return
+
+    subset = df[["YEAR", "UNITID"] + required].copy()
+    mask = subset[GENDER_TOTAL].notna() & subset[[GENDER_MEN, GENDER_WOMEN]].isna().any(axis=1)
+    issues = subset.loc[mask]
+    if issues.empty:
+        logging.info("No gender coverage gaps detected.")
+        return
+    out_path = output / "enrollment_validation_gender_coverage_gaps.csv"
+    issues.to_csv(out_path, index=False)
+    logging.warning("Gender coverage gaps written to %s", out_path)
+
+
+def check_race_coverage(df: pd.DataFrame, output: Path) -> None:
+    if RACE_TOTAL not in df.columns:
+        logging.info("Race coverage check skipped: %s not found", RACE_TOTAL)
+        return
+    missing_parts = [col for col in RACE_PARTS if col not in df.columns]
+    if missing_parts:
+        logging.info(
+            "Race coverage check skipped: missing detail columns %s",
+            ", ".join(missing_parts),
+        )
+        return
+    subset = df[["YEAR", "UNITID", RACE_TOTAL] + RACE_PARTS].copy()
+    mask = subset[RACE_TOTAL].notna() & subset[RACE_PARTS].isna().any(axis=1)
+    issues = subset.loc[mask]
+    if issues.empty:
+        logging.info("No race coverage gaps detected.")
+        return
+    out_path = output / "enrollment_validation_race_coverage_gaps.csv"
+    issues.to_csv(out_path, index=False)
+    logging.warning("Race coverage gaps written to %s", out_path)
+
+
 def main() -> None:
     args = parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO), format="%(levelname)s %(message)s")
