@@ -37,14 +37,14 @@ python3 merge_raw_panels.py \
 # 4. Finance Step 0: form-level extraction (F1/F2/F3 + components)
 python3 unify_finance.py \
   --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/panel_wide_raw_2004_2024_merged.csv" \
-  --output-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/UnifyingParquets/finance_step0_long.parquet" \
-  --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/finance_step0_wide.csv"
+  --output-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_step0_long.parquet" \
+  --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/Final/finance_step0_wide.csv"
 
 # quick coverage check
 python3 - <<'PY'
 import pandas as pd
 from pathlib import Path
-step0 = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/UnifyingParquets/finance_step0_long.parquet")
+step0 = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_step0_long.parquet")
 df = pd.read_parquet(step0)
 summary = df.groupby(["YEAR", "form_family"]).size().reset_index(name="n_rows")
 print(summary.head())
@@ -53,7 +53,7 @@ PY
 # 5. Build crosswalk template (then edit manually)
 python3 finance_build_crosswalk_template.py \
   --dict-lake "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet" \
-  --output "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/finance_crosswalk_template.csv" \
+  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_template.csv" \
   --year-min 2004 \
   --year-max 2024
 
@@ -61,14 +61,14 @@ python3 finance_build_crosswalk_template.py \
 
 # 6. Apply crosswalk to create concept-level finance panel
 python3 harmonize_finance_concepts.py \
-  --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/UnifyingParquets/finance_step0_long.parquet" \
-  --crosswalk "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/finance_crosswalk_template.csv" \
-  --output-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/finance_concepts_long.parquet" \
-  --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/finance_concepts_wide.parquet" \
-  --coverage "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/finance_concepts_coverage.csv"
+  --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_step0_long.parquet" \
+  --crosswalk "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_template.csv" \
+  --output-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_concepts_long.parquet" \
+  --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_concepts_wide.parquet" \
+  --coverage "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_concepts_coverage.csv"
 
 # 7. Validate the concept-wide panel
 python3 finance_validate_panel.py \
-  --panel "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/finance_concepts_wide.parquet" \
+  --panel "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_concepts_wide.parquet" \
   --tolerance 100000 \
   --tol-rel 0.05

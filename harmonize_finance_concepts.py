@@ -9,16 +9,20 @@ from pathlib import Path
 import pandas as pd
 
 DEFAULT_STEP0 = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/UnifyingParquets/finance_step0_long.parquet"
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_step0_long.parquet"
 )
-DEFAULT_CROSSWALK = Path("finance_crosswalk_template.csv")
+DEFAULT_CROSSWALK = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_template.csv"
+)
 DEFAULT_LONG_OUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/finance_concepts_long.parquet"
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_concepts_long.parquet"
 )
 DEFAULT_WIDE_OUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/finance_concepts_wide.parquet"
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_concepts_wide.parquet"
 )
-DEFAULT_COVERAGE = Path("finance_concepts_coverage.csv")
+DEFAULT_COVERAGE = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_concepts_coverage.csv"
+)
 
 ID_COLS = ["YEAR", "UNITID"]
 OPTIONAL_ID_COLS = ["REPORTING_UNITID"]
