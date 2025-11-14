@@ -84,7 +84,7 @@ python3 finance_build_crosswalk_template.py \
   --dict-lake "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet" \
   --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_template.csv" \
   --year-min 2004 \
-  --year-max 2024
+  --year-max 2023
 
 # [MANUAL STEP] Edit finance_crosswalk_template.csv to fill concept_key, year ranges, weights.
 
@@ -114,15 +114,3 @@ python3 finance_validate_panel.py \
     --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_2023.csv" \
     --column-field source_var \
     --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,ADM,GR,GR200,OM,CST"
-
-python3 - <<'PY'
-import pandas as pd
-import re
-
-wide_path = "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_2023.csv"
-cols = pd.read_csv(wide_path, nrows=0).columns.str.upper()
-
-finance_cols = [c for c in cols if re.match(r"^X?F[123][A-Z]{1,2}\d+", c)]
-print("Finance columns detected:", len(finance_cols))
-print(finance_cols[:10])  # preview
-PY
