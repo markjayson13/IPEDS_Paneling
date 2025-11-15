@@ -13,10 +13,14 @@
 # finance_validate_panel.py
 
 # Enrollment Unify and crosswalk scripts:
-
+Unification Scripts/unify_enrollment.py
+Unification Scripts/build_efres_residency_buckets.py
+CrossWalk Scripts/enrollment_build_crosswalk_template.py
+CrossWalk Scripts/Fill Scripts/autofill_enrollment_crosswalk_core.py
 
 #HD and IC Unify and crosswalk scripts:
-
+Unification Scripts/stabilize_hd.py
+CrossWalk Scripts/hd_build_crosswalk_template.py
 
 # SFA Unify and crosswalk scripts:
 
