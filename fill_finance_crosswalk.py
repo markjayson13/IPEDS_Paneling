@@ -183,6 +183,18 @@ def main() -> None:
     print("concept_key counts after auto-fill:")
     print(cw["concept_key"].value_counts(dropna=True).head(40))
 
+    filled = sorted(
+        c
+        for c in cw["concept_key"].dropna().unique()
+        if isinstance(c, str) and c.strip()
+    )
+    if filled:
+        print(f"\nConcepts filled ({len(filled)} total):")
+        for name in filled:
+            print(f"  - {name}")
+    else:
+        print("\nNo concepts were auto-filled.")
+
     unknown = set(cw["concept_key"].dropna().unique()) - CONCEPTS - {""}
     if unknown:
         print("WARNING: crosswalk contains concept_keys not in the schema:", sorted(unknown))
