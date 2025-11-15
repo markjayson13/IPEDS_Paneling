@@ -128,9 +128,6 @@ python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/finance_valida
   --tol-rel 0.05
 done
 
-
-
-
 #===============================================================
 # Enrollment paneling steps
 #===============================================================
@@ -153,15 +150,17 @@ python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/unify_enrollme
   --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/enrollment_step0_long.parquet"
 
 # Apply crosswalk to create concept-level enrollment panel
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/harmonize_enrollment_concepts.py" \
-  --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/enrollment_step0_long.parquet" \
-  --crosswalk "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/enrollment_crosswalk_autofilled.csv" \
-  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrollwide/enrollment_concepts_wide.parquet"
+for YEAR in {2004..2024}; do
+  python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/harmonize_enrollment_concepts.py" \
+    --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/enrollment_step0_long.parquet" \
+    --crosswalk "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/enrollment_crosswalk_autofilled.csv" \
+    --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrollwide/enrollment_concepts_wide_${YEAR}.parquet"
+done
 
 # Validate the concept-wide enrollment panel
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/validate_enrollment_panel.py" \
   --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrollwide/enrollment_concepts_wide.parquet" \
-  --output-dir "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Validation"
+  --output-dir "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrollwide/enrollment_concepts_wide_${YEAR}.parquet"
 
 # Build EFRES residency buckets
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/build_efres_residency_buckets.py" \
