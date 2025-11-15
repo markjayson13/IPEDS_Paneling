@@ -28,20 +28,42 @@ for YEAR in {2004..2024}; do
 done
 
 # 3. Merge all yearly wides into one big wide panel
-python3 merge_raw_panels.py \
+python3 /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/merge_raw_panels.py \
   --input-dir "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections" \
   --pattern "panel_wide_raw_*.csv" \
   --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/panel_wide_raw_2004_2024_merged.csv" \
   --component-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,ADM,GR,GR200,OM,CST"
 
-# 4. Finance Step 0: form-level extraction (F1/F2/F3 + components)
+python3 - <<'PY'
+import pandas as pd
+from pathlib import Path
+
+path = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_2004_2024_merged.csv")
+df = pd.read_csv(path, low_memory=False)
+
+nunique = df.nunique(dropna=False)
+stable_cols = nunique[nunique == 1].sort_index()
+print("Stable columns (same value in every row):")
+print(stable_cols)
+
+# Example: look specifically at HD columns
+hd_cols = [c for c in df.columns if c.startswith("HD")]
+hd_nunique = nunique.loc[hd_cols].sort_values()
+print("\nHD columns with few unique values:")
+print(hd_nunique.head(20))
+PY
+
+#===============================================================
+# Finance paneling steps
+#===============================================================
+# Finance Step 0: form-level extraction (F1/F2/F3 + components)
 for YEAR in {2004..2024}; do
   echo "Running unify_finance for YEAR=${YEAR}..."
 
-  python3 unify_finance.py \
+  python3 /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/unify_finance.py \
     --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_${YEAR}.csv" \
-    --output-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_step0_long_${YEAR}.parquet" \
-    --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/Finance/finance_step0_wide_${YEAR}.csv"
+    --output-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0Finlong/Step0Finlong_${YEAR}.parquet" \
+    --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Raw panel/Finance/Step0wide/Step0_${YEAR}.csv"
 
 done
 
@@ -78,52 +100,46 @@ else:
     print("No Step 0 files found.")
 PY
 
-
-# 5. Build crosswalk template (then edit manually)
-python3 finance_build_crosswalk_template.py \
+# Build crosswalk template
+python3 /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/finance_build_crosswalk_template.py \
   --dict-lake "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet" \
   --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_template.csv" \
   --year-min 2004 \
   --year-max 2023
 
-# [MANUAL STEP] Edit finance_crosswalk_template.csv to fill concept_key, year ranges, weights.
+#  Edit finance_crosswalk_template.csv to fill concept_key, year ranges, weights.
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/fill_finance_crosswalk.py"
 
-# 6. Apply crosswalk to create concept-level finance panel
-python3 harmonize_finance_concepts.py \
-  --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_step0_long.parquet" \
-  --crosswalk "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_template.csv" \
-  --output-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_concepts_long.parquet" \
-  --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_concepts_wide.parquet" \
-  --coverage "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_concepts_coverage.csv"
+# Apply crosswalk to create concept-level finance panel
+for YEAR in {2004..2023}; do
+  python3 /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/harmonize_finance_concepts.py \
+    --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0Finlong/Step0Finlong_${YEAR}.parquet" \
+    --crosswalk "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/finance_crosswalk_filled.csv" \
+    --output-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Financelong/finance_concepts_long_${YEAR}.parquet" \
+    --output-wide "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Financewide/finance_concepts_wide_${YEAR}.parquet" \
+    --coverage "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Harmonized/Finance/finance_concepts_coverage_${YEAR}.csv"
+done
 
-# 7. Validate the concept-wide panel
-python3 finance_validate_panel.py \
-  --panel "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_concepts_wide.parquet" \
+# Validate the concept-wide panel
+for YEAR in {2004..2023}; do
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/finance_validate_panel.py" \
+  --panel "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Financewide/finance_concepts_wide_${YEAR}.parquet" \
   --tolerance 100000 \
   --tol-rel 0.05
-
-
-  python3 build_raw_panel.py \
-    --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
-    --years 2023 \
-    --surveys HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,GR,GR200,ADM,OM,CST \
-    --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_2023.parquet"
-
-  python3 panelize_raw.py \
-    --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_raw_2023.parquet" \
-    --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_2023.csv" \
-    --column-field source_var \
-    --survey-order "HD,IC,IC_AY,EF,E12,EFIA,E1D,EFFY,SFA,FIN,F1A,F2A,F3A,ADM,GR,GR200,OM,CST"
+done
 
 
 
+
+#===============================================================
+# Enrollment paneling steps
+#===============================================================
 # Enrollment Step 0: unify enrollment data across years
 python3 /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/unify_enrollment.py \
   --dictionary "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet" \
   --panel-root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections" \
   --years "2004-2024" \
-  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Enrollment0/enrollment_step0_long.parquet"
-
+  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0Enrolllong/enrollment_step0_long.parquet"
 
 # Enrollment Crosswalk
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/enrollment_build_crosswalk_template.py" \
@@ -131,8 +147,7 @@ python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/enrollment_bui
   --years "2004-2024" \
   --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/enrollment_crosswalk_template.csv"
 
-
-
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/autofill_enrollment_crosswalk_core.py" 
 
 python3 /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/harmonize_enrollment_concepts.py \
   --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Enrollment0/enrollment_step0_long.parquet" \
@@ -144,3 +159,16 @@ cd "/Users/markjaysonfarol13/Higher Ed research/IPEDS"
 python3 validate_enrollment_panel.py \
   --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/enrollment_concepts_wide.parquet" \
   --output-dir "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/validation_enrollment"
+
+
+python3 /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/build_raw_panel.py \
+  --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
+  --years "2004-2024" \
+  --surveys HD,IC \
+  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_hd_ic.parquet"
+
+python3 /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/panelize_raw.py \
+  --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long_hd_ic.parquet" \
+  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_hd_ic.csv" \
+  --column-field source_var \
+  --survey-order "HD,IC"

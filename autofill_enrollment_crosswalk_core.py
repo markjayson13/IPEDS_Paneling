@@ -10,15 +10,22 @@ from pathlib import Path
 import pandas as pd
 
 DEFAULT_INPUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/enrollment_crosswalk_template.csv"
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/enrollment_crosswalk_template.csv"
 )
 DEFAULT_OUTPUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/enrollment_crosswalk_autofilled.csv"
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/enrollment_crosswalk_autofilled.csv"
 )
 
 E12_HEAD_ALL_TOT_ALL = "E12_HEAD_ALL_TOT_ALL"
 EF_HEAD_ALL_TOT_ALL = "EF_HEAD_ALL_TOT_ALL"
 EF_HEAD_FTFT_UG_DEGSEEK_TOT = "EF_HEAD_FTFT_UG_DEGSEEK_TOT"
+EF_HEAD_FT_ALL_TOT_ALL = "EF_HEAD_FT_ALL_TOT_ALL"
+EF_HEAD_FT_UG_TOT_ALL = "EF_HEAD_FT_UG_TOT_ALL"
+EF_HEAD_FT_GR_TOT_ALL = "EF_HEAD_FT_GR_TOT_ALL"
+EF_HEAD_FTFT_UG_RES_INSTATE = "EF_HEAD_FTFT_UG_RES_INSTATE"
+EF_HEAD_FTFT_UG_RES_OUTSTATE = "EF_HEAD_FTFT_UG_RES_OUTSTATE"
+EF_HEAD_FTFT_UG_RES_FOREIGN = "EF_HEAD_FTFT_UG_RES_FOREIGN"
+EF_HEAD_FTFT_UG_RES_UNKNOWN = "EF_HEAD_FTFT_UG_RES_UNKNOWN"
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,6 +63,9 @@ def main() -> None:
 
     blank_mask = cw["concept_key"].map(is_blank)
 
+    def _note_is_blank(series: pd.Series) -> pd.Series:
+        return series.map(is_blank)
+
     if "note" not in cw.columns:
         cw["note"] = ""
 
@@ -66,7 +76,8 @@ def main() -> None:
         & blank_mask
     )
     cw.loc[mask_e12_total, "concept_key"] = E12_HEAD_ALL_TOT_ALL
-    cw.loc[mask_e12_total & cw["note"].map(is_blank), "note"] = f"auto:{E12_HEAD_ALL_TOT_ALL}"
+    cw.loc[mask_e12_total & _note_is_blank(cw["note"]), "note"] = f"auto:{E12_HEAD_ALL_TOT_ALL}"
+    blank_mask = cw["concept_key"].map(is_blank)
 
     # Rule B: Fall totals
     mask_ef_total_old = (
@@ -83,7 +94,8 @@ def main() -> None:
     )
     mask_ef_total = mask_ef_total_old | mask_ef_total_new
     cw.loc[mask_ef_total, "concept_key"] = EF_HEAD_ALL_TOT_ALL
-    cw.loc[mask_ef_total & cw["note"].map(is_blank), "note"] = f"auto:{EF_HEAD_ALL_TOT_ALL}"
+    cw.loc[mask_ef_total & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_HEAD_ALL_TOT_ALL}"
+    blank_mask = cw["concept_key"].map(is_blank)
 
     # Rule C: Fall FTFT deg/cert seekers
     mask_ef_ftft_degseek = (
@@ -92,12 +104,128 @@ def main() -> None:
         & blank_mask
     )
     cw.loc[mask_ef_ftft_degseek, "concept_key"] = EF_HEAD_FTFT_UG_DEGSEEK_TOT
-    cw.loc[mask_ef_ftft_degseek & cw["note"].map(is_blank), "note"] = f"auto:{EF_HEAD_FTFT_UG_DEGSEEK_TOT}"
+    cw.loc[mask_ef_ftft_degseek & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_HEAD_FTFT_UG_DEGSEEK_TOT}"
+    blank_mask = cw["concept_key"].map(is_blank)
+
+    # Rule D: Full-time undergraduates
+    mask_ft_ug_name = (
+        (cw["survey"] == "FALLENROLLMENT")
+        & cw["source_var"].str.upper().eq("EFUGFT")
+        & blank_mask
+    )
+    mask_ft_ug_label = (
+        (cw["survey"] == "FALLENROLLMENT")
+        & cw["label_norm"].str.contains("full-time", case=False, na=False)
+        & cw["label_norm"].str.contains("undergraduate", case=False, na=False)
+        & (
+            cw["label_norm"].str.contains("enrollment", case=False, na=False)
+            | cw["label_norm"].str.contains("students", case=False, na=False)
+        )
+        & blank_mask
+    )
+    mask_ft_ug = mask_ft_ug_name | mask_ft_ug_label
+    cw.loc[mask_ft_ug, "concept_key"] = EF_HEAD_FT_UG_TOT_ALL
+    cw.loc[mask_ft_ug & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_HEAD_FT_UG_TOT_ALL}"
+    blank_mask = cw["concept_key"].map(is_blank)
+
+    # Rule E: Full-time graduate
+    grad_ft_varnames = {"EFGRFT"}
+    mask_ft_gr_name = (
+        (cw["survey"] == "FALLENROLLMENT")
+        & cw["source_var"].str.upper().isin(grad_ft_varnames)
+        & blank_mask
+    )
+    mask_ft_gr_label = (
+        (cw["survey"] == "FALLENROLLMENT")
+        & cw["label_norm"].str.contains("full-time", case=False, na=False)
+        & cw["label_norm"].str.contains("graduate", case=False, na=False)
+        & (
+            cw["label_norm"].str.contains("enrollment", case=False, na=False)
+            | cw["label_norm"].str.contains("students", case=False, na=False)
+        )
+        & blank_mask
+    )
+    mask_ft_gr = mask_ft_gr_name | mask_ft_gr_label
+    cw.loc[mask_ft_gr, "concept_key"] = EF_HEAD_FT_GR_TOT_ALL
+    cw.loc[mask_ft_gr & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_HEAD_FT_GR_TOT_ALL}"
+    blank_mask = cw["concept_key"].map(is_blank)
+
+    # Rule F: Full-time all levels
+    mask_ft_all_label = (
+        (cw["survey"] == "FALLENROLLMENT")
+        & cw["label_norm"].str.contains("full-time", case=False, na=False)
+        & (
+            cw["label_norm"].str.contains("enrollment", case=False, na=False)
+            | cw["label_norm"].str.contains("students", case=False, na=False)
+        )
+        & ~cw["label_norm"].str.contains("undergraduate", case=False, na=False)
+        & ~cw["label_norm"].str.contains("graduate", case=False, na=False)
+        & blank_mask
+    )
+    cw.loc[mask_ft_all_label, "concept_key"] = EF_HEAD_FT_ALL_TOT_ALL
+    cw.loc[mask_ft_all_label & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_HEAD_FT_ALL_TOT_ALL}"
+    blank_mask = cw["concept_key"].map(is_blank)
+
+    # Rule G: FTFT residence buckets
+    base_ftft_ug = (
+        (cw["survey"] == "FALLENROLLMENT")
+        & (
+            cw["label_norm"].str.contains("first-time", case=False, na=False)
+            | cw["label_norm"].str.contains("first time", case=False, na=False)
+        )
+        & (
+            cw["label_norm"].str.contains("degree/certificate", case=False, na=False)
+            | cw["label_norm"].str.contains("degree-seeking", case=False, na=False)
+            | cw["label_norm"].str.contains("degree or certificate", case=False, na=False)
+            | cw["label_norm"].str.contains("degree", case=False, na=False)
+        )
+        & cw["label_norm"].str.contains("undergraduate", case=False, na=False)
+        & blank_mask
+    )
+    mask_res_instate = (
+        base_ftft_ug
+        & (
+            cw["label_norm"].str.contains("in same state", case=False, na=False)
+            | cw["label_norm"].str.contains("in same jurisdiction", case=False, na=False)
+        )
+    )
+    mask_res_outstate = (
+        base_ftft_ug
+        & (
+            cw["label_norm"].str.contains("in a different state", case=False, na=False)
+            | cw["label_norm"].str.contains("in a different jurisdiction", case=False, na=False)
+        )
+    )
+    mask_res_foreign = (
+        base_ftft_ug
+        & (
+            cw["label_norm"].str.contains("outside the united states", case=False, na=False)
+            | cw["label_norm"].str.contains("outside the us", case=False, na=False)
+        )
+    )
+    mask_res_unknown = base_ftft_ug & cw["label_norm"].str.contains("unknown", case=False, na=False)
+
+    cw.loc[mask_res_instate, "concept_key"] = EF_HEAD_FTFT_UG_RES_INSTATE
+    cw.loc[mask_res_outstate, "concept_key"] = EF_HEAD_FTFT_UG_RES_OUTSTATE
+    cw.loc[mask_res_foreign, "concept_key"] = EF_HEAD_FTFT_UG_RES_FOREIGN
+    cw.loc[mask_res_unknown, "concept_key"] = EF_HEAD_FTFT_UG_RES_UNKNOWN
+    cw.loc[mask_res_instate & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_HEAD_FTFT_UG_RES_INSTATE}"
+    cw.loc[mask_res_outstate & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_HEAD_FTFT_UG_RES_OUTSTATE}"
+    cw.loc[mask_res_foreign & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_HEAD_FTFT_UG_RES_FOREIGN}"
+    cw.loc[mask_res_unknown & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_HEAD_FTFT_UG_RES_UNKNOWN}"
+    blank_mask = cw["concept_key"].map(is_blank)
 
     filled_total = cw["concept_key"].map(lambda x: not is_blank(x)).sum()
     print(f"{E12_HEAD_ALL_TOT_ALL} rows: {mask_e12_total.sum()}")
     print(f"{EF_HEAD_ALL_TOT_ALL} rows: {mask_ef_total.sum()}")
     print(f"{EF_HEAD_FTFT_UG_DEGSEEK_TOT} rows: {mask_ef_ftft_degseek.sum()}")
+    print(f"{EF_HEAD_FT_UG_TOT_ALL} rows: {mask_ft_ug.sum()}")
+    print(f"{EF_HEAD_FT_GR_TOT_ALL} rows: {mask_ft_gr.sum()}")
+    print(f"{EF_HEAD_FT_ALL_TOT_ALL} rows: {mask_ft_all_label.sum()}")
+    print(f"{EF_HEAD_FTFT_UG_RES_INSTATE} rows: {mask_res_instate.sum()}")
+    print(f"{EF_HEAD_FTFT_UG_RES_OUTSTATE} rows: {mask_res_outstate.sum()}")
+    print(f"{EF_HEAD_FTFT_UG_RES_FOREIGN} rows: {mask_res_foreign.sum()}")
+    print(f"{EF_HEAD_FTFT_UG_RES_UNKNOWN} rows: {mask_res_unknown.sum()}")
     print(f"Total rows with concept_key set: {filled_total}")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
