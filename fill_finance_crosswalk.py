@@ -18,22 +18,14 @@ import pandas as pd
 
 # Assumes you run this from the repo root where finance_crosswalk_template.csv lives.
 CROSSWALK_IN = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_template.csv")
-CROSSWALK_OUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_template.csv")
+CROSSWALK_OUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/finance_crosswalk_filled.csv")
 
 CONCEPTS = {
-    "BS_ASSETS_TOTAL",
-    "BS_LIABILITIES_TOTAL",
-    "BS_NET_ASSETS_TOTAL",
-    "BS_NET_ASSETS_WODR",
-    "BS_NET_ASSETS_WDR",
-    "BS_ASSETS_CASH",
-    "BS_ASSETS_INVESTMENTS_TOTAL",
-    "BS_LIAB_DEBT_LONGTERM",
-    "BS_ASSETS_CAPITAL_NET",
-    "BS_ENDOWMENT_FMV",
     "IS_REVENUES_TOTAL",
     "IS_EXPENSES_TOTAL",
     "IS_NET_INCOME",
+    "BS_ASSETS_INVESTMENTS_TOTAL",
+    "BS_ENDOWMENT_FMV",
     "REV_TUITION_NET",
     "REV_GOV_APPROPS_TOTAL",
     "REV_GRANTS_CONTRACTS_TOTAL",
@@ -51,6 +43,16 @@ CONCEPTS = {
     "DISCOUNT_TUITION",
 }
 
+IGNORED_CONCEPTS = {
+    "BS_ASSETS_TOTAL",
+    "BS_LIABILITIES_TOTAL",
+    "BS_NET_ASSETS_TOTAL",
+    "BS_NET_ASSETS_WODR",
+    "BS_NET_ASSETS_WDR",
+    "BS_ASSETS_CASH",
+    "BS_LIAB_DEBT_LONGTERM",
+    "BS_ASSETS_CAPITAL_NET",
+}
 
 def assign_concept(label: str, form_family: str, base_key: str) -> str | None:
     """Heuristic mapping from source_label_norm to the conceptual schema."""
@@ -58,38 +60,18 @@ def assign_concept(label: str, form_family: str, base_key: str) -> str | None:
         return None
     s = label.lower().strip()
 
-    # BALANCE SHEET TOTALS
-    if "total assets" in s and "net assets" not in s:
-        if "current assets" not in s and "noncurrent" not in s:
-            return "BS_ASSETS_TOTAL"
-    if "total liabilities" in s:
-        return "BS_LIABILITIES_TOTAL"
-    if "total net assets" in s or ("net position end of year" in s) or ("net assets end of year" in s):
-        return "BS_NET_ASSETS_TOTAL"
-    if ("unrestricted net" in s) or ("without donor restrictions" in s):
-        return "BS_NET_ASSETS_WODR"
-    if (("restricted" in s and ("net assets" in s or "net position" in s)) or ("with donor restrictions" in s)):
-        return "BS_NET_ASSETS_WDR"
-
-    # CASH (only if explicitly present)
-    if "cash and cash equivalents" in s:
-        return "BS_ASSETS_CASH"
-
-    # INVESTMENTS & ENDOWMENT
-    if "long-term investments" in s or "long term investments" in s:
+    # ENDOWMENTS / INVESTMENTS
+    if (
+        ("investments" in s and "long-term" in s)
+        or ("investments" in s and "long term" in s)
+        or ("investments" in s and "fair value" in s)
+    ):
         return "BS_ASSETS_INVESTMENTS_TOTAL"
-    if s.startswith("value of endowment assets at the end"):
+    if (
+        s.startswith("value of endowment assets at the end")
+        or ("endowment" in s and ("assets" in s or "funds" in s) and ("end of" in s or "at the end" in s))
+    ):
         return "BS_ENDOWMENT_FMV"
-
-    # CAPITAL ASSETS NET
-    if ("capital assets - net" in s) or ("capital assets net of" in s) or ("net capital assets" in s):
-        return "BS_ASSETS_CAPITAL_NET"
-    if "depreciable capital assets net of depreciation" in s:
-        return "BS_ASSETS_CAPITAL_NET"
-
-    # LONG-TERM DEBT
-    if ("bonds payable" in s or "notes payable" in s or "long-term debt" in s or "long term debt" in s) and "current" not in s:
-        return "BS_LIAB_DEBT_LONGTERM"
 
     # INCOME STATEMENT TOTALS
     if (
@@ -104,46 +86,71 @@ def assign_concept(label: str, form_family: str, base_key: str) -> str | None:
         return "IS_NET_INCOME"
 
     # REVENUES: TUITION, DISCOUNTS, AUXILIARY, ETC.
-    if ("tuition and fees" in s or "tuition fees" in s) and (
+    if ("tuition and fees" in s or "tuition fees" in s or "net tuition" in s) and (
         "after deducting discounts" in s
         or "net of discounts" in s
         or "net of scholarship allowances" in s
+        or "net of scholarships" in s
         or "net" in s
     ):
         return "REV_TUITION_NET"
-    if "scholarship allowances" in s or "discounts and allowances" in s:
+    if (
+        "scholarship allowances" in s
+        or "discounts and allowances" in s
+        or "tuition discounts" in s
+        or ("discounts" in s and "tuition" in s)
+    ):
         return "DISCOUNT_TUITION"
-    if "auxiliary enterprises" in s and ("revenue" in s or "revenues" in s):
+    if "auxiliary enterprises" in s and ("revenue" in s or "revenues" in s or "net" in s):
         return "REV_AUXILIARY_NET"
-    if "appropriations" in s:
+    if "appropriations" in s and ("federal" in s or "state" in s or "local" in s or "government" in s):
         return "REV_GOV_APPROPS_TOTAL"
-    if "grants and contracts" in s:
+    if "grants and contracts" in s or ("grants" in s and "contracts" in s):
         return "REV_GRANTS_CONTRACTS_TOTAL"
     if (
         "private gifts" in s
         or "private grants" in s
+        or ("private gifts, grants, and contracts" in s)
+        or ("contributions from private sources" in s)
         or ("contributions" in s and "government" not in s and "state" not in s)
     ):
         return "REV_PRIVATE_GIFTS"
-    if "investment income" in s or "investment return" in s or ("income from investments" in s):
+    if (
+        "investment income" in s
+        or "investment return" in s
+        or ("income from investments" in s)
+        or "investment gain" in s
+        or "return on investments" in s
+        or "investment income (net of expenses)" in s
+    ):
         return "REV_INVESTMENT_RETURN"
 
     # EXPENSES BY FUNCTION
-    if s.startswith("instruction") or s.startswith("expenses for instruction"):
+    if ("instruction" in s and "expenses" in s) or s.startswith("instruction"):
         return "EXP_INSTRUCTION"
-    if s.startswith("research") or s.startswith("expenses for research"):
+    if ("research" in s and "expenses" in s) or s.startswith("research"):
         return "EXP_RESEARCH"
-    if s.startswith("public service") or s.startswith("expenses for public service"):
+    if ("public service" in s and "expenses" in s) or s.startswith("public service"):
         return "EXP_PUBLIC_SERVICE"
-    if s.startswith("academic support") or s.startswith("expenses for academic support"):
+    if ("academic support" in s and "expenses" in s) or s.startswith("academic support"):
         return "EXP_ACADEMIC_SUPPORT"
-    if s.startswith("student services") or s.startswith("expenses for student services"):
+    if ("student services" in s and "expenses" in s) or s.startswith("student services"):
         return "EXP_STUDENT_SERVICES"
-    if s.startswith("institutional support") or s.startswith("expenses for institutional support"):
+    if ("institutional support" in s and "expenses" in s) or s.startswith("institutional support"):
         return "EXP_INSTITUTIONAL_SUPPORT"
     if "operations and maintenance of plant" in s or "operation and maintenance of plant" in s:
         return "EXP_OPERATIONS_PLANT"
-    if s.startswith("scholarships and fellowships") and "discounts" not in s and "allowances" not in s:
+    if (
+        "scholarships and fellowships" in s
+        and "discounts" not in s
+        and "allowances" not in s
+    ):
+        return "EXP_SCHOLARSHIPS_NET"
+    if (
+        ("student aid" in s or "grants to students" in s or "grants and scholarships to students" in s)
+        and "discount" not in s
+        and "allowance" not in s
+    ):
         return "EXP_SCHOLARSHIPS_NET"
 
     return None
@@ -155,6 +162,9 @@ def main() -> None:
 
     if "concept_key" not in cw.columns:
         cw["concept_key"] = ""
+
+    # Drop any pre-existing balance sheet concepts; we no longer auto-fill those.
+    cw.loc[cw["concept_key"].isin(IGNORED_CONCEPTS), "concept_key"] = ""
 
     mask_blank = cw["concept_key"].isna() | (cw["concept_key"].astype(str).str.strip() == "")
     cw.loc[mask_blank, "concept_key"] = cw.loc[mask_blank].apply(
