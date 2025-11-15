@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""Basic validation utilities for the finance concept panel."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+import pandas as pd
+
+DEFAULT_PANEL = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/finance_concepts_wide.parquet"
+)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--panel", type=Path, default=DEFAULT_PANEL)
+    parser.add_argument("--tolerance", type=float, default=1e5, help="allowed absolute error when comparing flows")
+    parser.add_argument("--tol-rel", type=float, default=0.05, help="allowed relative error (fraction)")
+    return parser.parse_args()
+
+
+def check_income_statement(df: pd.DataFrame, tol_abs: float, tol_rel: float) -> pd.DataFrame:
+    required = ["IS_REVENUES_TOTAL", "IS_EXPENSES_TOTAL", "IS_NET_INCOME"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        print(f"Skipping income statement check, missing columns: {missing}")
+        return pd.DataFrame()
+    sample = df.dropna(subset=required).copy()
+    sample["diff"] = sample["IS_REVENUES_TOTAL"] - sample["IS_EXPENSES_TOTAL"] - sample["IS_NET_INCOME"]
+    scale = sample[["IS_REVENUES_TOTAL", "IS_EXPENSES_TOTAL"]].abs().max(axis=1).replace(0, 1)
+    sample["rel_diff"] = sample["diff"] / scale
+    mask = (sample["diff"].abs() > tol_abs) & (sample["rel_diff"].abs() > tol_rel)
+    outliers = sample.loc[
+        mask,
+        [
+            "YEAR",
+            "UNITID",
+            "IS_REVENUES_TOTAL",
+            "IS_EXPENSES_TOTAL",
+            "IS_NET_INCOME",
+            "diff",
+            "rel_diff",
+        ],
+    ]
+    return outliers
+
+
+def check_net_assets(df: pd.DataFrame, tol_abs: float, tol_rel: float) -> pd.DataFrame:
+    cols = ["YEAR", "UNITID", "BS_NET_ASSETS_TOTAL", "IS_NET_INCOME"]
+    missing = [c for c in cols[2:] if c not in df.columns]
+    if missing:
+        print(f"Skipping net asset check, missing columns: {missing}")
+        return pd.DataFrame()
+    df = df.sort_values(["UNITID", "YEAR"])
+    df["bs_lag"] = df.groupby("UNITID")["BS_NET_ASSETS_TOTAL"].shift(1)
+    df["delta_bs"] = df["BS_NET_ASSETS_TOTAL"] - df["bs_lag"]
+    sample = df.dropna(subset=["delta_bs", "IS_NET_INCOME"])
+    sample["gap"] = sample["delta_bs"] - sample["IS_NET_INCOME"]
+    scale = sample[["BS_NET_ASSETS_TOTAL", "bs_lag"]].abs().max(axis=1).replace(0, 1)
+    sample["rel_gap"] = sample["gap"] / scale
+    mask = (sample["gap"].abs() > tol_abs) & (sample["rel_gap"].abs() > tol_rel)
+    return sample.loc[
+        mask,
+        [
+            "YEAR",
+            "UNITID",
+            "bs_lag",
+            "BS_NET_ASSETS_TOTAL",
+            "delta_bs",
+            "IS_NET_INCOME",
+            "gap",
+            "rel_gap",
+        ],
+    ]
+
+
+def year_totals(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    existing = [c for c in cols if c in df.columns]
+    if not existing:
+        return pd.DataFrame()
+    totals = df.groupby("YEAR")[existing].sum().reset_index()
+    return totals
+
+
+def main() -> None:
+    args = parse_args()
+    panel_path = args.panel
+    if not panel_path.exists():
+        raise SystemExit(f"Panel not found: {panel_path}")
+    if panel_path.suffix.lower() == ".parquet":
+        df = pd.read_parquet(panel_path)
+    else:
+        df = pd.read_csv(panel_path)
+
+    income_outliers = check_income_statement(df, args.tolerance, args.tol_rel)
+    print(
+        f"Income statement mismatches (> {args.tolerance} abs & > {args.tol_rel:.2f} rel): {len(income_outliers)} rows"
+    )
+    if not income_outliers.empty:
+        print(income_outliers.head())
+
+    net_outliers = check_net_assets(df, args.tolerance, args.tol_rel)
+    print(
+        f"Net asset change mismatches (> {args.tolerance} abs & > {args.tol_rel:.2f} rel): {len(net_outliers)} rows"
+    )
+    if not net_outliers.empty:
+        print(net_outliers.head())
+
+    totals = year_totals(
+        df,
+        [
+            "REV_TUITION_NET",
+            "IS_REVENUES_TOTAL",
+            "IS_EXPENSES_TOTAL",
+            "BS_ASSETS_TOTAL",
+            "BS_NET_ASSETS_TOTAL",
+        ],
+    )
+    if not totals.empty:
+        print("\nYearly aggregates (selected columns):")
+        print(totals)
+        totals_path = panel_path.with_suffix(panel_path.suffix + "_yearly_totals.csv")
+        totals.to_csv(totals_path, index=False)
+        print(f"Saved yearly totals to {totals_path}")
+
+
+if __name__ == "__main__":
+    main()

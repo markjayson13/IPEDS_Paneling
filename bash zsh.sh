@@ -1,11 +1,30 @@
-# Code Runs
+# Code 
+
+
 # 01_ingest_dictionaries.py 
+
 # build_raw_panel.py panelize_raw.py 
 # merge_raw_panels.py 
+
+#Fiannce Unify and crosswalk scripts:
 # unify_finance.py
 # finance_build_crosswalk_template.py 
 # harmonize_finance_concepts.py
 # finance_validate_panel.py
+
+# Enrollment Unify and crosswalk scripts:
+
+
+#HD and IC Unify and crosswalk scripts:
+
+
+# SFA Unify and crosswalk scripts:
+
+
+#ADM Unify and crosswalk scripts:
+
+
+
 
 # 1. Build dictionary lake (run once, or when dictionaries change)
 python3 01_ingest_dictionaries.py \
