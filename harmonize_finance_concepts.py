@@ -104,6 +104,10 @@ def apply_crosswalk(step0: pd.DataFrame, crosswalk: pd.DataFrame) -> pd.DataFram
         (merged["YEAR"] >= merged["year_start"]) & (merged["YEAR"] <= merged["year_end"])
     ]
     merged["concept_value"] = merged["value"] * merged["weight"]
+    # Ensure imputed_flag exists so downstream aggregations can carry it
+    if "imputed_flag" not in merged.columns:
+        merged["imputed_flag"] = 0
+    merged["imputed_flag"] = merged["imputed_flag"].fillna(0).astype(int)
     return merged
 
 
@@ -112,19 +116,32 @@ def build_long(merged: pd.DataFrame) -> pd.DataFrame:
     if "REPORTING_UNITID" in merged.columns:
         group_cols.insert(2, "REPORTING_UNITID")
     long = (
-        merged.groupby(group_cols, dropna=False)["concept_value"].sum().reset_index()
+        merged.groupby(group_cols, dropna=False)
+        .agg(
+            value=("concept_value", "sum"),
+            imputed_flag=("imputed_flag", "max"),
+        )
+        .reset_index()
     )
-    long.rename(columns={"concept_value": "value"}, inplace=True)
     return long
 
 
 def build_wide(long: pd.DataFrame) -> pd.DataFrame:
     id_cols = [col for col in ID_COLS if col in long.columns]
     id_cols += [col for col in OPTIONAL_ID_COLS if col in long.columns and col not in id_cols]
-    wide = (
+    wide_values = (
         long.pivot_table(index=id_cols, columns="concept_key", values="value", aggfunc="first")
         .reset_index()
     )
+    if "imputed_flag" in long.columns:
+        wide_flags = (
+            long.pivot_table(index=id_cols, columns="concept_key", values="imputed_flag", aggfunc="max")
+            .add_suffix("_FLAG")
+            .reset_index()
+        )
+        wide = wide_values.merge(wide_flags, on=id_cols, how="left")
+    else:
+        wide = wide_values
     return wide
 
 

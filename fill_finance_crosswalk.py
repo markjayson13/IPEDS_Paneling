@@ -23,7 +23,6 @@ CROSSWALK_OUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled 
 CONCEPTS = {
     "IS_REVENUES_TOTAL",
     "IS_EXPENSES_TOTAL",
-    "IS_NET_INCOME",
     "BS_ASSETS_INVESTMENTS_TOTAL",
     "BS_ENDOWMENT_FMV",
     "REV_TUITION_NET",
@@ -52,6 +51,7 @@ IGNORED_CONCEPTS = {
     "BS_ASSETS_CASH",
     "BS_LIAB_DEBT_LONGTERM",
     "BS_ASSETS_CAPITAL_NET",
+    "IS_NET_INCOME",
 }
 
 def assign_concept(label: str, form_family: str, base_key: str) -> str | None:
@@ -82,8 +82,6 @@ def assign_concept(label: str, form_family: str, base_key: str) -> str | None:
         return "IS_REVENUES_TOTAL"
     if "total expenses" in s or "total operating expenses" in s:
         return "IS_EXPENSES_TOTAL"
-    if "change in net assets" in s or "increase in net assets" in s or "increase in net position" in s:
-        return "IS_NET_INCOME"
 
     # REVENUES: TUITION, DISCOUNTS, AUXILIARY, ETC.
     if ("tuition and fees" in s or "tuition fees" in s or "net tuition" in s) and (
