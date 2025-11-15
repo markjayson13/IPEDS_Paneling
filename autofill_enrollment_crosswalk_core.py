@@ -10,10 +10,10 @@ from pathlib import Path
 import pandas as pd
 
 DEFAULT_INPUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/enrollment_crosswalk_template.csv"
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/enrollment_crosswalk_template.csv"
 )
 DEFAULT_OUTPUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/enrollment_crosswalk_autofilled.csv"
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled.csv"
 )
 
 E12_HEAD_ALL_TOT_ALL = "E12_HEAD_ALL_TOT_ALL"
