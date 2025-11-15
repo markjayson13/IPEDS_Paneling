@@ -156,6 +156,83 @@ def assign_concept(label: str, form_family: str, base_key: str) -> str | None:
     return None
 
 
+def _first_nonempty(series: pd.Series) -> str:
+    for val in series:
+        if isinstance(val, str) and val.strip():
+            return val
+    return ""
+
+
+def _collapse_block(block: pd.DataFrame, year_start: int, year_end: int) -> dict:
+    first = block.iloc[0]
+
+    surveys = sorted(set(str(s) for s in block.get("survey", []) if pd.notna(s)))
+    survey_val = ";".join(surveys) if surveys else first.get("survey", "")
+
+    vars_raw: list[str] = []
+    if "source_var" in block.columns:
+        for v in block["source_var"].dropna():
+            vars_raw.extend(str(v).split(";"))
+    source_vars = sorted(set(v.strip() for v in vars_raw if v.strip()))
+    source_var_val = ";".join(source_vars) if source_vars else first.get("source_var", "")
+
+    source_label = _first_nonempty(block.get("source_label", pd.Series(dtype=object)))
+    source_label_norm = _first_nonempty(block.get("source_label_norm", pd.Series(dtype=object)))
+
+    notes_vals = [str(n) for n in block.get("notes", []) if isinstance(n, str) and n.strip()]
+    notes_val = " | ".join(sorted(set(notes_vals))) if notes_vals else first.get("notes", "")
+
+    return {
+        "concept_key": first["concept_key"],
+        "form_family": first.get("form_family", ""),
+        "survey": survey_val,
+        "year_start": year_start,
+        "year_end": year_end,
+        "base_key": first.get("base_key", ""),
+        "section": first.get("section", ""),
+        "line_code": first.get("line_code", ""),
+        "source_var": source_var_val,
+        "source_label": source_label,
+        "source_label_norm": source_label_norm,
+        "weight": first.get("weight", 1.0),
+        "notes": notes_val,
+    }
+
+
+def _merge_intervals_for_group(g: pd.DataFrame) -> pd.DataFrame:
+    if g.empty:
+        return g
+
+    g = g.copy()
+    g["year_start"] = pd.to_numeric(g["year_start"], errors="coerce").astype("Int64")
+    g["year_end"] = pd.to_numeric(g["year_end"], errors="coerce").astype("Int64")
+    g = g.sort_values(["year_start", "year_end"])
+
+    merged_rows = []
+    current_start = int(g.iloc[0]["year_start"])
+    current_end = int(g.iloc[0]["year_end"])
+    idxs = [g.index[0]]
+
+    for idx, row in g.iloc[1:].iterrows():
+        ys = int(row["year_start"])
+        ye = int(row["year_end"])
+
+        if ys <= current_end + 1:
+            current_end = max(current_end, ye)
+            idxs.append(idx)
+        else:
+            block = g.loc[idxs]
+            merged_rows.append(_collapse_block(block, current_start, current_end))
+            current_start = ys
+            current_end = ye
+            idxs = [idx]
+
+    block = g.loc[idxs]
+    merged_rows.append(_collapse_block(block, current_start, current_end))
+
+    return pd.DataFrame(merged_rows)
+
+
 def main() -> None:
     cw = pd.read_csv(CROSSWALK_IN)
     cw.columns = [c.strip() for c in cw.columns]
@@ -194,6 +271,22 @@ def main() -> None:
             print(f"  - {name}")
     else:
         print("\nNo concepts were auto-filled.")
+
+    # Collapse overlapping/contiguous intervals per (form_family, base_key, concept_key)
+    has_concept = cw["concept_key"].astype(str).str.strip() != ""
+    mapped = cw[has_concept].copy()
+    unmapped = cw[~has_concept].copy()
+
+    merged_groups: list[pd.DataFrame] = []
+    group_cols = ["form_family", "base_key", "concept_key"]
+    for _, grp in mapped.groupby(group_cols, dropna=False):
+        merged_groups.append(_merge_intervals_for_group(grp))
+
+    if merged_groups:
+        mapped = pd.concat(merged_groups, ignore_index=True)
+
+    cw = pd.concat([mapped, unmapped], ignore_index=True, sort=False)
+    cw = cw.sort_values(["form_family", "base_key", "concept_key", "year_start"], na_position="last").reset_index(drop=True)
 
     unknown = set(cw["concept_key"].dropna().unique()) - CONCEPTS - {""}
     if unknown:
