@@ -22,6 +22,7 @@ import pandas as pd
 CROSSWALK_IN = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_template.csv")
 CROSSWALK_OUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/finance_crosswalk_filled.csv")
 OVERRIDES_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_overrides.csv")
+DICTIONARY_LAKE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet")
 STEP0_SAMPLE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Step0/finance_step0_long_2004.parquet")
 
 CONCEPTS = {
@@ -369,6 +370,74 @@ def _export_suspect_core(cw: pd.DataFrame) -> None:
         print(f"\nWrote {len(suspect_core)} suspect core rows with blank concept_key to {suspect_path}")
     else:
         print("\nNo suspect core rows with blank concept_key.")
+
+
+def inspect_component_endowment_labels(dict_path: Path | str | None = None) -> None:
+    """
+    Inspect dictionary lake entries for component (F1A_F / F1A_G) lines that mention endowment.
+
+    This allows us to decide whether manual overrides are needed for component files.
+    """
+    dict_path = Path(dict_path) if dict_path else DICTIONARY_LAKE
+    if not dict_path.exists():
+        print(f"Dictionary lake not found: {dict_path}")
+        return
+
+    cols = [
+        "year",
+        "form_family",
+        "base_key",
+        "source_var",
+        "source_label_norm",
+        "dict_filename",
+        "data_filename",
+        "survey",
+        "is_finance",
+    ]
+    try:
+        df = pd.read_parquet(dict_path, columns=cols)
+    except Exception as exc:  # pragma: no cover - debug helper
+        print(f"Failed to load dictionary lake {dict_path}: {exc}")
+        return
+
+    df = df[df["is_finance"] == True].copy()
+    if df.empty:
+        print("No finance rows present in dictionary lake sample.")
+        return
+
+    dict_names = df["dict_filename"].fillna("")
+    data_names = df["data_filename"].fillna("")
+    survey_vals = df["survey"].fillna("")
+    comp_mask = (
+        dict_names.str.contains(r"f1a.*(_f|_g)", case=False, regex=True)
+        | data_names.str.contains(r"f1a.*(_f|_g)", case=False, regex=True)
+        | survey_vals.str.contains("F1A", case=False, regex=True)
+    )
+    label_mask = df["source_label_norm"].fillna("").str.contains("endowment", case=False, na=False)
+    component_endow = df[comp_mask & label_mask]
+
+    if component_endow.empty:
+        print("No endowment-related labels found on F1 component dictionaries.")
+        return
+
+    cols_out = [
+        "year",
+        "form_family",
+        "base_key",
+        "source_var",
+        "source_label_norm",
+        "dict_filename",
+    ]
+    cols_present = [c for c in cols_out if c in component_endow.columns]
+    summary = (
+        component_endow[cols_present]
+        .drop_duplicates()
+        .sort_values(cols_present)
+    )
+
+    print("\nPotential component endowment lines:")
+    print(summary.to_string(index=False))
+    print(f"\nTotal matching rows: {len(summary)}")
 
 
 def inspect_endowment_base_keys(

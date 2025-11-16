@@ -8,7 +8,7 @@ Usage (default paths):
 Or with explicit paths:
     python auto_fill_hd_crosswalk.py \
         --template "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/hd_crosswalk_template.csv" \
-        --out "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/hd_crosswalk.csv"
+        --out "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/hd_crosswalk.csv"
 
 This script:
   - Reads the template (with columns: concept_key, survey, varname, year_start, year_end, notes)
@@ -36,7 +36,8 @@ import pandas as pd
 DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
 DEFAULT_CROSSWALK_DIR = DATA_ROOT / "Paneled Datasets" / "Crosswalks"
 DEFAULT_TEMPLATE_PATH = DEFAULT_CROSSWALK_DIR / "hd_crosswalk_template.csv"
-DEFAULT_OUTPUT_PATH = DEFAULT_CROSSWALK_DIR / "hd_crosswalk.csv"
+DEFAULT_FILLED_DIR = DEFAULT_CROSSWALK_DIR / "Filled"
+DEFAULT_OUTPUT_PATH = DEFAULT_FILLED_DIR / "hd_crosswalk.csv"
 
 # --------------------------------------------------------------------
 # Explicit mappings for "stable" concepts
@@ -108,7 +109,7 @@ def parse_args() -> argparse.Namespace:
         "--out",
         type=Path,
         default=DEFAULT_OUTPUT_PATH,
-        help="Output path for hd_crosswalk.csv",
+        help="Output path for filled hd_crosswalk.csv (in the Filled directory).",
     )
     return p.parse_args()
 

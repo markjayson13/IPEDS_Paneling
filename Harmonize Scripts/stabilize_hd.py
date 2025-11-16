@@ -247,10 +247,13 @@ def stabilize_hd(input_path: Path, crosswalk_path: Path, output_path: Path) -> p
             f"{dup_rows.head(10).to_string(index=False)}"
         )
 
-    wide = _pivot_wide(merged)
-    if wide.duplicated(subset=["unitid", "year"]).any():
+    base_pairs = raw[["unitid", "year"]].drop_duplicates()
+    wide_mapped = _pivot_wide(merged)
+    if wide_mapped.duplicated(subset=["unitid", "year"]).any():
         dup = (
-            wide.loc[wide.duplicated(subset=["unitid", "year"], keep=False), ["unitid", "year"]]
+            wide_mapped.loc[
+                wide_mapped.duplicated(subset=["unitid", "year"], keep=False), ["unitid", "year"]
+            ]
             .drop_duplicates()
             .head()
         )
@@ -258,6 +261,7 @@ def stabilize_hd(input_path: Path, crosswalk_path: Path, output_path: Path) -> p
             "Post-pivot panel has duplicate (unitid, year) rows, which should be impossible.\n"
             f"Example duplicates:\n{dup.to_string(index=False)}"
         )
+    wide = base_pairs.merge(wide_mapped, on=["unitid", "year"], how="left")
     wide = wide.sort_values(["unitid", "year"]).reset_index(drop=True)
     wide = _coerce_types(wide)
 
