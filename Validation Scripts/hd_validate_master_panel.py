@@ -12,6 +12,7 @@ DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
 DEFAULT_RAW_HDIC = DATA_ROOT / "Parquets" / "panel_long_hd_ic.parquet"
 DEFAULT_MASTER = DATA_ROOT / "Paneled Datasets" / "Final" / "hd_master_panel.csv"
 FALLBACK_MASTER = DATA_ROOT / "Parquets" / "Unify" / "HDICwide" / "hd_master_panel.parquet"
+DEFAULT_CROSSWALK_PATH = DATA_ROOT / "Paneled Datasets" / "Crosswalks" / "Filled" / "hd_crosswalk.csv"
 
 CARNEGIE_COLS: List[str] = [
     "CARNEGIE_2005",
@@ -36,10 +37,44 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_MASTER,
         help="Path to hd_master_panel.parquet.",
     )
+    parser.add_argument(
+        "--crosswalk",
+        type=Path,
+        default=DEFAULT_CROSSWALK_PATH,
+        help="Path to filled hd_crosswalk.csv used by the stabilizer.",
+    )
     return parser.parse_args()
 
 
-def load_raw_hd(raw_path: Path) -> pd.DataFrame:
+def load_crosswalk_surveys(crosswalk_path: Path) -> list[str]:
+    """
+    Load the HD crosswalk and return the unique survey codes (uppercase).
+    """
+    if not crosswalk_path.exists():
+        print(
+            f"[WARN] Crosswalk not found at {crosswalk_path}; using ['HD', 'IC'] as survey filter."
+        )
+        return ["HD", "IC"]
+    cw = pd.read_csv(crosswalk_path)
+    cw.columns = [c.lower() for c in cw.columns]
+    if "survey" not in cw.columns:
+        print(
+            f"[WARN] Crosswalk at {crosswalk_path} has no 'survey' column; using ['HD', 'IC'] as survey filter."
+        )
+        return ["HD", "IC"]
+    surveys = sorted(
+        set(str(s).upper() for s in cw["survey"].dropna().unique())
+    )
+    if not surveys:
+        print(
+            f"[WARN] Crosswalk at {crosswalk_path} has empty survey set; using ['HD', 'IC'] as survey filter."
+        )
+        return ["HD", "IC"]
+    print(f"[INFO] Using surveys from crosswalk for validation filter: {surveys}")
+    return surveys
+
+
+def load_raw_hd(raw_path: Path, surveys: list[str]) -> pd.DataFrame:
     if not raw_path.exists():
         raise SystemExit(f"Raw HD/IC file not found: {raw_path}")
     df = pd.read_parquet(raw_path)
@@ -51,7 +86,8 @@ def load_raw_hd(raw_path: Path) -> pd.DataFrame:
     if missing:
         raise SystemExit(f"Raw HD/IC missing required columns: {sorted(missing)}")
     df["survey"] = df["survey"].astype(str).str.upper()
-    mask = df["survey"].isin(["HD", "IC"])
+    survey_set = {s.upper() for s in surveys}
+    mask = df["survey"].isin(survey_set)
     return df.loc[mask].copy()
 
 
@@ -172,7 +208,8 @@ def check_carnegie_coverage(master: pd.DataFrame) -> None:
 
 def main() -> None:
     args = parse_args()
-    raw_hd = load_raw_hd(args.raw)
+    surveys = load_crosswalk_surveys(args.crosswalk)
+    raw_hd = load_raw_hd(args.raw, surveys)
     master = load_master(args.master)
 
     print(f"Loaded raw HD/IC: {len(raw_hd):,} rows")

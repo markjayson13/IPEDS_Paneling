@@ -409,8 +409,8 @@ def inspect_component_endowment_labels(dict_path: Path | str | None = None) -> N
     data_names = df["data_filename"].fillna("")
     survey_vals = df["survey"].fillna("")
     comp_mask = (
-        dict_names.str.contains(r"f1a.*(_f|_g)", case=False, regex=True)
-        | data_names.str.contains(r"f1a.*(_f|_g)", case=False, regex=True)
+        dict_names.str.contains(r"f1a.*_(?:f|g)", case=False, regex=True)
+        | data_names.str.contains(r"f1a.*_(?:f|g)", case=False, regex=True)
         | survey_vals.str.contains("F1A", case=False, regex=True)
     )
     label_mask = df["source_label_norm"].fillna("").str.contains("endowment", case=False, na=False)
