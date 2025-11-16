@@ -17,9 +17,9 @@ NET_PRICE_BINS = [
     "NET_PRICE_AVG_INC_75_110K",
     "NET_PRICE_AVG_INC_110K_PLUS",
 ]
-BASE_SFA_LONG_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAlong")
-BASE_SFA_WIDE_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAwide")
-BASE_VALIDATION_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Validation")
+SFA_LONG_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAlong")
+SFA_WIDE_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAwide")
+VALIDATION_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Validation")
 
 
 def resolve_column(df: pd.DataFrame, preferred: str, fallbacks: Sequence[str]) -> str:
@@ -32,6 +32,15 @@ def resolve_column(df: pd.DataFrame, preferred: str, fallbacks: Sequence[str]) -
 
 def to_numeric(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce")
+
+
+def write_violation_parquet(rows: pd.DataFrame, parquet_dir: Path | None, filename: str) -> Path | None:
+    if parquet_dir is None or rows.empty:
+        return None
+    parquet_dir.mkdir(parents=True, exist_ok=True)
+    destination = parquet_dir / filename
+    rows.to_parquet(destination, index=False)
+    return destination
 
 
 def check_percent_bounds(df: pd.DataFrame) -> List[str]:
@@ -82,7 +91,12 @@ def check_amount_bounds(df: pd.DataFrame) -> List[str]:
     return lines
 
 
-def check_nested_counts(df: pd.DataFrame, unitid_col: str, year_col: str) -> List[str]:
+def check_nested_counts(
+    df: pd.DataFrame,
+    unitid_col: str,
+    year_col: str,
+    parquet_dir: Path | None = None,
+) -> List[str]:
     lines: List[str] = []
     required = [
         "SFA_FTFT_N",
@@ -114,6 +128,11 @@ def check_nested_counts(df: pd.DataFrame, unitid_col: str, year_col: str) -> Lis
             sample = df.loc[violations, [unitid_col, year_col, left, right]].head(5)
             lines.append(f"Sample violations for {left} <= {right}:")
             lines.append(sample.to_string(index=False))
+            violation_rows = df.loc[violations, [unitid_col, year_col, left, right]].copy()
+            filename = f"{left.lower()}_gt_{right.lower()}.parquet"
+            dest = write_violation_parquet(violation_rows, parquet_dir, filename)
+            if dest:
+                lines.append(f"Saved {count} violations to {dest}")
     return lines
 
 
@@ -125,6 +144,7 @@ def check_cross_component(
     ef_unitid_col: str,
     ef_year_col: str,
     ef_ftft_col: str,
+    parquet_dir: Path | None = None,
 ) -> List[str]:
     lines: List[str] = []
     if "SFA_FTFT_N" not in sfa_df.columns:
@@ -153,27 +173,42 @@ def check_cross_component(
         sample = merged.loc[violations, ["sfa_unitid", "sfa_year", "SFA_FTFT_N", ef_ftft_col]].head(5)
         lines.append("Sample cross-component violations:")
         lines.append(sample.to_string(index=False))
+        violation_rows = merged.loc[violations, ["sfa_unitid", "sfa_year", "SFA_FTFT_N", ef_ftft_col]].copy()
+        filename = f"sfa_ftft_n_gt_{ef_ftft_col.lower()}.parquet"
+        dest = write_violation_parquet(violation_rows, parquet_dir, filename)
+        if dest:
+            lines.append(f"Saved {count} cross-component violations to {dest}")
     return lines
 
 
-def check_net_price_monotonicity(df: pd.DataFrame) -> List[str]:
+def check_net_price_monotonicity(
+    df: pd.DataFrame,
+    unitid_col: str,
+    year_col: str,
+    parquet_dir: Path | None = None,
+) -> List[str]:
     lines: List[str] = []
-    available = [col for col in NET_PRICE_BINS if col in df.columns]
-    if len(available) < 2:
-        lines.append("Not enough net price bins to evaluate monotonicity.")
+    low_col = "NET_PRICE_AVG_INC_0_30K"
+    high_col = "NET_PRICE_AVG_INC_110K_PLUS"
+    if low_col not in df.columns or high_col not in df.columns:
+        lines.append("0-30K and 110K+ net price bins not both present; skipping monotonicity check.")
         return lines
-    subset = df[available].dropna()
+    subset = df[[unitid_col, year_col, low_col, high_col]].dropna()
     if subset.empty:
-        lines.append("No rows have complete net price bins.")
+        lines.append("No rows have both low- and high-income net price bins.")
         return lines
-    low = to_numeric(subset[NET_PRICE_BINS[0]])
-    high = to_numeric(subset[NET_PRICE_BINS[-1]])
-    violations = low > high
-    count = violations.sum()
-    share = count / len(subset)
-    lines.append(
-        f"NET_PRICE_AVG_INC_0_30K <= NET_PRICE_AVG_INC_110K_PLUS: {count} violations ({share:.2%} of complete rows)"
-    )
+    low = to_numeric(subset[low_col])
+    high = to_numeric(subset[high_col])
+    violations_mask = low > high
+    count = int(violations_mask.sum())
+    total = len(subset)
+    share = count / total if total else 0.0
+    lines.append(f"{low_col} <= {high_col}: {count} violations ({share:.2%} of complete rows)")
+    if count:
+        violation_rows = subset.loc[violations_mask].copy()
+        dest = write_violation_parquet(violation_rows, parquet_dir, "net_price_monotonicity_violations.parquet")
+        if dest:
+            lines.append(f"Wrote {count} net price monotonicity violations to {dest}")
     return lines
 
 
@@ -214,14 +249,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sfa-panel",
         type=Path,
-        default=BASE_SFA_WIDE_DIR / "sfa_concepts_wide.parquet",
+        default=SFA_WIDE_DIR / "sfa_concepts_wide.parquet",
         help="Concept-level SFA parquet to validate.",
     )
     parser.add_argument("--ef-panel", type=Path, default=None, help="Optional EF concepts parquet for cross-checks")
     parser.add_argument(
         "--output-summary",
         type=Path,
-        default=BASE_VALIDATION_DIR / "sfa_panel_validation_summary.txt",
+        default=VALIDATION_DIR / "sfa_panel_validation_summary.txt",
         help="Destination for validation summary text.",
     )
     parser.add_argument("--no-output-summary", action="store_true", help="Skip writing the summary file.")
@@ -229,8 +264,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--plots-dir",
         type=Path,
-        default=BASE_VALIDATION_DIR / "plots",
+        default=VALIDATION_DIR / "plots",
         help="Directory for diagnostic plots when --make-plots is set.",
+    )
+    parser.add_argument(
+        "--parquet-dir",
+        type=Path,
+        default=VALIDATION_DIR,
+        help="Directory for validation parquet artifacts (violations, diagnostics).",
     )
     parser.add_argument("--unitid-col", type=str, default="UNITID")
     parser.add_argument("--year-col", type=str, default="YEAR")
@@ -267,7 +308,7 @@ def main() -> None:
     summary_lines.append("Amount & net price bounds:")
     summary_lines.extend(amount_lines)
 
-    nested_lines = check_nested_counts(sfa_df, unitid_col, year_col)
+    nested_lines = check_nested_counts(sfa_df, unitid_col, year_col, args.parquet_dir)
     logging.info("Nested FTFT checks complete")
     summary_lines.append("Nested FTFT cohort checks:")
     summary_lines.extend(nested_lines)
@@ -285,11 +326,12 @@ def main() -> None:
             resolve_column(ef_df, args.ef_unitid_col, UNITID_CANDIDATES),
             resolve_column(ef_df, args.ef_year_col, YEAR_CANDIDATES),
             args.ef_ftft_col,
+            args.parquet_dir,
         )
         summary_lines.append("Cross-component EF checks:")
         summary_lines.extend(cross_lines)
 
-    monotonic_lines = check_net_price_monotonicity(sfa_df)
+    monotonic_lines = check_net_price_monotonicity(sfa_df, unitid_col, year_col, args.parquet_dir)
     summary_lines.append("Net price monotonicity:")
     summary_lines.extend(monotonic_lines)
 
