@@ -12,7 +12,7 @@ import pandas as pd
 SFA_VAR_RX = re.compile(r"^(SFA|NPT)", re.IGNORECASE)
 SURVEY_HINTS = ("SFA", "STUDENT FINANCIAL AID", "NET PRICE", "NET-PRICE")
 CROSSWALK_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks")
-DICTIONARY_LAKE_PATH = Path("dictionary_lake.parquet")
+DICTIONARY_LAKE_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
 
 
 VAR_COL_CANDIDATES = ["varname", "var_name", "var", "variable"]

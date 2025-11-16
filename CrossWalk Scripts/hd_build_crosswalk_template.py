@@ -8,7 +8,7 @@ from typing import Iterable
 import pandas as pd
 
 DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
-DEFAULT_DICT_LAKE_PATH = DATA_ROOT / "Parquets" / "dictionary_lake.parquet"
+DEFAULT_DICT_LAKE_PATH = DATA_ROOT / "Parquets" / "Dictionary" / "dictionary_lake.parquet"
 DEFAULT_CROSSWALK_DIR = DATA_ROOT / "Paneled Datasets" / "Crosswalks"
 DEFAULT_FILLED_CROSSWALK_DIR = DEFAULT_CROSSWALK_DIR / "Filled"
 DEFAULT_TEMPLATE_PATH = DEFAULT_CROSSWALK_DIR / "hd_crosswalk_template.csv"

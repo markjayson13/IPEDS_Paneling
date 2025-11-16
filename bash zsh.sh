@@ -1,6 +1,7 @@
 # Code 
 #Dictionary
-Dictionary/01_ingest_dictionaries.py
+python3 Dictionary/01_ingest_dictionaries.py
+
 
 # Panelize raw data scripts:
 python3 Scripts/build_raw_panel.py
@@ -8,10 +9,10 @@ python3 Scripts/panelize_raw.py
 python3 Scripts/merge_raw_panels.py
 
 #HD and IC Unify and crosswalk scripts:
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/hd_build_crosswalk_template.py"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/Fill Scripts/auto_fill_hd_crosswalk.py"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Harmonize Scripts/stabilize_hd.py"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Validation Scripts/hd_validate_master_panel.py"
+python3 "CrossWalk Scripts/hd_build_crosswalk_template.py"
+python3 "CrossWalk Scripts/Fill Scripts/auto_fill_hd_crosswalk.py"
+python3 "Harmonize Scripts/stabilize_hd.py"
+python3 "Validation Scripts/hd_validate_master_panel.py"
 
 # SFA Unify and crosswalk scripts:
 python3 "Unification Scripts/combine_step0_finance.py"
@@ -40,7 +41,6 @@ python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scri
 python3 "CrossWalk Scripts/Fill Scripts/fill_finance_crosswalk.py"
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Harmonize Scripts/harmonize_finance_concepts.py"
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Validation Scripts/finance_validate_panel.py"
-
 
 
 

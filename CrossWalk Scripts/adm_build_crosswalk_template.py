@@ -20,7 +20,7 @@ import pandas as pd
 DEFAULT_STEP0 = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0adm/adm_step0_long.parquet"
 )
-DEFAULT_DICT = Path("/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/dictionary_lake.parquet")
+DEFAULT_DICT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
 DEFAULT_OUTPUT = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/adm_crosswalk.csv"
 )

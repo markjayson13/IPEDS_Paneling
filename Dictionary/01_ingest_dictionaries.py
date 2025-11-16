@@ -27,7 +27,7 @@ except ImportError as exc:  # pragma: no cover - startup guard
     raise
 
 ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas")
-DEFAULT_OUTPUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet")
+DEFAULT_OUTPUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
 DICT_NAME_PATTERN = re.compile(
     r"(?:^|[/_-])(dict|dictionary|varlist|variables?|layout|codebook)(?:$|[_-])",
     re.IGNORECASE,

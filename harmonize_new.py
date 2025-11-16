@@ -315,7 +315,12 @@ class CandidateSelection:
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Label-driven IPEDS harmonizer")
     parser.add_argument("--root", type=Path, default=Path("data/raw"), help="Raw data root containing year folders")
-    parser.add_argument("--lake", type=Path, default=Path("dictionary_lake.parquet"), help="Dictionary lake parquet path")
+    parser.add_argument(
+        "--lake",
+        type=Path,
+        default=Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet"),
+        help="Dictionary lake parquet path",
+    )
     parser.add_argument("--output", type=Path, default=PARQUET_OUTPUT_DIR / "panel_long.parquet", help="Output parquet path")
     parser.add_argument(
         "--years",

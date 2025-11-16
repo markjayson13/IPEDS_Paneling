@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 DEFAULT_DICT_LAKE = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet"
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet"
 )
 DEFAULT_OUTPUT = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_template.csv"

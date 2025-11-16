@@ -19,7 +19,7 @@ SURVEY_HINTS = ("SFA", "STUDENT FINANCIAL AID", "NET PRICE", "NET-PRICE")
 DEFAULT_WIDE_PANEL = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/panel_wide.csv")
 BASE_STEP0_SFA_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0sfa")
 BASE_SFA_LONG_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAlong")
-DEFAULT_DICTIONARY_LAKE = Path("dictionary_lake.parquet")
+DEFAULT_DICTIONARY_LAKE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
 
 
 def _resolve_dict_columns(df: pd.DataFrame, candidates: Iterable[str], required: bool = True) -> str | None:
