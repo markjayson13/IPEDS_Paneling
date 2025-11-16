@@ -258,6 +258,9 @@ def stabilize_hd(input_path: Path, crosswalk_path: Path, output_path: Path) -> p
     merged = raw.merge(expanded, on=["year", "survey", "varname"], how="inner")
     if merged.empty:
         raise ValueError("Merged HD/IC data is empty. Check crosswalk and input panel.")
+    merged = merged.sort_values(["unitid", "year"]).drop_duplicates(
+        subset=["unitid", "year", "concept_key"], keep="first"
+    )
     dup_mask = merged.duplicated(subset=["unitid", "year", "concept_key"], keep=False)
     if dup_mask.any():
         dup_rows = merged.loc[dup_mask, ["unitid", "year", "concept_key", "survey", "varname"]]

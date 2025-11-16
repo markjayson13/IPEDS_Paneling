@@ -1,5 +1,6 @@
 # Code 
 
+# Download IPEDS data for years 2004 to 2024
 python3 "Download Scripts/download_ipeds.py" \
 --out-root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
 --years 2004 (line 2024)
@@ -81,7 +82,9 @@ python3 "Validation Scripts/hd_validate_master_panel.py"
 python3 "Unification Scripts/combine_step0_finance.py"
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_sfa.py"
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/sfa_build_crosswalk_template.py"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/Fill Scripts/auto_fill_sfa_crosswalk.py"
+python3 "Harmonize Scripts/harmonize_sfa_concepts.py" \
+  --input-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0sfa/sfa_step0_long.parquet" \
+  --crosswalk "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/sfa_crosswalk_filled.csv"
 python3 "Harmonize Scripts/harmonize_finance_concepts.py" \
   --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0Finlong/finance_step0_long.parquet"
 python3 "Validation Scripts/validate_sfa_panel.py"
@@ -93,10 +96,10 @@ python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Harmonize Scri
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Validation Scripts/validate_admissions.py"
 
 # Enrollment Unify and crosswalk scripts:
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_enrollment.py"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/build_efres_residency_buckets.py"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/enrollment_build_crosswalk_template.py"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/autofill_enrollment_crosswalk_core.py"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/build_efres_residency_buckets.py" --efres "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/efres_long.parquet" --hd "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/HD/hd_state_panel.parquet" --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/efres_residency_buckets.parquet"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/enrollment_build_crosswalk_template.py" --dictionary "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet" --years "2004-2024" --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/enrollment_crosswalk_template.csv"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/Fill Scripts/autofill_enrollment_crosswalk_core.py" --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/enrollment_crosswalk_template.csv" --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/enrollment_crosswalk_autofilled.csv"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_enrollment.py" --dictionary "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet" --panel-root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections" --years "2004-2024" --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/enrollment_step0_long.parquet"
 
 #Fiannce Unify and crosswalk scripts:
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_finance.py"
@@ -280,5 +283,3 @@ python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/build_efres_re
   --efres "/path/to/efres_long.parquet" \
   --hd "/path/to/hd_state_panel.parquet" \
   --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/efres_residency_buckets.parquet"
-
-
