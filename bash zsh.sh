@@ -103,11 +103,11 @@ python3 "Unification Scripts/unify_enrollment.py"
 python3 "Validation Scripts/validate_enrollment_panel.py"
 
 #Fiannce Unify and crosswalk scripts:
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_finance.py"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/finance_build_crosswalk_template.py"
+python3 "CrossWalk Scripts/finance_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/Fill Scripts/fill_finance_crosswalk.py"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Harmonize Scripts/harmonize_finance_concepts.py"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Validation Scripts/finance_validate_panel.py"
+python3 "Harmonize Scripts/harmonize_finance_concepts.py" \
+  --step0 "/Users/.../Step0Finlong/finance_step0_long.parquet"
+python3 "Validation Scripts/finance_validate_panel.py"
 
 
 
