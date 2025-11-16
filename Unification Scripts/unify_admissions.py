@@ -46,7 +46,9 @@ SUFFIX_YEAR_RE = re.compile(r"^(?P<var>[A-Z0-9_]+)[_-](?P<survey>[A-Z]{2,5})(?P<
 SURVEY_VAR_RE = re.compile(r"^(?P<survey>[A-Z]{2,5})[_-](?P<var>[A-Z0-9_]+)$")
 
 DEFAULT_DICT = Path("data/dictionary_lake.parquet")
-DEFAULT_OUTPUT = Path("data/adm_step0_long.parquet")
+DEFAULT_OUTPUT = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0adm/adm_step0_long.parquet"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -95,6 +97,14 @@ def select_admissions_varcodes(lake: pd.DataFrame, var_col: str, survey_col: str
         mask &= df[survey_col].isin(SURVEY_FILTER)
     subset = df.loc[mask, var_col]
     varcodes = set(subset.dropna().unique())
+    if not varcodes and survey_col:
+        logging.warning(
+            "No admissions varcodes found with SURVEY_FILTER=%s. Relaxing survey filter.",
+            ",".join(sorted(SURVEY_FILTER)),
+        )
+        mask = df[var_col].isin(ADMISSIONS_VAR_SEEDS)
+        subset = df.loc[mask, var_col]
+        varcodes = set(subset.dropna().unique())
     if not varcodes:
         raise SystemExit("No admissions varcodes found in dictionary_lake. Check dictionary filters.")
     return varcodes
@@ -129,8 +139,9 @@ def match_column_to_var(column: str, varcodes: set[str]) -> str | None:
         match = pattern.match(name)
         if not match:
             continue
+        survey = match.group("survey").strip("_").upper()
         candidate = match.group("var").strip("_").upper()
-        if candidate in varcodes:
+        if survey in SURVEY_FILTER and candidate in varcodes:
             return candidate
     return None
 
@@ -143,7 +154,19 @@ def build_long_for_year(df: pd.DataFrame, year: int, varcodes: set[str]) -> pd.D
     if "YEAR" not in data.columns:
         data["YEAR"] = year
     else:
-        data["YEAR"] = pd.to_numeric(data["YEAR"], errors="coerce").fillna(year).astype(int)
+        data["YEAR"] = pd.to_numeric(data["YEAR"], errors="coerce")
+        non_missing = data["YEAR"].dropna().unique()
+        if len(non_missing) == 0:
+            logging.warning("All YEAR values missing in panel for nominal YEAR=%s; overwriting with nominal year.", year)
+            data["YEAR"] = year
+        elif len(non_missing) > 1:
+            raise RuntimeError(f"Multiple YEAR values found in panel for nominal YEAR={year}: {non_missing}")
+        else:
+            canonical = int(non_missing[0])
+            if canonical != year:
+                logging.error("Panel YEAR=%s does not match nominal YEAR=%s", canonical, year)
+                raise RuntimeError(f"YEAR mismatch for panel file {year}: found {canonical}")
+            data["YEAR"] = canonical
 
     col_map: dict[str, str] = {}
     for col in data.columns:
@@ -156,6 +179,13 @@ def build_long_for_year(df: pd.DataFrame, year: int, varcodes: set[str]) -> pd.D
     if not col_map:
         logging.warning("No admissions columns found for YEAR=%s", year)
         return None
+
+    logging.info(
+        "YEAR=%s: mapped %d admissions columns (%s)",
+        year,
+        len(col_map),
+        ", ".join(sorted(set(col_map.values()))),
+    )
 
     subset = data[["UNITID", "YEAR", *col_map.keys()]].copy()
     subset["UNITID"] = pd.to_numeric(subset["UNITID"], errors="coerce")
@@ -188,11 +218,11 @@ def combine_years(frames: list[pd.DataFrame]) -> pd.DataFrame:
     conflict_counts = long_all.groupby(["UNITID", "YEAR", "source_var"])["value"].nunique()
     conflicts = conflict_counts[conflict_counts > 1]
     if not conflicts.empty:
-        logging.warning(
-            "%s UNITID/YEAR/source_var combinations have conflicting values; keeping first occurrence.",
-            len(conflicts),
+        sample = conflicts.head(10)
+        logging.error("Found %s conflicting UNITID/YEAR/source_var combos. Sample:\n%s", len(conflicts), sample)
+        raise RuntimeError(
+            "Admissions unify step found multiple distinct values for the same UNITID/YEAR/source_var."
         )
-        long_all = long_all.drop_duplicates(subset=["UNITID", "YEAR", "source_var"], keep="first")
 
     return long_all
 

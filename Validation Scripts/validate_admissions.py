@@ -10,8 +10,10 @@ from typing import Iterable, List
 
 import pandas as pd
 
-DEFAULT_WIDE = Path("data/adm_concepts_wide.parquet")
-DEFAULT_OUT_DIR = Path("validation/adm")
+DEFAULT_WIDE = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/ADMwide/adm_concepts_wide.parquet"
+)
+DEFAULT_OUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Validation")
 
 UNITID_CANDIDATES = ["UNITID", "unitid", "UNIT_ID", "unit_id"]
 YEAR_CANDIDATES = ["YEAR", "year", "SURVEY_YEAR", "survey_year", "panel_year"]
@@ -88,6 +90,13 @@ def ensure_numeric(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce")
 
 
+def write_dual(df: pd.DataFrame, csv_path: Path) -> None:
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(csv_path, index=False)
+    parquet_path = csv_path.with_suffix(".parquet")
+    df.to_parquet(parquet_path, index=False)
+
+
 def check_funnel(df: pd.DataFrame, unitid_col: str, year_col: str, out_dir: Path) -> List[str]:
     lines: List[str] = []
     violation_frames: list[pd.DataFrame] = []
@@ -117,8 +126,8 @@ def check_funnel(df: pd.DataFrame, unitid_col: str, year_col: str, out_dir: Path
     if violation_frames:
         combined = pd.concat(violation_frames, ignore_index=True)
         out_path = out_dir / "adm_funnel_violations.csv"
-        combined.to_csv(out_path, index=False)
-        lines.append(f"Saved funnel violation details to {out_path}")
+        write_dual(combined, out_path)
+        lines.append(f"Saved funnel violation details to {out_path} and {out_path.with_suffix('.parquet')}")
     return lines
 
 
@@ -149,8 +158,8 @@ def check_percentiles(df: pd.DataFrame, unitid_col: str, year_col: str, out_dir:
     if violation_frames:
         combined = pd.concat(violation_frames, ignore_index=True)
         out_path = out_dir / "adm_percentile_order_violations.csv"
-        combined.to_csv(out_path, index=False)
-        lines.append(f"Saved percentile violation details to {out_path}")
+        write_dual(combined, out_path)
+        lines.append(f"Saved percentile violation details to {out_path} and {out_path.with_suffix('.parquet')}")
     return lines
 
 
@@ -190,8 +199,8 @@ def check_score_ranges(df: pd.DataFrame, unitid_col: str, year_col: str, out_dir
     if violation_frames:
         combined = pd.concat(violation_frames, ignore_index=True)
         out_path = out_dir / "adm_score_range_violations.csv"
-        combined.to_csv(out_path, index=False)
-        lines.append(f"Saved score range violation details to {out_path}")
+        write_dual(combined, out_path)
+        lines.append(f"Saved score range violation details to {out_path} and {out_path.with_suffix('.parquet')}")
     if not lines:
         lines.append("No out-of-range SAT/ACT values detected.")
     return lines
@@ -228,7 +237,17 @@ def evaluate_open_admissions(
         lines.append(f"Open admissions flag column '{flag_col}' missing; skipping check.")
         return lines
     subset = open_df[[open_unitid, open_year, flag_col]].copy()
-    subset[flag_col] = ensure_numeric(subset[flag_col]).fillna(0)
+    numeric_flags = ensure_numeric(subset[flag_col])
+    if numeric_flags.notna().any():
+        subset[flag_col] = numeric_flags.fillna(0)
+    else:
+        values = subset[flag_col].astype(str).str.strip().str.upper()
+        parsed = pd.Series(0, index=values.index, dtype="float64")
+        open_mask = values.isin(["Y", "YES", "1", "TRUE"])
+        closed_mask = values.isin(["N", "NO", "0", "FALSE"])
+        parsed.loc[open_mask] = 1.0
+        parsed.loc[~(open_mask | closed_mask)] = 0.0
+        subset[flag_col] = parsed
     collapsed = subset.groupby([open_unitid, open_year], as_index=False)[flag_col].max()
     collapsed.rename(columns={open_unitid: unitid_col, open_year: year_col}, inplace=True)
 
@@ -245,6 +264,77 @@ def evaluate_open_admissions(
     closed_missing = merged.loc[closed_mask, "ADM_N_APPLICANTS_TOTAL"].isna().mean()
     lines.append(f"Open admissions: {open_nonmissing:.2%} have applicant counts present.")
     lines.append(f"Selective institutions: {closed_missing:.2%} missing applicant counts.")
+    return lines
+
+
+def summarize_coverage(df: pd.DataFrame, unitid_col: str, year_col: str, out_dir: Path) -> List[str]:
+    lines: List[str] = []
+    concepts = [
+        "ADM_N_APPLICANTS_TOTAL",
+        "ADM_N_ADMITTED_TOTAL",
+        "ADM_N_ENROLLED_TOTAL",
+    ]
+    available = [col for col in concepts if col in df.columns]
+    if not available:
+        lines.append("Coverage summary skipped; required columns missing.")
+        return lines
+    records = []
+    for col in available:
+        series = df[[year_col, col]].copy()
+        series[col] = ensure_numeric(series[col])
+        grouped = (
+            series.groupby(year_col)[col]
+            .apply(lambda s: s.notna().sum())
+            .rename("non_missing")
+            .reset_index()
+        )
+        grouped["concept_key"] = col
+        records.append(grouped)
+    if not records:
+        lines.append("Coverage summary unavailable.")
+        return lines
+    coverage_df = pd.concat(records, ignore_index=True)
+    csv_path = out_dir / "adm_coverage_by_year.csv"
+    write_dual(coverage_df, csv_path)
+    lines.append(
+        f"Wrote coverage summary (non-missing counts by year) to {csv_path} and {csv_path.with_suffix('.parquet')}"
+    )
+    return lines
+
+
+def check_non_negative_counts(df: pd.DataFrame, unitid_col: str, year_col: str, out_dir: Path) -> List[str]:
+    lines: List[str] = []
+    cols = [
+        "ADM_N_APPLICANTS_TOTAL",
+        "ADM_N_ADMITTED_TOTAL",
+        "ADM_N_ENROLLED_TOTAL",
+        "ADM_N_APPLICANTS_MEN",
+        "ADM_N_ADMITTED_MEN",
+        "ADM_N_ENROLLED_MEN",
+        "ADM_N_APPLICANTS_WOMEN",
+        "ADM_N_ADMITTED_WOMEN",
+        "ADM_N_ENROLLED_WOMEN",
+    ]
+    cols = [c for c in cols if c in df.columns]
+    if not cols:
+        lines.append("No Admissions count columns available for non-negativity check.")
+        return lines
+    violation_frames: list[pd.DataFrame] = []
+    for col in cols:
+        series = df[[unitid_col, year_col, col]].copy()
+        series[col] = ensure_numeric(series[col])
+        mask = series[col] < 0
+        count = mask.sum()
+        if count:
+            lines.append(f"{col}: {count} negative values")
+            violation_frames.append(series.loc[mask])
+    if violation_frames:
+        combined = pd.concat(violation_frames, ignore_index=True)
+        out_path = out_dir / "adm_negative_counts.csv"
+        write_dual(combined, out_path)
+        lines.append(f"Saved negative count details to {out_path} and {out_path.with_suffix('.parquet')}")
+    if not violation_frames:
+        lines.append("No negative Admissions counts detected.")
     return lines
 
 
@@ -341,7 +431,9 @@ def main() -> None:
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     sections = [
+        ("Coverage summary", summarize_coverage(df, unitid_col, year_col, args.out_dir)),
         ("Funnel checks", check_funnel(df, unitid_col, year_col, args.out_dir)),
+        ("Non-negative counts", check_non_negative_counts(df, unitid_col, year_col, args.out_dir)),
         ("Percentile ordering", check_percentiles(df, unitid_col, year_col, args.out_dir)),
         ("Score ranges", check_score_ranges(df, unitid_col, year_col, args.out_dir)),
         ("Open admissions", evaluate_open_admissions(df, unitid_col, year_col, args.open_admissions, args.open_flag_col)),

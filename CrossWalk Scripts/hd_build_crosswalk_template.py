@@ -8,6 +8,11 @@ from typing import Iterable
 import pandas as pd
 
 
+DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
+DEFAULT_DICT_LAKE_PATH = DATA_ROOT / "Parquets" / "dictionary_lake.parquet"
+DEFAULT_TEMPLATE_PATH = DATA_ROOT / "Paneled Datasets" / "Crosswalks" / "hd_crosswalk_template.csv"
+
+
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Return a copy of *df* with lowercase column names for uniform access."""
     df = df.copy()
@@ -23,7 +28,7 @@ def _filter_hd_ic(df: pd.DataFrame) -> pd.DataFrame:
     if "survey_hint" in df.columns:
         hint = df["survey_hint"].astype(str).str.lower()
         mask |= hint.str.contains("institutional", na=False)
-        mask |= hint.str.contains("hd", na=False)
+        mask |= hint.str.contains(r"\bhd\b", na=False, regex=True)
 
     return df[mask]
 
@@ -53,12 +58,10 @@ def build_crosswalk_template(dict_lake: Path) -> pd.DataFrame:
         agg_dict["varlab"] = "first"
 
     grouped = filtered.groupby(group_cols, as_index=False).agg(agg_dict)
-    grouped.columns = [
-        "survey",
-        "varname",
-        "year_start",
-        "year_end",
-    ] + (["varlab"] if "varlab" in filtered.columns else [])
+    rename_map = {"year_min": "year_start", "year_max": "year_end"}
+    if "varlab_first" in grouped.columns:
+        rename_map["varlab_first"] = "varlab"
+    grouped = grouped.rename(columns=rename_map)
 
     grouped["concept_key"] = ""
     grouped["notes"] = ""
@@ -85,13 +88,13 @@ def main() -> None:
     parser.add_argument(
         "--dict-lake",
         type=Path,
-        default=Path("dictionary_lake.parquet"),
+        default=DEFAULT_DICT_LAKE_PATH,
         help="Path to the dictionary_lake.parquet file.",
     )
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path("hd_crosswalk_template.csv"),
+        default=DEFAULT_TEMPLATE_PATH,
         help="Output path for the crosswalk template CSV.",
     )
     args = parser.parse_args()

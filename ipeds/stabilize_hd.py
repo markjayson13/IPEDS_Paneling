@@ -9,6 +9,10 @@ import numpy as np
 import pandas as pd
 
 
+DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
+DEFAULT_CROSSWALK_PATH = DATA_ROOT / "Paneled Datasets" / "Crosswalks" / "hd_crosswalk.csv"
+DEFAULT_OUTPUT_PATH = DATA_ROOT / "Parquets" / "Unify" / "HDICwide" / "hd_master_panel.parquet"
+
 EVER_TRUE_COLS = ["STABLE_HBCU", "STABLE_TRIBAL"]
 GAP_FILL_COLS = [
     "STABLE_CONTROL",
@@ -40,6 +44,13 @@ def _prepare_crosswalk_df(df: pd.DataFrame) -> pd.DataFrame:
     df["year_end"] = pd.to_numeric(df["year_end"], errors="coerce").astype("Int64")
     if df[["year_start", "year_end"]].isna().any().any():
         raise ValueError("Crosswalk contains non-numeric year ranges.")
+    bad_range = df["year_start"] > df["year_end"]
+    if bad_range.any():
+        bad_rows = df.loc[bad_range, ["concept_key", "survey", "source_var", "year_start", "year_end"]]
+        raise ValueError(
+            "Crosswalk has year_start > year_end for these rows:\n"
+            f"{bad_rows.to_string(index=False)}"
+        )
     return df
 
 
@@ -64,7 +75,15 @@ def _expand_crosswalk(df: pd.DataFrame) -> pd.DataFrame:
             )
     if not records:
         raise ValueError("Crosswalk expansion produced no rows.")
-    return pd.DataFrame.from_records(records)
+    expanded = pd.DataFrame.from_records(records)
+    dup_mask = expanded.duplicated(subset=["survey", "year", "varname"], keep=False)
+    if dup_mask.any():
+        dup_rows = expanded.loc[dup_mask, ["concept_key", "survey", "year", "varname"]]
+        raise ValueError(
+            "Crosswalk expansion produced non-unique (survey, year, varname) combinations:\n"
+            f"{dup_rows.head(10).to_string(index=False)}"
+        )
+    return expanded
 
 
 def _prepare_raw_panel_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -75,6 +94,10 @@ def _prepare_raw_panel_df(df: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Input panel missing required columns: {sorted(missing)}")
 
+    df["unitid"] = pd.to_numeric(df["unitid"], errors="raise")
+    df["year"] = pd.to_numeric(df["year"], errors="raise")
+    if df["unitid"].isna().any() or df["year"].isna().any():
+        raise ValueError("Input panel has missing unitid or year values.")
     df["survey"] = df["survey"].astype(str).str.upper()
     df["varname"] = df["varname"].astype(str)
     return df
@@ -120,6 +143,23 @@ def _coerce_types(df: pd.DataFrame) -> pd.DataFrame:
         if converted.notna().any() and converted.isna().sum() == df[col].isna().sum():
             df[col] = converted
     return df
+
+
+def _normalize_binary_flag(df: pd.DataFrame, col: str) -> None:
+    if col not in df.columns:
+        return
+    numeric = pd.to_numeric(df[col], errors="coerce")
+    mask_yes = numeric == 1
+    mask_no = numeric.isin({0, 2})
+    unexpected = numeric[~(mask_yes | mask_no | numeric.isna())].unique()
+    if len(unexpected):
+        raise ValueError(
+            f"{col} contains unexpected non-binary codes: {sorted(map(float, unexpected))}"
+        )
+    normalized = pd.Series(np.nan, index=df.index, dtype="float64")
+    normalized[mask_yes] = 1.0
+    normalized[mask_no] = 0.0
+    df[col] = normalized
 
 
 def _propagate_ever_true(df: pd.DataFrame, col: str) -> None:
@@ -171,12 +211,26 @@ def stabilize_hd(input_path: Path, crosswalk_path: Path, output_path: Path) -> p
     merged = raw.merge(expanded, on=["year", "survey", "varname"], how="inner")
     if merged.empty:
         raise ValueError("Merged HD/IC data is empty. Check crosswalk and input panel.")
+    dup_mask = merged.duplicated(subset=["unitid", "year", "concept_key"], keep=False)
+    if dup_mask.any():
+        dup_rows = merged.loc[dup_mask, ["unitid", "year", "concept_key", "survey", "varname"]]
+        raise ValueError(
+            "Found duplicate (unitid, year, concept_key) rows before pivot. "
+            "Check for raw panel duplicates or crosswalk overlaps:\n"
+            f"{dup_rows.head(10).to_string(index=False)}"
+        )
 
     wide = _pivot_wide(merged)
     wide = _coerce_types(wide)
 
     for col in EVER_TRUE_COLS:
+        _normalize_binary_flag(wide, col)
+
+    for col in EVER_TRUE_COLS:
         _propagate_ever_true(wide, col)
+        if col in wide.columns and not wide[col].isna().all():
+            numeric = pd.to_numeric(wide[col], errors="coerce")
+            wide[col] = pd.Series(pd.array(numeric.round(), dtype="Int64"), index=wide.index)
 
     wide = wide.sort_values(["unitid", "year"]).reset_index(drop=True)
 
@@ -285,6 +339,17 @@ def _run_smoke_test() -> None:
     unit1_carn = wide.loc[wide["unitid"] == 1001, "CARNEGIE_2015"].tolist()
     assert all(val == 15 for val in unit1_carn), "Carnegie propagation failed."
 
+    unit1_tribal = wide.loc[wide["unitid"] == 1001, "STABLE_TRIBAL"].unique()
+    assert len(unit1_tribal) == 1 and float(unit1_tribal[0]) == 0.0, "Tribal flag did not normalize."
+
+    stfips = wide.loc[wide["unitid"] == 1001, "STABLE_STFIPS"].unique()
+    assert len(stfips) == 1 and stfips[0] == "AL", "STABLE_STFIPS gap fill failed."
+
+    latest_name = wide.loc[wide["unitid"] == 1001, "STABLE_INSTITUTION_NAME"].unique()
+    assert (
+        len(latest_name) == 1 and latest_name[0] == "Alpha College University"
+    ), "Latest institution name propagation failed."
+
     print("Smoke test passed: propagation logic behaves as expected.")
 
 
@@ -298,13 +363,13 @@ def main() -> None:
     parser.add_argument(
         "--crosswalk",
         type=Path,
-        default=Path("hd_crosswalk.csv"),
+        default=DEFAULT_CROSSWALK_PATH,
         help="Path to the manually curated HD crosswalk CSV.",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("hd_master_panel.parquet"),
+        default=DEFAULT_OUTPUT_PATH,
         help="Output path for the stabilized HD panel.",
     )
     parser.add_argument(

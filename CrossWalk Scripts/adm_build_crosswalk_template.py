@@ -17,9 +17,13 @@ from typing import Iterable
 
 import pandas as pd
 
-DEFAULT_STEP0 = Path("data/adm_step0_long.parquet")
+DEFAULT_STEP0 = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0adm/adm_step0_long.parquet"
+)
 DEFAULT_DICT = Path("data/dictionary_lake.parquet")
-DEFAULT_OUTPUT = Path("data/adm_crosswalk.csv")
+DEFAULT_OUTPUT = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/adm_crosswalk.csv"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -73,11 +77,17 @@ def load_dictionary(path: Path) -> tuple[pd.DataFrame, str, str | None, str | No
     dict_copy[var_col] = dict_copy[var_col].astype(str).str.strip().str.upper()
     if year_col:
         dict_copy[year_col] = pd.to_numeric(dict_copy[year_col], errors="coerce")
+        year_stats = (
+            dict_copy.groupby(var_col)[year_col].agg(dict_min_year="min", dict_max_year="max").reset_index()
+        )
+        dict_copy = dict_copy.merge(year_stats, on=var_col, how="left")
         dict_copy.sort_values([var_col, year_col], inplace=True)
     else:
         dict_copy.sort_values(var_col, inplace=True)
-    dict_unique = dict_copy.drop_duplicates(subset=[var_col], keep="first")
-    columns = [var_col]
+        dict_copy["dict_min_year"] = pd.NA
+        dict_copy["dict_max_year"] = pd.NA
+    dict_unique = dict_copy.drop_duplicates(subset=[var_col], keep="last")
+    columns = [var_col, "dict_min_year", "dict_max_year"]
     for col in (label_col, survey_col, survey_hint_col):
         if col:
             columns.append(col)
@@ -92,6 +102,8 @@ def build_template(summary: pd.DataFrame, dictionary: pd.DataFrame, var_col: str
             "source_var": merged["source_var"],
             "year_start": merged["min_year"],
             "year_end": merged["max_year"],
+            "dict_min_year": merged.get("dict_min_year"),
+            "dict_max_year": merged.get("dict_max_year"),
             "weight": 1.0,
             "note": "",
         }
