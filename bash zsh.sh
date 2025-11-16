@@ -14,11 +14,13 @@ python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Harmonize Scri
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Validation Scripts/hd_validate_master_panel.py"
 
 # SFA Unify and crosswalk scripts:
+python3 "Unification Scripts/combine_step0_finance.py"
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_sfa.py"
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/sfa_build_crosswalk_template.py"
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/Fill Scripts/auto_fill_sfa_crosswalk.py"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Harmonize Scripts/harmonize_sfa_concepts.py"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Validation Scripts/validate_sfa_panel.py"
+python3 "Harmonize Scripts/harmonize_finance_concepts.py" \
+  --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0Finlong/finance_step0_long.parquet"
+python3 "Validation Scripts/validate_sfa_panel.py"
 
 #ADM Unify and crosswalk scripts:
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_admissions.py" 

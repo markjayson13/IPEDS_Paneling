@@ -13,6 +13,15 @@ DEFAULT_RAW_HDIC = DATA_ROOT / "Parquets" / "panel_long_hd_ic.parquet"
 DEFAULT_MASTER = DATA_ROOT / "Paneled Datasets" / "Final" / "hd_master_panel.csv"
 FALLBACK_MASTER = DATA_ROOT / "Parquets" / "Unify" / "HDICwide" / "hd_master_panel.parquet"
 DEFAULT_CROSSWALK_PATH = DATA_ROOT / "Paneled Datasets" / "Crosswalks" / "Filled" / "hd_crosswalk.csv"
+SURVEY_SYNONYMS = {
+    "INSTITUTIONALCHARACTERISTICS": "HD",
+    "INSTITUTIONALCHARACTERISTICSIC": "IC",
+    "INSTITUTIONALCHARACTERISTICSIC_A": "IC",
+}
+
+def _normalize_survey_label(label: str) -> str:
+    cleaned = label.strip().upper().replace(" ", "")
+    return SURVEY_SYNONYMS.get(cleaned, cleaned)
 
 CARNEGIE_COLS: List[str] = [
     "CARNEGIE_2005",
@@ -63,7 +72,7 @@ def load_crosswalk_surveys(crosswalk_path: Path) -> list[str]:
         )
         return ["HD", "IC"]
     surveys = sorted(
-        set(str(s).upper() for s in cw["survey"].dropna().unique())
+        set(_normalize_survey_label(str(s)) for s in cw["survey"].dropna().unique())
     )
     if not surveys:
         print(
@@ -85,7 +94,7 @@ def load_raw_hd(raw_path: Path, surveys: list[str]) -> pd.DataFrame:
     missing = required - set(df.columns)
     if missing:
         raise SystemExit(f"Raw HD/IC missing required columns: {sorted(missing)}")
-    df["survey"] = df["survey"].astype(str).str.upper()
+    df["survey"] = df["survey"].astype(str).map(_normalize_survey_label)
     survey_set = {s.upper() for s in surveys}
     mask = df["survey"].isin(survey_set)
     return df.loc[mask].copy()

@@ -33,6 +33,15 @@ DICT_NAME_PATTERN = re.compile(
     re.IGNORECASE,
 )
 SUPPORTED_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt"}
+DICTIONARY_VAR_COLS = {"varname", "variable", "var", "var_name", "name", "column"}
+DICTIONARY_LABEL_COLS = {
+    "label",
+    "varlab",
+    "description",
+    "variable label",
+    "variable_label",
+    "varlabel",
+}
 VAR_PREFIX_RE = re.compile(
     r"^(F[123]A|EFFY|EFIA?|EFIB|EFIC|EFID|E1D|OM|HR|IC|SFA|GRS?|PE|AL|ADM|HD|C)",
     re.IGNORECASE,
@@ -433,6 +442,31 @@ def looks_like_dictionary(path: Path) -> bool:
     )
 
 
+def looks_like_dictionary_by_content(path: Path, max_rows: int = 50) -> bool:
+    """
+    Lightly inspect the file contents to see if they look like a dictionary.
+    Only used for files that do not already match looks_like_dictionary.
+    """
+    suffix = path.suffix.lower()
+    try:
+        if suffix in {".xlsx", ".xls"}:
+            engine = "openpyxl" if suffix == ".xlsx" else "xlrd"
+            xls = pd.ExcelFile(path, engine=engine)
+            sheet = xls.sheet_names[0]
+            preview = xls.parse(sheet_name=sheet, nrows=max_rows, dtype=str)
+        elif suffix in {".csv", ".txt"}:
+            preview = pd.read_csv(path, nrows=max_rows, dtype=str, encoding_errors="ignore")
+        else:
+            return False
+    except Exception:  # noqa: BLE001
+        return False
+
+    cols = {c.strip().lower() for c in preview.columns if isinstance(c, str)}
+    has_var = bool(cols & DICTIONARY_VAR_COLS)
+    has_label = bool(cols & DICTIONARY_LABEL_COLS)
+    return has_var and has_label
+
+
 def iter_dictionary_files(year_dir: Path) -> Iterable[Path]:
     """Yield candidate dictionary files under a given year directory."""
     for path in year_dir.rglob("*"):
@@ -441,6 +475,17 @@ def iter_dictionary_files(year_dir: Path) -> Iterable[Path]:
         if path.suffix.lower() not in SUPPORTED_SUFFIXES:
             continue
         if looks_like_dictionary(path):
+            yield path
+            continue
+
+        stem = path.stem.lower()
+        parent = path.parent.name.lower()
+        looks_hd_icish = any(
+            token in stem or token in parent for token in {"hd", "ic", "instit", "directory"}
+        )
+        if not looks_hd_icish:
+            continue
+        if looks_like_dictionary_by_content(path):
             yield path
 
 
@@ -709,6 +754,9 @@ def main() -> None:
         .reset_index(name="n_rows")
     )
     ingest_profile.to_csv(args.output.with_name("ingest_profile.csv"), index=False)
+    print("\n=== Ingest profile (year x survey, first 20 rows) ===")
+    with pd.option_context("display.max_rows", 20, "display.max_columns", 3):
+        print(ingest_profile.head(20).to_string(index=False))
 
     dup_mask = lake.duplicated(["year", "survey", "label_norm", "varname"], keep=False)
     ingest_dupes = (
