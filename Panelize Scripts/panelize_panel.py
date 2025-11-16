@@ -20,12 +20,20 @@ from typing import List
 
 import pandas as pd
 
-DEFAULT_OUTPUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Artifacts/panel_wide.csv")
+DEFAULT_INPUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long.parquet")
+DEFAULT_OUTPUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Final/panel_wide.csv")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate a consolidated panel_wide.csv")
-    parser.add_argument("--input", type=Path, required=True, help="Path to panel_long.parquet")
+    parser.add_argument(
+        "--input",
+        "--source",
+        dest="input",
+        type=Path,
+        default=DEFAULT_INPUT,
+        help=f"Path to panel_long.parquet (default: {DEFAULT_INPUT})",
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -157,4 +165,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
