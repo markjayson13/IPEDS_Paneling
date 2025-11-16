@@ -60,6 +60,11 @@ def build_crosswalk_template(dict_lake: Path) -> pd.DataFrame:
         agg_dict["varlab"] = "first"
 
     grouped = filtered.groupby(group_cols, as_index=False).agg(agg_dict)
+    if isinstance(grouped.columns, pd.MultiIndex):
+        grouped.columns = [
+            "_".join(part for part in col if part).rstrip("_") if isinstance(col, tuple) else col
+            for col in grouped.columns
+        ]
     rename_map = {"year_min": "year_start", "year_max": "year_end"}
     if "varlab_first" in grouped.columns:
         rename_map["varlab_first"] = "varlab"

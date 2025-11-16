@@ -69,6 +69,8 @@ def expand_crosswalk(crosswalk: pd.DataFrame) -> pd.DataFrame:
 
 
 def harmonize(long_df: pd.DataFrame, crosswalk_df: pd.DataFrame, unitid_col: str, year_col: str) -> pd.DataFrame:
+    long_df = long_df.copy()
+    long_df[year_col] = pd.to_numeric(long_df[year_col], errors="coerce").astype("Int64")
     expanded_cw = expand_crosswalk(crosswalk_df)
     if expanded_cw.empty:
         logging.warning("Expanded SFA crosswalk is empty; no concepts can be produced.")
@@ -165,8 +167,8 @@ def main() -> None:
 
     long_df = long_df.copy()
     crosswalk_df = crosswalk_df.copy()
-    long_df["source_var"] = long_df["source_var"].astype(str).str.upper()
-    crosswalk_df["source_var"] = crosswalk_df["source_var"].astype(str).str.upper()
+    long_df["source_var"] = long_df["source_var"].astype(str).str.strip().str.upper()
+    crosswalk_df["source_var"] = crosswalk_df["source_var"].astype(str).str.strip().str.upper()
 
     try:
         unitid_col = resolve_column(long_df, args.unitid_col, UNITID_CANDIDATES)

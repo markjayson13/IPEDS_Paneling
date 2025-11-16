@@ -108,7 +108,7 @@ def build_long_panel(
         return empty
     subset = df[[unitid_col, year_col] + sfa_cols].copy()
     long_df = subset.melt(id_vars=[unitid_col, year_col], var_name="source_var", value_name="value")
-    long_df["source_var"] = long_df["source_var"].astype(str).str.upper()
+    long_df["source_var"] = long_df["source_var"].astype(str).str.strip().str.upper()
     long_df["value"] = pd.to_numeric(long_df["value"], errors="coerce")
     long_df.dropna(subset=["value"], inplace=True)
     long_df.rename(columns={unitid_col: "UNITID", year_col: "YEAR"}, inplace=True)

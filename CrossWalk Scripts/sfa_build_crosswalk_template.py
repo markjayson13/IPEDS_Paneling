@@ -48,7 +48,7 @@ def build_template(df: pd.DataFrame, year_col: str, var_col: str, survey_col: st
     filtered = filtered.drop_duplicates(subset=[var_col, year_col])
     template = pd.DataFrame({
         "concept_key": "",
-        "source_var": filtered[var_col].astype(str).str.upper(),
+        "source_var": filtered[var_col].astype(str).str.strip().str.upper(),
         "year_start": filtered[year_col],
         "year_end": filtered[year_col],
         "weight": 1.0,
