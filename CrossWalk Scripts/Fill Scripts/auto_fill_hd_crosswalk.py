@@ -30,6 +30,20 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
 
+from concept_keys import (
+    CARNEGIE_2005,
+    CARNEGIE_2010,
+    CARNEGIE_2015,
+    CARNEGIE_2018,
+    CARNEGIE_2021,
+    STABLE_CONTROL,
+    STABLE_HBCU,
+    STABLE_INSTITUTION_NAME,
+    STABLE_SECTOR,
+    STABLE_STFIPS,
+    STABLE_TRIBAL,
+)
+
 # --------------------------------------------------------------------
 # Canonical paths (same base you use elsewhere)
 # --------------------------------------------------------------------
@@ -45,12 +59,12 @@ DEFAULT_OUTPUT_PATH = DEFAULT_CROSSWALK_DIR / "hd_crosswalk.csv"
 # --------------------------------------------------------------------
 EXACT_VAR_TO_CONCEPT: Dict[str, str] = {
     # Core stable vars used by the HD stabilizer
-    "INSTNM": "STABLE_INSTITUTION_NAME",
-    "SECTOR": "STABLE_SECTOR",
-    "STABBR": "STABLE_STFIPS",
-    "HBCU": "STABLE_HBCU",
-    "TRIBAL": "STABLE_TRIBAL",
-    "CONTROL": "STABLE_CONTROL",  # may not be present in your current template yet
+    "INSTNM": STABLE_INSTITUTION_NAME,
+    "SECTOR": STABLE_SECTOR,
+    "STABBR": STABLE_STFIPS,
+    "HBCU": STABLE_HBCU,
+    "TRIBAL": STABLE_TRIBAL,
+    "CONTROL": STABLE_CONTROL,  # may not be present in your current template yet
 
     # You can add more here later, e.g.:
     # "LOCALE": "STABLE_LOCALE",
@@ -75,11 +89,11 @@ CARNEGIE_SOURCE_VARS = {
 #   - 2018 basic: starting 2018-19
 #   - 2021 basic: starting 2021 update
 CARNEGIE_VERSION_WINDOWS: List[Tuple[str, int, int]] = [
-    ("CARNEGIE_2005", 2005, 2010),  # Treat early years as 2005 basic
-    ("CARNEGIE_2010", 2011, 2014),
-    ("CARNEGIE_2015", 2015, 2017),
-    ("CARNEGIE_2018", 2018, 2020),
-    ("CARNEGIE_2021", 2021, 2100),
+    (CARNEGIE_2005, 2005, 2010),  # Treat early years as 2005 basic
+    (CARNEGIE_2010, 2011, 2014),
+    (CARNEGIE_2015, 2015, 2017),
+    (CARNEGIE_2018, 2018, 2020),
+    (CARNEGIE_2021, 2021, 2100),
 ]
 
 

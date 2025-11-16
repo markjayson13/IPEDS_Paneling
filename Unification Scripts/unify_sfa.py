@@ -16,6 +16,7 @@ VAR_COL_CANDIDATES = ["varname", "var_name", "var", "variable"]
 SURVEY_COL_CANDIDATES = ["survey", "SURVEY", "component", "COMPONENT", "survey_label", "component_name"]
 SURVEY_YEAR_CANDIDATES = ["survey_year", "SURVEY_YEAR", "year", "YEAR", "panel_year"]
 SURVEY_HINTS = ("SFA", "STUDENT FINANCIAL AID", "NET PRICE", "NET-PRICE")
+DEFAULT_WIDE_PANEL = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/panel_wide.csv")
 BASE_STEP0_SFA_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0sfa")
 BASE_SFA_LONG_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAlong")
 DEFAULT_DICTIONARY_LAKE = Path("dictionary_lake.parquet")
@@ -116,13 +117,22 @@ def build_long_panel(
     return long_df.reset_index(drop=True)
 
 
+def load_wide_panel(path: Path) -> pd.DataFrame:
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        return pd.read_csv(path)
+    if suffix in {".parquet", ".pq"}:
+        return pd.read_parquet(path)
+    raise ValueError(f"Unsupported wide-panel file type: {path.suffix or '<no extension>'}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--input-wide",
         type=Path,
-        default=Path("data/derived/ipeds_panel_wide.parquet"),
-        help="Path to the raw wide IPEDS panel (parquet).",
+        default=DEFAULT_WIDE_PANEL,
+        help="Path to the raw wide IPEDS panel (parquet or CSV).",
     )
     parser.add_argument(
         "--output-long",
@@ -149,7 +159,7 @@ def main() -> None:
         raise FileNotFoundError(f"Wide panel not found: {args.input_wide}")
 
     logging.info("Loading wide panel: %s", args.input_wide)
-    panel_df = pd.read_parquet(args.input_wide)
+    panel_df = load_wide_panel(args.input_wide)
 
     try:
         unitid_col = resolve_column(panel_df, args.unitid_col, UNITID_CANDIDATES)
