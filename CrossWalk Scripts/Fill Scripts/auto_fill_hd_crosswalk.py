@@ -30,20 +30,6 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
 
-from concept_keys import (
-    CARNEGIE_2005,
-    CARNEGIE_2010,
-    CARNEGIE_2015,
-    CARNEGIE_2018,
-    CARNEGIE_2021,
-    STABLE_CONTROL,
-    STABLE_HBCU,
-    STABLE_INSTITUTION_NAME,
-    STABLE_SECTOR,
-    STABLE_STFIPS,
-    STABLE_TRIBAL,
-)
-
 # --------------------------------------------------------------------
 # Canonical paths (same base you use elsewhere)
 # --------------------------------------------------------------------
@@ -57,6 +43,19 @@ DEFAULT_OUTPUT_PATH = DEFAULT_CROSSWALK_DIR / "hd_crosswalk.csv"
 #   - Keys: raw varname (as in dictionary), case-insensitive
 #   - Values: concept_key you want in the master panel
 # --------------------------------------------------------------------
+STABLE_INSTITUTION_NAME = "STABLE_INSTITUTION_NAME"
+STABLE_CONTROL = "STABLE_CONTROL"
+STABLE_SECTOR = "STABLE_SECTOR"
+STABLE_STFIPS = "STABLE_STFIPS"
+STABLE_HBCU = "STABLE_HBCU"
+STABLE_TRIBAL = "STABLE_TRIBAL"
+
+CARNEGIE_2005 = "CARNEGIE_2005"
+CARNEGIE_2010 = "CARNEGIE_2010"
+CARNEGIE_2015 = "CARNEGIE_2015"
+CARNEGIE_2018 = "CARNEGIE_2018"
+CARNEGIE_2021 = "CARNEGIE_2021"
+
 EXACT_VAR_TO_CONCEPT: Dict[str, str] = {
     # Core stable vars used by the HD stabilizer
     "INSTNM": STABLE_INSTITUTION_NAME,
