@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from typing import List
 
@@ -9,12 +10,13 @@ import numpy as np
 import pandas as pd
 
 DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
-DEFAULT_LONG_PANEL_PATH = DATA_ROOT / "Parquets" / "Unify" / "panel_long_raw.parquet"
+DEFAULT_LONG_PANEL_PATH = DATA_ROOT / "Parquets" / "panel_long_hd_ic.parquet"
 LONG_PANEL_FALLBACKS = [
-    DATA_ROOT / "Parquets" / "Unify" / "panel_long_raw_2004_2024_merged.parquet",
-    DATA_ROOT / "Parquets" / "panel_long_raw_2004_2024_merged.parquet",
-    DATA_ROOT / "Parquets" / "Raw data long" / "panel_long_raw_2004_2024_merged.parquet",
+    DATA_ROOT / "Parquets" / "Unify" / "panel_long_raw.parquet",
+    DATA_ROOT / "Parquets" / "Raw data long" / "panel_long_raw_2023.parquet",
+    DATA_ROOT / "Parquets" / "Raw data long" / "panel_long_raw_2024.parquet",
 ]
+MAX_YEAR = 2023  # IC_AY stabilizer will ignore years beyond this
 DEFAULT_CROSSWALK_PATH = DATA_ROOT / "Paneled Datasets" / "Crosswalks" / "Filled" / "ic_ay_crosswalk_all.csv"
 STEP0_LONG_DEFAULT = DATA_ROOT / "Parquets" / "Unify" / "Step0ICAYlong" / "icay_step0_long.parquet"
 STEP0_WIDE_DEFAULT = DATA_ROOT / "Parquets" / "Unify" / "Step0ICAYwide" / "icay_step0_wide.parquet"
@@ -64,6 +66,8 @@ def _prepare_long_panel(path: Path) -> pd.DataFrame:
         raise FileNotFoundError(f"Long panel parquet not found: {path}")
     df = pd.read_parquet(path)
     df.columns = [c.lower() for c in df.columns]
+    if "varname" not in df.columns and "source_var" in df.columns:
+        df["varname"] = df["source_var"]
     required = {"unitid", "year", "survey", "varname", "value"}
     missing = required - set(df.columns)
     if missing:
@@ -73,6 +77,20 @@ def _prepare_long_panel(path: Path) -> pd.DataFrame:
     df["survey"] = df["survey"].astype(str).str.upper()
     df["varname"] = df["varname"].astype(str).str.upper()
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
+    before = len(df)
+    df = df[df["year"] <= MAX_YEAR].copy()
+    after = len(df)
+    if after == 0:
+        raise ValueError(
+            f"Long panel at {path} has no rows with YEAR <= {MAX_YEAR}. "
+            "Check that you have built the multi-year panel for earlier years."
+        )
+    dropped = before - after
+    if dropped > 0:
+        print(
+            f"Filtered long panel to YEAR <= {MAX_YEAR}: "
+            f"dropped {dropped:,} rows (kept {after:,})."
+        )
     return df
 
 
@@ -145,24 +163,110 @@ def stabilize_ic_ay(
     panel = _prepare_long_panel(long_panel_resolved)
 
     icay_surveys = set(cw["survey"].unique())
-    step0_df = panel[panel["survey"].isin(icay_surveys)].copy()
+    icay_vars = set(cw["source_var"].unique())
+    survey_mask = panel["survey"].isin(icay_surveys) if icay_surveys else pd.Series(True, index=panel.index)
+    var_mask = panel["varname"].isin(icay_vars) if icay_vars else pd.Series(False, index=panel.index)
+    step0_df = panel[survey_mask & var_mask].copy()
     if step0_df.empty:
-        raise ValueError("No IC_AY rows located in the long panel for the surveys referenced by the crosswalk.")
+        step0_df = panel[var_mask].copy()
+    if step0_df.empty:
+        raise ValueError(
+            "No IC_AY rows located in the long panel that match the filled crosswalk source variables. "
+            "Ensure the long panel includes the IC_AY raw variables referenced in ic_ay_crosswalk_all.csv."
+        )
 
-    if step0_long:
+    step0_long_flag = (
+        step0_long
+        and (overwrite or not step0_long.exists())
+        and step0_long.parent.exists()
+        and os.access(step0_long.parent, os.W_OK)
+    )
+    if step0_long_flag:
         step0_long.parent.mkdir(parents=True, exist_ok=True)
         step0_df.to_parquet(step0_long, index=False)
         print(f"Wrote IC_AY Step0 long panel to {step0_long} ({len(step0_df):,} rows).")
 
     if step0_wide:
-        step0_wide_df = _pivot_step0_wide(step0_df)
         step0_wide.parent.mkdir(parents=True, exist_ok=True)
+        if step0_wide.exists() and not overwrite:
+            raise FileExistsError(f"Step0 wide output already exists: {step0_wide}. Use --overwrite to replace it.")
+        step0_wide_df = _pivot_step0_wide(step0_df)
         step0_wide_df.to_parquet(step0_wide, index=False)
         print(f"Wrote IC_AY Step0 wide panel to {step0_wide} ({step0_wide_df.shape[0]:,} rows).")
 
-    merged = step0_df.merge(cw, left_on=["survey", "varname"], right_on=["survey", "source_var"], how="inner")
+    print(
+        f"IC_AY crosswalk has {len(cw):,} rows and {cw['source_var'].nunique():,} unique source_var values."
+    )
+    print("Crosswalk source_var sample:", sorted(cw["source_var"].unique())[:20])
+    step0_var_counts = step0_df["varname"].value_counts()
+    print(f"Step0 has {len(step0_df):,} rows with {step0_var_counts.shape[0]:,} distinct varname values.")
+    print("Step0 varname sample:", list(step0_var_counts.head(20).index))
+
+    merged = step0_df.merge(
+        cw,
+        left_on=["survey", "varname"],
+        right_on=["survey", "source_var"],
+        how="inner",
+    )
+
     if merged.empty:
-        raise ValueError("Merged IC_AY data is empty. Check crosswalk entries and panel coverage.")
+        panel_surveys = sorted(step0_df["survey"].unique())
+        cw_surveys = sorted(cw["survey"].unique())
+        print("WARNING: IC_AY (survey, varname) join returned 0 rows.")
+        print(f"  Step0 panel surveys (sample): {panel_surveys[:10]}")
+        print(f"  Crosswalk surveys (sample): {cw_surveys[:10]}")
+        print("  Falling back to varname-only join between Step0 panel and IC_AY crosswalk.")
+
+        cw_unique = cw.drop_duplicates(subset=["source_var", "concept_key"]).copy()
+        merged = step0_df.merge(
+            cw_unique[["source_var", "concept_key"]],
+            left_on="varname",
+            right_on="source_var",
+            how="inner",
+        )
+
+    if merged.empty:
+        raise ValueError(
+            "Merged IC_AY data is empty even after varname-only fallback. "
+            "Check that ic_ay_crosswalk_all.csv source_var values and the long-panel varname/survey "
+            "labels are aligned with actual IC_AY variables."
+        )
+
+    has_price = merged["concept_key"].astype(str).str.upper().str.startswith("PRICE_").any()
+    if not has_price:
+        print(
+            "WARNING: No concept_key values starting with 'PRICE_' in merged data. "
+            "Applying hard-coded CHG/TUITION/FEE mapping fallback."
+        )
+        HARD_MAP = {
+            "CHG1": "PRICE_TUITFEE_IN_DISTRICT_FTFTUG",
+            "CHG2": "PRICE_TUITFEE_IN_STATE_FTFTUG",
+            "CHG3": "PRICE_TUITFEE_OUT_STATE_FTFTUG",
+            "CHG4": "PRICE_BOOK_SUPPLY_FTFTUG",
+            "CHG5": "PRICE_RMBD_ON_CAMPUS_FTFTUG",
+            "TUITION1": "UG_TUIT_IN_DISTRICT_FULLTIME_AVG",
+            "TUITION2": "UG_TUIT_IN_STATE_FULLTIME_AVG",
+            "TUITION3": "UG_TUIT_OUT_STATE_FULLTIME_AVG",
+            "FEE1": "UG_FEE_IN_DISTRICT_FULLTIME_AVG",
+            "FEE2": "UG_FEE_IN_STATE_FULLTIME_AVG",
+            "FEE3": "UG_FEE_OUT_STATE_FULLTIME_AVG",
+        }
+
+        def map_var_to_concept(var: str) -> str | None:
+            v = str(var).upper().strip()
+            for base, key in HARD_MAP.items():
+                if v.startswith(base):
+                    return key
+            return None
+
+        mapped_concepts = merged["varname"].map(map_var_to_concept)
+        fill_mask = mapped_concepts.notna()
+        merged.loc[fill_mask, "concept_key"] = mapped_concepts[fill_mask]
+        merged["concept_key"] = merged["concept_key"].astype(str).str.strip()
+        before = len(merged)
+        merged = merged[merged["concept_key"] != ""].copy()
+        after = len(merged)
+        print(f"Hard fallback mapping applied. Removed {before - after} rows with unmapped CHG/TUITION/FEE vars.")
 
     merged = merged[["unitid", "year", "concept_key", "value"]]
     merged["unitid"] = merged["unitid"].astype("int64")
@@ -182,8 +286,12 @@ def stabilize_ic_ay(
     wide["YEAR"] = wide["YEAR"].astype("int64")
 
     if concept_long_path:
-        concept_long = merged.rename(columns={"unitid": "UNITID", "year": "YEAR"})
         concept_long_path.parent.mkdir(parents=True, exist_ok=True)
+        if concept_long_path.exists() and not overwrite:
+            raise FileExistsError(
+                f"ICAY concept long output already exists: {concept_long_path}. Use --overwrite to replace it."
+            )
+        concept_long = merged.rename(columns={"unitid": "UNITID", "year": "YEAR"})
         concept_long.to_parquet(concept_long_path, index=False)
         print(f"Wrote IC_AY concept long panel to {concept_long_path}")
 

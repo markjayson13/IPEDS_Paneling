@@ -33,7 +33,7 @@ python3 "Unification Scripts/build_efres_residency_buckets.py"
 #Harmonize scripts:
 python3 "Harmonize Scripts/harmonize_admissions.py"
 python3 "Harmonize Scripts/harmonize_enrollment_concepts.py"
-python3 "Harmonize Scripts/stabilize_ic_ay.py" --overwrite
+python3 "Harmonize Scripts/stabilize_ic_ay.py" 
 python3 "Harmonize Scripts/harmonize_sfa_concepts.py"
 python3 "Harmonize Scripts/harmonize_finance_concepts.py"
 python3 "Harmonize Scripts/stabilize_hd.py"
@@ -56,14 +56,11 @@ python3 panelize_panel.py \
 # Validation scripts:
 python3 "Validation Scripts/hd_validate_master_panel.py"
 python3 "Validation Scripts/validate_admissions.py"
+
 python3 "Validation Scripts/validate_enrollment_panel.py"
 python3 "Validation Scripts/validate_sfa_panel.py"
 python3 "Validation Scripts/finance_validate_panel.py"
-
-
-
-
-
+python3 "Validation Scripts/validate_ic_ay.py"
 
 
 
@@ -80,6 +77,14 @@ python3 "CrossWalk Scripts/hd_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/Fill Scripts/auto_fill_hd_crosswalk.py"
 python3 "Harmonize Scripts/stabilize_hd.py"
 python3 "Validation Scripts/hd_validate_master_panel.py"
+
+
+python3 "CrossWalk Scripts/ic_ay_build_crosswalk_template.py"
+python3 "CrossWalk Scripts/Fill Scripts/fill_ic_ay_crosswalk.py" --overwrite
+python3 "CrossWalk Scripts/Fill Scripts/reset_ic_ay_crosswalk_all.py" --force
+python3 "Harmonize Scripts/stabilize_ic_ay.py" --overwrite
+python3 "Validation Scripts/validate_ic_ay.py"
+
 
 # SFA Unify and crosswalk scripts:
 python3 "Unification Scripts/combine_step0_finance.py"

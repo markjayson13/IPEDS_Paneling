@@ -17,12 +17,20 @@ DEFAULT_CROSSWALK_PATH = DATA_ROOT / "Paneled Datasets" / "Crosswalks" / "Filled
 
 UNITID_CANDIDATES = ["UNITID", "unitid", "UNIT_ID", "unit_id"]
 YEAR_CANDIDATES = ["YEAR", "year", "SURVEY_YEAR", "survey_year"]
+CONTROL_CANDIDATES = ["CONTROL", "control", "PCCONTROL", "pccontrol", "STABLE_CONTROL", "stable_control"]
+SECTOR_CANDIDATES = ["SECTOR", "sector", "PCSECTOR", "pcsector", "STABLE_SECTOR", "stable_sector"]
 PRICE_COLS = [
     "PRICE_TUITFEE_IN_DISTRICT_FTFTUG",
     "PRICE_TUITFEE_IN_STATE_FTFTUG",
     "PRICE_TUITFEE_OUT_STATE_FTFTUG",
     "PRICE_BOOK_SUPPLY_FTFTUG",
     "PRICE_RMBD_ON_CAMPUS_FTFTUG",
+    "UG_TUIT_IN_DISTRICT_FULLTIME_AVG",
+    "UG_TUIT_IN_STATE_FULLTIME_AVG",
+    "UG_TUIT_OUT_STATE_FULLTIME_AVG",
+    "UG_FEE_IN_DISTRICT_FULLTIME_AVG",
+    "UG_FEE_IN_STATE_FULLTIME_AVG",
+    "UG_FEE_OUT_STATE_FULLTIME_AVG",
 ]
 
 
@@ -61,6 +69,21 @@ def _ensure_unitid_year(df: pd.DataFrame) -> pd.DataFrame:
     df = df.rename(columns={unitid_col: "UNITID", year_col: "YEAR"})
     df["UNITID"] = pd.to_numeric(df["UNITID"], errors="raise").astype("int64")
     df["YEAR"] = pd.to_numeric(df["YEAR"], errors="raise").astype("int64")
+    return df
+
+
+def _ensure_control_sector(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    if "CONTROL" not in df.columns:
+        for cand in CONTROL_CANDIDATES:
+            if cand in df.columns:
+                df["CONTROL"] = df[cand]
+                break
+    if "SECTOR" not in df.columns:
+        for cand in SECTOR_CANDIDATES:
+            if cand in df.columns:
+                df["SECTOR"] = df[cand]
+                break
     return df
 
 
@@ -188,19 +211,24 @@ def main() -> None:
         )
     ic = _ensure_unitid_year(_load_panel(args.ic_ay))
     hd = _ensure_unitid_year(_load_panel(args.hd))
+    hd = _ensure_control_sector(hd)
     if not {"CONTROL", "SECTOR"}.issubset(hd.columns):
         missing = {"CONTROL", "SECTOR"} - set(hd.columns)
         raise KeyError(f"HD master panel is missing required columns: {sorted(missing)}")
     df = ic.merge(hd[["UNITID", "YEAR", "CONTROL", "SECTOR"]], on=["UNITID", "YEAR"], how="left")
 
-    available_price_cols = [col for col in PRICE_COLS if col in df.columns]
+    explicit_price_cols = [col for col in PRICE_COLS if col in df.columns]
+    prefix_price_cols = [col for col in df.columns if col.startswith("PRICE_")]
+    available_price_cols = sorted(set(explicit_price_cols) | set(prefix_price_cols))
     if not available_price_cols:
         print("Warning: no IC_AY price columns found in the master panel.")
+    else:
+        print(f"IC_AY price columns detected: {available_price_cols}")
 
-    range_summary = summarize_price_ranges(df, PRICE_COLS, args.out_dir)
+    range_summary = summarize_price_ranges(df, available_price_cols, args.out_dir)
     residency = check_residency_order(df, args.out_dir)
-    mean_trends = mean_price_timeseries(df, PRICE_COLS, args.out_dir)
-    growth_flags = flag_large_growth(mean_trends, PRICE_COLS, args.out_dir)
+    mean_trends = mean_price_timeseries(df, available_price_cols, args.out_dir)
+    growth_flags = flag_large_growth(mean_trends, available_price_cols, args.out_dir)
 
     n_inst = df["UNITID"].nunique()
     year_min = df["YEAR"].min()

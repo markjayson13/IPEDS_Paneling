@@ -36,6 +36,13 @@ TUITION_FEE_CONCEPTS: Dict[str, str] = {
     "FEE3": "UG_FEE_OUT_STATE_FULLTIME_AVG",
 }
 
+# Modern IC_AY variables that map directly to canonical concepts.
+MANUAL_MAP: Dict[str, str] = {
+    "RMBRDAMT": "PRICE_RMBD_ON_CAMPUS_FTFTUG",
+    "ROOMAMT": "PRICE_RMBD_ON_CAMPUS_FTFTUG",
+    "BOARDAMT": "PRICE_RMBD_ON_CAMPUS_FTFTUG",
+}
+
 
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -71,35 +78,8 @@ def suggest_concept_key(row: pd.Series) -> str | None:
             var_base = base
             break
 
-    if var_base == "CHG1":
-        has_tuition = "tuition" in label
-        has_fee = "fee" in label
-        has_district = "district" in label
-        if has_tuition and has_fee and (has_district or "in-district" in label):
-            return CHG_CONCEPTS[var_base]
-        if "tuition" in label and "district" in label and ("fee" in label or "required" in label):
-            return CHG_CONCEPTS[var_base]
-
-    if var_base == "CHG2":
-        if "tuition" in label and ("in-state" in label or "resident" in label) and "fee" in label:
-            if "nonresident" not in label and "out-of-state" not in label:
-                return CHG_CONCEPTS[var_base]
-        if "tuition and fees" in label and ("in state" in label or "instate" in label):
-            return CHG_CONCEPTS[var_base]
-
-    if var_base == "CHG3":
-        if "tuition" in label and "fee" in label and ("out-of-state" in label or "nonresident" in label):
-            return CHG_CONCEPTS[var_base]
-
-    if var_base == "CHG4":
-        if "books" in label and ("suppl" in label or "supplies" in label):
-            return CHG_CONCEPTS[var_base]
-
-    if var_base == "CHG5":
-        if "room" in label and "board" in label and ("on-campus" in label or "on campus" in label):
-            return CHG_CONCEPTS[var_base]
-        if "room and board" in label and "campus" in label:
-            return CHG_CONCEPTS[var_base]
+    if var_base in CHG_CONCEPTS:
+        return CHG_CONCEPTS[var_base]
 
     if var_base == "TUITION1":
         if "tuition" in label and "in-district" in label and "full-time" in label:
@@ -124,6 +104,9 @@ def suggest_concept_key(row: pd.Series) -> str | None:
     if var_base == "FEE3":
         if "fee" in label and "full-time" in label and ("out-of-state" in label or "nonresident" in label):
             return TUITION_FEE_CONCEPTS[var_base]
+
+    if var_raw in MANUAL_MAP:
+        return MANUAL_MAP[var_raw]
 
     return None
 

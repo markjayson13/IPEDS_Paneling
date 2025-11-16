@@ -34,6 +34,14 @@ STRICT_CONCEPTS = {
     "FEE3": "UG_FEE_OUT_STATE_FULLTIME_AVG",
 }
 
+CANONICAL_PRICE_CONCEPTS = {
+    "PRICE_TUITFEE_IN_DISTRICT_FTFTUG",
+    "PRICE_TUITFEE_IN_STATE_FTFTUG",
+    "PRICE_TUITFEE_OUT_STATE_FTFTUG",
+    "PRICE_BOOK_SUPPLY_FTFTUG",
+    "PRICE_RMBD_ON_CAMPUS_FTFTUG",
+}
+
 RES_STOPWORDS = {"OF", "THE", "FOR", "AND", "IN", "AT", "BY", "WITH", "ON"}
 
 
@@ -110,19 +118,7 @@ def suggest_concept_key_strict(row: pd.Series) -> str | None:
     label = _clean(row.get("label", "")).lower()
     if not var or not survey or "IC" not in survey or "AY" not in survey:
         return None
-    if var == "CHG1" and "tuition" in label and "fee" in label and "district" in label:
-        return STRICT_CONCEPTS[var]
-    if var == "CHG2" and "tuition" in label and "fee" in label and (
-        "in-state" in label or "in state" in label or ("resident" in label and "nonresident" not in label)
-    ):
-        return STRICT_CONCEPTS[var]
-    if var == "CHG3" and "tuition" in label and "fee" in label and (
-        "out-of-state" in label or "out of state" in label or "nonresident" in label
-    ):
-        return STRICT_CONCEPTS[var]
-    if var == "CHG4" and "books" in label and "suppl" in label:
-        return STRICT_CONCEPTS[var]
-    if var == "CHG5" and "room" in label and "board" in label and ("on campus" in label or "on-campus" in label):
+    if var in {"CHG1", "CHG2", "CHG3", "CHG4", "CHG5"}:
         return STRICT_CONCEPTS[var]
     if var == "TUITION1" and "tuition" in label and "in-district" in label and "full-time" in label:
         return STRICT_CONCEPTS[var]
@@ -268,7 +264,6 @@ def fill_concept_keys(df: pd.DataFrame) -> Tuple[pd.DataFrame, dict[str, int]]:
     existing_mask = concept != ""
     df.loc[existing_mask, "concept_key_source"] = "existing"
     used_keys = set(concept[existing_mask])
-
     empty_mask = ~existing_mask
     strict_results = df.loc[empty_mask].apply(suggest_concept_key_strict, axis=1)
     strict_idx = strict_results.index[strict_results.notna()]
@@ -276,7 +271,8 @@ def fill_concept_keys(df: pd.DataFrame) -> Tuple[pd.DataFrame, dict[str, int]]:
     df.loc[strict_idx, "concept_key_source"] = "strict_rule"
     used_keys.update(df.loc[strict_idx, "concept_key"].tolist())
 
-    remaining_mask = df["concept_key"].astype(str).str.strip() == ""
+    canonical_mask = df["concept_key"].isin(CANONICAL_PRICE_CONCEPTS)
+    remaining_mask = (df["concept_key"].astype(str).str.strip() == "") & (~canonical_mask)
     generic_idx = df.index[remaining_mask]
     for idx in generic_idx:
         df.at[idx, "concept_key"] = slugify_label_to_concept(df.loc[idx], used_keys)
