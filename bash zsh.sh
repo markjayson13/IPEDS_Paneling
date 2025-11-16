@@ -12,6 +12,7 @@ Unification Scripts/unify_finance.py
 CrossWalk Scripts/finance_build_crosswalk_template.py
 Harmonize Scripts/harmonize_finance_concepts.py
 Validation Scripts/finance_validate_panel.py
+
 # Enrollment Unify and crosswalk scripts:
 Unification /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_enrollment.py
 Unification /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/build_efres_residency_buckets.py
