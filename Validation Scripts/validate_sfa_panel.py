@@ -17,6 +17,9 @@ NET_PRICE_BINS = [
     "NET_PRICE_AVG_INC_75_110K",
     "NET_PRICE_AVG_INC_110K_PLUS",
 ]
+BASE_SFA_LONG_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAlong")
+BASE_SFA_WIDE_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAwide")
+BASE_VALIDATION_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Validation")
 
 
 def resolve_column(df: pd.DataFrame, preferred: str, fallbacks: Sequence[str]) -> str:
@@ -208,10 +211,27 @@ def plot_time_series(df: pd.DataFrame, year_col: str, output_dir: Path) -> List[
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sfa-panel", type=Path, default=Path("data/derived/sfa_concepts_wide.parquet"))
+    parser.add_argument(
+        "--sfa-panel",
+        type=Path,
+        default=BASE_SFA_WIDE_DIR / "sfa_concepts_wide.parquet",
+        help="Concept-level SFA parquet to validate.",
+    )
     parser.add_argument("--ef-panel", type=Path, default=None, help="Optional EF concepts parquet for cross-checks")
-    parser.add_argument("--output-summary", type=Path, default=None, help="Optional text file for summary stats")
+    parser.add_argument(
+        "--output-summary",
+        type=Path,
+        default=BASE_VALIDATION_DIR / "sfa_panel_validation_summary.txt",
+        help="Destination for validation summary text.",
+    )
+    parser.add_argument("--no-output-summary", action="store_true", help="Skip writing the summary file.")
     parser.add_argument("--make-plots", action="store_true", help="Generate time-series plots")
+    parser.add_argument(
+        "--plots-dir",
+        type=Path,
+        default=BASE_VALIDATION_DIR / "plots",
+        help="Directory for diagnostic plots when --make-plots is set.",
+    )
     parser.add_argument("--unitid-col", type=str, default="UNITID")
     parser.add_argument("--year-col", type=str, default="YEAR")
     parser.add_argument("--ef-unitid-col", type=str, default="UNITID")
@@ -274,17 +294,18 @@ def main() -> None:
     summary_lines.extend(monotonic_lines)
 
     if args.make_plots:
-        plot_dir = args.sfa_panel.parent / "diagnostics"
-        plot_lines = plot_time_series(sfa_df, year_col, plot_dir)
+        plot_lines = plot_time_series(sfa_df, year_col, args.plots_dir)
         summary_lines.append("Plots:")
         summary_lines.extend(plot_lines)
 
     text = "\n".join(summary_lines)
     print(text)
-    if args.output_summary:
+    if not args.no_output_summary and args.output_summary:
         args.output_summary.parent.mkdir(parents=True, exist_ok=True)
         args.output_summary.write_text(text)
         logging.info("Saved summary to %s", args.output_summary)
+    elif args.no_output_summary:
+        logging.info("Summary file skipped per CLI flag.")
 
 
 if __name__ == "__main__":

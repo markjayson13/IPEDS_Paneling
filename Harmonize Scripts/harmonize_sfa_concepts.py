@@ -10,6 +10,10 @@ import pandas as pd
 
 UNITID_CANDIDATES = ["UNITID", "unitid", "UNIT_ID", "unit_id"]
 YEAR_CANDIDATES = ["YEAR", "year", "SURVEY_YEAR", "survey_year", "panel_year", "SURVYEAR", "survyear"]
+CROSSWALK_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks")
+SFA_WIDE_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAwide")
+SFA_HARMONIZED_CSV_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Harmonized/SFA")
+STEP0_SFA_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0sfa")
 
 
 def resolve_column(df: pd.DataFrame, preferred: str, fallbacks: Iterable[str]) -> str:
@@ -35,8 +39,9 @@ def expand_crosswalk(crosswalk: pd.DataFrame) -> pd.DataFrame:
     records = []
     for row in cw.itertuples():
         concept = getattr(row, "concept_key", None)
-        if not concept:
+        if not isinstance(concept, str) or not concept.strip():
             continue
+        concept = concept.strip()
         start, end = int(row.year_start), int(row.year_end)
         if end < start:
             start, end = end, start
@@ -79,20 +84,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--input-long",
         type=Path,
-        default=Path("data/derived/sfa_step0_long.parquet"),
+        default=STEP0_SFA_DIR / "sfa_step0_long.parquet",
         help="Long SFA parquet from unify_sfa.py",
     )
     parser.add_argument(
         "--crosswalk",
         type=Path,
-        default=Path("data/derived/meta/sfa_crosswalk.csv"),
+        default=CROSSWALK_DIR / "sfa_crosswalk.csv",
         help="Edited crosswalk CSV",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("data/derived/sfa_concepts_wide.parquet"),
+        default=SFA_WIDE_DIR / "sfa_concepts_wide.parquet",
         help="Destination concept-level parquet",
+    )
+    parser.add_argument(
+        "--csv-output",
+        type=Path,
+        default=SFA_HARMONIZED_CSV_DIR / "sfa_concepts_wide.csv",
+        help="Optional CSV export stored under the harmonized SFA directory.",
     )
     parser.add_argument("--unitid-col", type=str, default="UNITID", help="UNITID column name in the long file.")
     parser.add_argument("--year-col", type=str, default="YEAR", help="Year column name in the long file.")
@@ -129,7 +140,12 @@ def main() -> None:
     concept_wide = harmonize(long_df, crosswalk_df, unitid_col, year_col)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     concept_wide.to_parquet(args.output, index=False)
-    logging.info("Saved SFA concepts panel to %s", args.output)
+    logging.info("Wrote wide SFA concepts parquet to %s", args.output)
+
+    if args.csv_output:
+        args.csv_output.parent.mkdir(parents=True, exist_ok=True)
+        concept_wide.to_csv(args.csv_output, index=False)
+        logging.info("Wrote wide SFA concepts CSV to %s", args.csv_output)
 
 
 if __name__ == "__main__":

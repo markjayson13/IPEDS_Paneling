@@ -11,6 +11,7 @@ import pandas as pd
 
 SFA_VAR_RX = re.compile(r"^(SFA|NPT)", re.IGNORECASE)
 SURVEY_HINTS = ("SFA", "STUDENT FINANCIAL AID", "NET PRICE", "NET-PRICE")
+CROSSWALK_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks")
 
 
 VAR_COL_CANDIDATES = ["varname", "var_name", "var", "variable"]
@@ -72,8 +73,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("data/derived/meta/sfa_crosswalk_template.csv"),
-        help="Destination CSV for manual editing",
+        default=CROSSWALK_DIR / "sfa_crosswalk_template.csv",
+        help="Path for the SFA crosswalk template CSV (outside the repo).",
     )
     return parser.parse_args()
 

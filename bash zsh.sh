@@ -1,5 +1,4 @@
 # Code 
-
 #Dictionary
 Dictionary/01_ingest_dictionaries.py
 
@@ -7,7 +6,6 @@ Dictionary/01_ingest_dictionaries.py
 Panelize Scripts/build_raw_panel.py
 Panelize Scripts/panelize_raw.py
 Panelize Scripts/merge_raw_panels.py
-
 
 #Fiannce Unify and crosswalk scripts:
 Unification Scripts/unify_finance.py
