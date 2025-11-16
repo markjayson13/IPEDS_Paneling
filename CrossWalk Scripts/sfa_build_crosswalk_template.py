@@ -15,10 +15,10 @@ CROSSWALK_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled 
 
 
 VAR_COL_CANDIDATES = ["varname", "var_name", "var", "variable"]
-SURVEY_YEAR_CANDIDATES = ["survey_year", "year", "SURVEYYEAR", "panel_year"]
-SURVEY_COL_CANDIDATES = ["survey", "component", "SURVEY"]
+SURVEY_YEAR_CANDIDATES = ["survey_year", "SURVEY_YEAR", "year", "YEAR", "panel_year"]
+SURVEY_COL_CANDIDATES = ["survey", "SURVEY", "component", "COMPONENT", "survey_label", "component_name"]
 TABLE_COL_CANDIDATES = ["table_name", "table", "tableName"]
-LABEL_COL_CANDIDATES = ["label", "varTitle", "title"]
+LABEL_COL_CANDIDATES = ["label", "varLabel", "label_text"]
 
 
 def resolve_column(df: pd.DataFrame, candidates: Iterable[str], required: bool = True) -> str | None:
@@ -44,9 +44,10 @@ def build_template(df: pd.DataFrame, year_col: str, var_col: str, survey_col: st
     filtered = filter_sfa_rows(df, var_col, survey_col)
     if filtered.empty:
         logging.warning("No SFA rows found in the dictionary lake.")
+    filtered = filtered.drop_duplicates(subset=[var_col, year_col])
     template = pd.DataFrame({
         "concept_key": "",
-        "source_var": filtered[var_col].astype(str),
+        "source_var": filtered[var_col].astype(str).str.upper(),
         "year_start": filtered[year_col],
         "year_end": filtered[year_col],
         "weight": 1.0,

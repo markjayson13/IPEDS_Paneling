@@ -14,30 +14,35 @@ Harmonize Scripts/harmonize_finance_concepts.py
 Validation Scripts/finance_validate_panel.py
 
 # Enrollment Unify and crosswalk scripts:
-Unification Scripts/unify_enrollment.py
-Unification Scripts/build_efres_residency_buckets.py
-CrossWalk Scripts/enrollment_build_crosswalk_template.py
-CrossWalk Scripts/Fill Scripts/autofill_enrollment_crosswalk_core.py
+Unification /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_enrollment.py
+Unification /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/build_efres_residency_buckets.py
+CrossWalk /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/enrollment_build_crosswalk_template.py
+CrossWalk /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/autofill_enrollment_crosswalk_core.py
 
 #HD and IC Unify and crosswalk scripts:
-python3 Unification Scripts/stabilize_hd.py
-python3 CrossWalk Scripts/hd_build_crosswalk_template.py
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/stabilize_hd.py"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/hd_build_crosswalk_template.py"
 
 # SFA Unify and crosswalk scripts:
-python3 Unification Scripts/unify_sfa.py
-python3 CrossWalk Scripts/sfa_build_crosswalk_template.py
-python3 Harmonize Scripts/harmonize_sfa_concepts.py
-python3 Validation Scripts/validate_sfa_panel.py
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_sfa.py"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/sfa_build_crosswalk_template.py"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Harmonize Scripts/harmonize_sfa_concepts.py"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Validation Scripts/validate_sfa_panel.py"
 
 #ADM Unify and crosswalk scripts:
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_admissions.py" \
-  --panel-dir "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections" \
-  --dictionary-lake "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/dictionary_lake.parquet" \
-  --year-start 2004 --year-end 2024
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_admissions.py" 
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/adm_build_crosswalk_template.py"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Harmonize Scripts/harmonize_admissions.py"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Validation Scripts/validate_admissions.py"
 
-python3 CrossWalk Scripts/adm_build_crosswalk_template.py
-python3 Harmonize Scripts/harmonize_admissions.py
-python3 Validation Scripts/validate_admissions.py
+
+
+
+
+
+
+
+
 
 
 # 1. Build dictionary lake (run once, or when dictionaries change)

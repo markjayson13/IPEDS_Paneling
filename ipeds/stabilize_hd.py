@@ -10,8 +10,10 @@ import pandas as pd
 
 
 DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
-DEFAULT_CROSSWALK_PATH = DATA_ROOT / "Paneled Datasets" / "Crosswalks" / "hd_crosswalk.csv"
-DEFAULT_OUTPUT_PATH = DATA_ROOT / "Parquets" / "Unify" / "HDICwide" / "hd_master_panel.parquet"
+DEFAULT_CROSSWALK_DIR = DATA_ROOT / "Paneled Datasets" / "Crosswalks"
+DEFAULT_CROSSWALK_PATH = DEFAULT_CROSSWALK_DIR / "hd_crosswalk.csv"
+DEFAULT_WIDE_DIR = DATA_ROOT / "Parquets" / "Unify" / "HDICwide"
+DEFAULT_OUTPUT_PATH = DEFAULT_WIDE_DIR / "hd_master_panel.parquet"
 
 EVER_TRUE_COLS = ["STABLE_HBCU", "STABLE_TRIBAL"]
 GAP_FILL_COLS = [
@@ -44,6 +46,13 @@ def _prepare_crosswalk_df(df: pd.DataFrame) -> pd.DataFrame:
     df["year_end"] = pd.to_numeric(df["year_end"], errors="coerce").astype("Int64")
     if df[["year_start", "year_end"]].isna().any().any():
         raise ValueError("Crosswalk contains non-numeric year ranges.")
+    implausible = (df["year_start"] < 1900) | (df["year_end"] > 2100)
+    if implausible.any():
+        bad_rows = df.loc[implausible, ["concept_key", "survey", "source_var", "year_start", "year_end"]]
+        raise ValueError(
+            "Crosswalk contains implausible year ranges (outside 1900–2100):\n"
+            f"{bad_rows.to_string(index=False)}"
+        )
     bad_range = df["year_start"] > df["year_end"]
     if bad_range.any():
         bad_rows = df.loc[bad_range, ["concept_key", "survey", "source_var", "year_start", "year_end"]]
@@ -80,8 +89,9 @@ def _expand_crosswalk(df: pd.DataFrame) -> pd.DataFrame:
     if dup_mask.any():
         dup_rows = expanded.loc[dup_mask, ["concept_key", "survey", "year", "varname"]]
         raise ValueError(
-            "Crosswalk expansion produced non-unique (survey, year, varname) combinations:\n"
-            f"{dup_rows.head(10).to_string(index=False)}"
+            "Crosswalk expansion produced non-unique (survey, year, varname) combinations. "
+            "Each raw variable-year-survey must map to at most one concept_key:\n"
+            f"{dup_rows.head().to_string(index=False)}"
         )
     return expanded
 
@@ -126,8 +136,7 @@ def _pivot_wide(merged: pd.DataFrame) -> pd.DataFrame:
     else:
         wide.columns = wide.columns.astype(str)
 
-    wide = wide.sort_values(["unitid", "year"]).reset_index(drop=True)
-    return wide
+    return wide.reset_index(drop=True)
 
 
 def _coerce_types(df: pd.DataFrame) -> pd.DataFrame:
@@ -154,7 +163,8 @@ def _normalize_binary_flag(df: pd.DataFrame, col: str) -> None:
     unexpected = numeric[~(mask_yes | mask_no | numeric.isna())].unique()
     if len(unexpected):
         raise ValueError(
-            f"{col} contains unexpected non-binary codes: {sorted(map(float, unexpected))}"
+            f"{col} contains unexpected codes {sorted(map(float, unexpected))}. "
+            "Expected only {1, 0, 2, NaN} (1=yes, 0/2=no)."
         )
     normalized = pd.Series(np.nan, index=df.index, dtype="float64")
     normalized[mask_yes] = 1.0
@@ -221,6 +231,17 @@ def stabilize_hd(input_path: Path, crosswalk_path: Path, output_path: Path) -> p
         )
 
     wide = _pivot_wide(merged)
+    if wide.duplicated(subset=["unitid", "year"]).any():
+        dup = (
+            wide.loc[wide.duplicated(subset=["unitid", "year"], keep=False), ["unitid", "year"]]
+            .drop_duplicates()
+            .head()
+        )
+        raise ValueError(
+            "Post-pivot panel has duplicate (unitid, year) rows, which should be impossible.\n"
+            f"Example duplicates:\n{dup.to_string(index=False)}"
+        )
+    wide = wide.sort_values(["unitid", "year"]).reset_index(drop=True)
     wide = _coerce_types(wide)
 
     for col in EVER_TRUE_COLS:
@@ -232,8 +253,6 @@ def stabilize_hd(input_path: Path, crosswalk_path: Path, output_path: Path) -> p
             numeric = pd.to_numeric(wide[col], errors="coerce")
             wide[col] = pd.Series(pd.array(numeric.round(), dtype="Int64"), index=wide.index)
 
-    wide = wide.sort_values(["unitid", "year"]).reset_index(drop=True)
-
     for col in GAP_FILL_COLS:
         _propagate_gap_fill(wide, col)
 
@@ -241,6 +260,10 @@ def stabilize_hd(input_path: Path, crosswalk_path: Path, output_path: Path) -> p
 
     for col in CARNEGIE_COLS:
         _propagate_carnegie(wide, col)
+        if col in wide.columns:
+            non_null = wide[col].notna().sum()
+            total = len(wide)
+            print(f"{col}: {non_null:,} non-missing values out of {total:,} rows")
 
     wide["unitid"] = pd.to_numeric(wide["unitid"], errors="raise").astype("int64")
     wide["year"] = pd.to_numeric(wide["year"], errors="raise").astype("int64")
@@ -248,11 +271,21 @@ def stabilize_hd(input_path: Path, crosswalk_path: Path, output_path: Path) -> p
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wide.to_parquet(output_path, index=False)
 
-    print(f"Wrote HD master panel to {output_path} with shape {wide.shape}")
+    print(f"Wrote HD master panel to {output_path}")
+    print(f"Shape: {wide.shape[0]:,} rows x {wide.shape[1]:,} columns")
     return wide
 
 
 def _run_smoke_test() -> None:
+    # Binary guard should reject unexpected codes.
+    try:
+        df = pd.DataFrame({"STABLE_HBCU": [0, 1, 2, 3]})
+        _normalize_binary_flag(df, "STABLE_HBCU")
+    except ValueError:
+        print("Binary flag normalization guard triggered as expected.")
+    else:
+        raise AssertionError("Expected _normalize_binary_flag to fail on invalid codes.")
+
     crosswalk = pd.DataFrame(
         {
             "concept_key": [
@@ -294,18 +327,22 @@ def _run_smoke_test() -> None:
             }
         )
 
-    # Unit 1001 with stable control but HBCU becomes 1 and missing names.
     unit1_data = {
         2018: {"INSTNM": "Alpha College", "CONTROL": 1, "SECTOR": 1, "HBCU": 0, "TRIBAL": 0, "STABBR": "AL", "CARNEGIE": 15},
-        2019: {"INSTNM": None, "CONTROL": 1, "SECTOR": 1, "HBCU": 1, "TRIBAL": 0, "STABBR": None, "CARNEGIE": None},
+        2019: {"INSTNM": None, "CONTROL": 1, "SECTOR": 1, "HBCU": 1, "TRIBAL": 1, "STABBR": None, "CARNEGIE": None},
         2020: {"INSTNM": "Alpha College University", "CONTROL": 1, "SECTOR": 1, "HBCU": None, "TRIBAL": 0, "STABBR": "AL", "CARNEGIE": None},
     }
 
-    # Unit 2002 switches control in 2019.
     unit2_data = {
         2018: {"INSTNM": "Beta Institute", "CONTROL": 2, "SECTOR": 2, "HBCU": 0, "TRIBAL": 0, "STABBR": "TX", "CARNEGIE": 18},
         2019: {"INSTNM": "Beta Institute", "CONTROL": 3, "SECTOR": 3, "HBCU": 0, "TRIBAL": 0, "STABBR": "TX", "CARNEGIE": 18},
         2020: {"INSTNM": "Beta Institute", "CONTROL": None, "SECTOR": 3, "HBCU": 0, "TRIBAL": 0, "STABBR": None, "CARNEGIE": None},
+    }
+
+    unit3_data = {
+        2018: {"INSTNM": "Gamma College", "CONTROL": 1, "SECTOR": 1, "HBCU": 2, "TRIBAL": 2, "STABBR": "CA", "CARNEGIE": 12},
+        2019: {"INSTNM": "Gamma College", "CONTROL": 1, "SECTOR": 1, "HBCU": 2, "TRIBAL": 2, "STABBR": "CA", "CARNEGIE": None},
+        2020: {"INSTNM": "Gamma College", "CONTROL": 1, "SECTOR": 1, "HBCU": 2, "TRIBAL": 2, "STABBR": "CA", "CARNEGIE": None},
     }
 
     for year, vars_map in unit1_data.items():
@@ -314,14 +351,21 @@ def _run_smoke_test() -> None:
     for year, vars_map in unit2_data.items():
         for var, value in vars_map.items():
             add(2002, year, var, value)
+    for year, vars_map in unit3_data.items():
+        for var, value in vars_map.items():
+            add(3003, year, var, value)
 
     raw_df = pd.DataFrame(records)
     raw = _prepare_raw_panel_df(raw_df)
     merged = raw.merge(expanded, on=["year", "survey", "varname"], how="inner")
     wide = _pivot_wide(merged)
+    if wide.duplicated(subset=["unitid", "year"]).any():
+        raise AssertionError("Smoke test pivot unexpectedly produced duplicates.")
+    wide = wide.sort_values(["unitid", "year"]).reset_index(drop=True)
     wide = _coerce_types(wide)
 
     for col in EVER_TRUE_COLS:
+        _normalize_binary_flag(wide, col)
         _propagate_ever_true(wide, col)
     wide = wide.sort_values(["unitid", "year"]).reset_index(drop=True)
     for col in GAP_FILL_COLS:
@@ -331,24 +375,25 @@ def _run_smoke_test() -> None:
         _propagate_carnegie(wide, col)
 
     unit1_hbcu = wide.loc[wide["unitid"] == 1001, "STABLE_HBCU"].unique()
-    assert len(unit1_hbcu) == 1 and float(unit1_hbcu[0]) == 1.0, "HBCU flag did not propagate."
+    assert len(unit1_hbcu) == 1 and float(unit1_hbcu[0]) == 1.0, "HBCU ever-true failed to lock at 1."
 
-    unit2_control = wide.loc[wide["unitid"] == 2002, "STABLE_CONTROL"].tolist()
-    assert unit2_control == [2, 3, 3], "Control values were overwritten incorrectly."
-
-    unit1_carn = wide.loc[wide["unitid"] == 1001, "CARNEGIE_2015"].tolist()
-    assert all(val == 15 for val in unit1_carn), "Carnegie propagation failed."
+    unit3_hbcu = wide.loc[wide["unitid"] == 3003, "STABLE_HBCU"].unique()
+    assert len(unit3_hbcu) == 1 and float(unit3_hbcu[0]) == 0.0, "HBCU code 2 should normalize to 0."
 
     unit1_tribal = wide.loc[wide["unitid"] == 1001, "STABLE_TRIBAL"].unique()
-    assert len(unit1_tribal) == 1 and float(unit1_tribal[0]) == 0.0, "Tribal flag did not normalize."
+    assert len(unit1_tribal) == 1 and float(unit1_tribal[0]) == 1.0, "Tribal flag did not propagate."
 
     stfips = wide.loc[wide["unitid"] == 1001, "STABLE_STFIPS"].unique()
     assert len(stfips) == 1 and stfips[0] == "AL", "STABLE_STFIPS gap fill failed."
 
     latest_name = wide.loc[wide["unitid"] == 1001, "STABLE_INSTITUTION_NAME"].unique()
-    assert (
-        len(latest_name) == 1 and latest_name[0] == "Alpha College University"
-    ), "Latest institution name propagation failed."
+    assert len(latest_name) == 1 and latest_name[0] == "Alpha College University", "Latest name propagation failed."
+
+    unit2_control = wide.loc[wide["unitid"] == 2002, "STABLE_CONTROL"].tolist()
+    assert unit2_control == [2, 3, 3], "Control change should persist."
+
+    unit1_carn = wide.loc[wide["unitid"] == 1001, "CARNEGIE_2015"].tolist()
+    assert all(val == 15 for val in unit1_carn), "Carnegie propagation failed."
 
     print("Smoke test passed: propagation logic behaves as expected.")
 
@@ -358,19 +403,20 @@ def main() -> None:
     parser.add_argument(
         "--input",
         type=Path,
-        help="Path to the long-form IPEDS panel (panel_long_raw.parquet).",
+        required=False,
+        help="Path to long-form raw HD/IC panel (panel_long_raw.parquet).",
     )
     parser.add_argument(
         "--crosswalk",
         type=Path,
         default=DEFAULT_CROSSWALK_PATH,
-        help="Path to the manually curated HD crosswalk CSV.",
+        help="Path to hd_crosswalk.csv.",
     )
     parser.add_argument(
         "--output",
         type=Path,
         default=DEFAULT_OUTPUT_PATH,
-        help="Output path for the stabilized HD panel.",
+        help="Output parquet path for the HD master panel (wide).",
     )
     parser.add_argument(
         "--run-smoke-test",

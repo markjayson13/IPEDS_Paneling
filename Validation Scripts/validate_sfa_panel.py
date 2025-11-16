@@ -83,11 +83,39 @@ def check_amount_bounds(df: pd.DataFrame) -> List[str]:
         neg = (values < 0).sum()
         neg_large = (values < -1000).sum()
         stats_line = summarize_series(values.dropna()) if nonmissing else ""
+        is_net_price = col.upper().startswith("NET_PRICE_")
+        warning = ""
+        if not is_net_price and neg > 0:
+            warning = " [WARNING: negative values in amount column]"
         lines.append(
-            f"{col}: negatives={neg} ({neg / nonmissing:.2%}), < -1000={neg_large} ({neg_large / nonmissing:.2%}); {stats_line}"
+            f"{col}: negatives={neg} ({neg / nonmissing:.2%}), < -1000={neg_large} ({neg_large / nonmissing:.2%}); {stats_line}{warning}"
         )
     if not lines:
         lines.append("No amount/net price columns found.")
+    return lines
+
+
+def check_negative_counts(df: pd.DataFrame) -> List[str]:
+    """Check for negative values in SFA count-style columns."""
+
+    lines: List[str] = []
+    count_cols = [col for col in df.columns if col.upper().startswith("SFA_") and "_N" in col.upper()]
+    if not count_cols:
+        lines.append("No SFA *_N count columns detected for negative-value check.")
+        return lines
+
+    any_neg = False
+    for col in count_cols:
+        values = to_numeric(df[col])
+        nonmissing = values.notna().sum()
+        if nonmissing == 0:
+            continue
+        neg = (values < 0).sum()
+        if neg:
+            any_neg = True
+            lines.append(f"{col}: {neg} negative values ({neg / nonmissing:.2%} of nonmissing).")
+    if not any_neg:
+        lines.append("No negative values found in SFA *_N count columns.")
     return lines
 
 
@@ -160,7 +188,9 @@ def check_cross_component(
     ef_tmp.rename(columns={ef_unitid_col: "sfa_unitid", ef_year_col: "sfa_year"}, inplace=True)
     merged = sfa_tmp.merge(ef_tmp, on=["sfa_unitid", "sfa_year"], how="inner")
     if merged.empty:
-        lines.append("No overlapping UNITID/YEAR between SFA and EF panels.")
+        msg = "No overlapping UNITID/YEAR between SFA and EF panels."
+        lines.append(msg)
+        logging.warning(msg)
         return lines
     sfa_counts = to_numeric(merged["SFA_FTFT_N"])
     ef_counts = to_numeric(merged[ef_ftft_col])
@@ -308,6 +338,11 @@ def main() -> None:
     summary_lines.append("Amount & net price bounds:")
     summary_lines.extend(amount_lines)
 
+    neg_count_lines = check_negative_counts(sfa_df)
+    logging.info("Negative count checks complete")
+    summary_lines.append("Negative count checks:")
+    summary_lines.extend(neg_count_lines)
+
     nested_lines = check_nested_counts(sfa_df, unitid_col, year_col, args.parquet_dir)
     logging.info("Nested FTFT checks complete")
     summary_lines.append("Nested FTFT cohort checks:")
@@ -332,6 +367,7 @@ def main() -> None:
         summary_lines.extend(cross_lines)
 
     monotonic_lines = check_net_price_monotonicity(sfa_df, unitid_col, year_col, args.parquet_dir)
+    logging.info("Net price monotonicity checks complete")
     summary_lines.append("Net price monotonicity:")
     summary_lines.extend(monotonic_lines)
 

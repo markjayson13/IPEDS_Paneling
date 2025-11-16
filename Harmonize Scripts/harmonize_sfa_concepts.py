@@ -55,11 +55,49 @@ def expand_crosswalk(crosswalk: pd.DataFrame) -> pd.DataFrame:
     expanded = pd.DataFrame.from_records(records)
     if expanded.empty:
         logging.warning("Expanded crosswalk is empty after filtering by concept keys.")
+        return expanded
+
+    dup_mask = expanded.duplicated(subset=["source_var", "concept_key", "YEAR"])
+    if dup_mask.any():
+        dup_count = int(dup_mask.sum())
+        logging.warning(
+            "Found %d duplicate (source_var, concept_key, YEAR) rows in expanded SFA crosswalk; dropping duplicates.",
+            dup_count,
+        )
+        expanded = expanded.loc[~dup_mask].copy()
     return expanded
 
 
 def harmonize(long_df: pd.DataFrame, crosswalk_df: pd.DataFrame, unitid_col: str, year_col: str) -> pd.DataFrame:
     expanded_cw = expand_crosswalk(crosswalk_df)
+    if expanded_cw.empty:
+        logging.warning("Expanded SFA crosswalk is empty; no concepts can be produced.")
+        return pd.DataFrame(columns=[unitid_col, year_col])
+
+    long_years = set(
+        pd.to_numeric(long_df[year_col], errors="coerce").dropna().astype(int).unique().tolist()
+    )
+    cw_years = set(expanded_cw["YEAR"].dropna().astype(int).unique().tolist())
+    common_years = long_years & cw_years
+
+    if long_years:
+        logging.info("SFA long years: %s-%s", min(long_years), max(long_years))
+    else:
+        logging.info("SFA long years: none")
+
+    if cw_years:
+        logging.info("Crosswalk years: %s-%s", min(cw_years), max(cw_years))
+    else:
+        logging.info("Crosswalk years: none")
+
+    logging.info("Overlap between SFA long and crosswalk years: %d distinct years", len(common_years))
+
+    if not common_years:
+        raise RuntimeError(
+            "No overlapping YEAR values between SFA long panel and expanded crosswalk; "
+            "check year alignment and crosswalk year ranges."
+        )
+
     merged = long_df.merge(expanded_cw, how="left", left_on=["source_var", year_col], right_on=["source_var", "YEAR"])
     merged.drop(columns=["YEAR_y"], inplace=True, errors="ignore")
     if "YEAR_x" in merged.columns:
@@ -124,6 +162,11 @@ def main() -> None:
 
     logging.info("Loading crosswalk: %s", args.crosswalk)
     crosswalk_df = pd.read_csv(args.crosswalk)
+
+    long_df = long_df.copy()
+    crosswalk_df = crosswalk_df.copy()
+    long_df["source_var"] = long_df["source_var"].astype(str).str.upper()
+    crosswalk_df["source_var"] = crosswalk_df["source_var"].astype(str).str.upper()
 
     try:
         unitid_col = resolve_column(long_df, args.unitid_col, UNITID_CANDIDATES)

@@ -13,11 +13,52 @@ SFA_VAR_RX = re.compile(r"^(SFA|NPT)", re.IGNORECASE)
 UNITID_CANDIDATES = ["UNITID", "unitid", "UNIT_ID", "unit_id"]
 YEAR_CANDIDATES = ["YEAR", "year", "SURVEY_YEAR", "survey_year", "panel_year", "SURVYEAR", "survyear"]
 VAR_COL_CANDIDATES = ["varname", "var_name", "var", "variable"]
-SURVEY_COL_CANDIDATES = ["survey", "component", "survey_label", "component_name"]
-SURVEY_YEAR_CANDIDATES = ["survey_year", "year", "SURVEY_YEAR", "YEAR"]
+SURVEY_COL_CANDIDATES = ["survey", "SURVEY", "component", "COMPONENT", "survey_label", "component_name"]
+SURVEY_YEAR_CANDIDATES = ["survey_year", "SURVEY_YEAR", "year", "YEAR", "panel_year"]
 SURVEY_HINTS = ("SFA", "STUDENT FINANCIAL AID", "NET PRICE", "NET-PRICE")
 BASE_STEP0_SFA_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0sfa")
 BASE_SFA_LONG_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAlong")
+
+
+def _resolve_dict_columns(df: pd.DataFrame, candidates: Iterable[str], required: bool = True) -> str | None:
+    for col in candidates:
+        if col in df.columns:
+            return col
+    if required:
+        raise KeyError(f"None of the requested columns are present in dictionary: {candidates}")
+    return None
+
+
+def build_sfa_var_whitelist_from_dictionary(dictionary_df: pd.DataFrame, panel_columns: Iterable[str]) -> list[str]:
+    """Return panel column names flagged as SFA/NPT in the dictionary, case-insensitive."""
+
+    var_col = _resolve_dict_columns(dictionary_df, VAR_COL_CANDIDATES, required=True)
+    survey_col = _resolve_dict_columns(dictionary_df, SURVEY_COL_CANDIDATES, required=False)
+
+    var_series = dictionary_df[var_col].astype(str)
+    mask = var_series.str.match(SFA_VAR_RX, na=False)
+
+    if survey_col is not None:
+        survey_values = dictionary_df[survey_col].astype(str).str.upper()
+        survey_mask = survey_values.apply(lambda text: any(hint in text for hint in SURVEY_HINTS))
+        mask |= survey_mask
+
+    filtered = dictionary_df.loc[mask]
+    if filtered.empty:
+        logging.warning("Dictionary lake has no SFA/NPT rows; whitelist will be empty.")
+        return []
+
+    dict_vars_upper = set(filtered[var_col].astype(str).str.upper())
+    panel_map = {str(col).upper(): col for col in panel_columns}
+
+    matched = [panel_map[name] for name in dict_vars_upper if name in panel_map]
+    if not matched:
+        logging.warning("No overlap between SFA dictionary varnames and panel columns; whitelist will be empty.")
+        return []
+
+    unique_cols = sorted(set(matched))
+    logging.info("Dictionary whitelist: %d SFA/NPT columns resolved in panel.", len(unique_cols))
+    return unique_cols
 
 
 def resolve_column(df: pd.DataFrame, preferred: str, fallbacks: Iterable[str]) -> str:
@@ -52,12 +93,13 @@ def build_long_panel(
     year_col: str,
     sfa_var_whitelist: list[str] | None = None,
 ) -> pd.DataFrame:
-    sfa_cols = identify_sfa_columns(df.columns, [unitid_col, year_col])
-    if not sfa_cols:
-        logging.warning("No SFA/NPT columns were detected in the wide panel.")
-    if sfa_var_whitelist is not None:
-        whitelist_set = set(sfa_var_whitelist)
-        sfa_cols = [column for column in sfa_cols if column in whitelist_set]
+    id_cols = [unitid_col, year_col]
+    if sfa_var_whitelist:
+        sfa_cols = [col for col in sfa_var_whitelist if col not in id_cols and col in df.columns]
+        logging.info("Using dictionary whitelist for SFA cols (%d columns).", len(sfa_cols))
+    else:
+        sfa_cols = identify_sfa_columns(df.columns, id_cols)
+        logging.info("Using regex-based SFA detection for SFA cols (%d columns).", len(sfa_cols))
     if not sfa_cols:
         logging.warning("No SFA columns remain after applying filters; returning empty panel.")
         empty = pd.DataFrame(columns=[unitid_col, year_col, "source_var", "value"])
@@ -65,6 +107,7 @@ def build_long_panel(
         return empty
     subset = df[[unitid_col, year_col] + sfa_cols].copy()
     long_df = subset.melt(id_vars=[unitid_col, year_col], var_name="source_var", value_name="value")
+    long_df["source_var"] = long_df["source_var"].astype(str).str.upper()
     long_df["value"] = pd.to_numeric(long_df["value"], errors="coerce")
     long_df.dropna(subset=["value"], inplace=True)
     long_df.rename(columns={unitid_col: "UNITID", year_col: "YEAR"}, inplace=True)
@@ -120,32 +163,18 @@ def main() -> None:
     logging.info("Detected YEAR column: %s", year_col)
 
     sfa_var_whitelist: list[str] | None = None
-    if args.dictionary_lake is not None:
-        if args.dictionary_lake.exists():
-            logging.info("Loading dictionary lake for SFA whitelist: %s", args.dictionary_lake)
-            dictionary_df = pd.read_parquet(args.dictionary_lake)
-            var_col = next((col for col in VAR_COL_CANDIDATES if col in dictionary_df.columns), None)
-            survey_col = next((col for col in SURVEY_COL_CANDIDATES if col in dictionary_df.columns), None)
-            year_col_hint = next((col for col in SURVEY_YEAR_CANDIDATES if col in dictionary_df.columns), None)
-            if var_col is None:
-                logging.warning("No varname column found in dictionary lake; skipping dictionary refinement.")
-            else:
-                mask = dictionary_df[var_col].astype(str).str.match(SFA_VAR_RX, na=False)
-                if survey_col is not None:
-                    survey_values = dictionary_df[survey_col].astype(str).str.upper()
-                    survey_mask = survey_values.apply(lambda text: any(hint in text for hint in SURVEY_HINTS))
-                    mask |= survey_mask
-                filtered = dictionary_df.loc[mask]
-                sfa_var_whitelist = sorted(filtered[var_col].astype(str).unique().tolist())
-                logging.info(
-                    "Dictionary refinement retained %d vars using %s (survey=%s, year=%s)",
-                    len(sfa_var_whitelist),
-                    var_col,
-                    survey_col or "<none>",
-                    year_col_hint or "<none>",
-                )
-        else:
-            logging.warning("Dictionary lake path does not exist: %s", args.dictionary_lake)
+    if args.dictionary_lake is not None and args.dictionary_lake.exists():
+        logging.info("Loading dictionary lake from %s", args.dictionary_lake)
+        dict_df = pd.read_parquet(args.dictionary_lake)
+        try:
+            sfa_var_whitelist = build_sfa_var_whitelist_from_dictionary(dict_df, panel_df.columns)
+        except KeyError as exc:
+            logging.warning("Failed to resolve dictionary columns: %s", exc)
+            sfa_var_whitelist = None
+    elif args.dictionary_lake is not None:
+        logging.warning("Dictionary lake path does not exist: %s", args.dictionary_lake)
+    else:
+        logging.info("No dictionary lake provided; using regex-only SFA detection.")
 
     long_df = build_long_panel(
         panel_df,

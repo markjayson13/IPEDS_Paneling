@@ -45,7 +45,7 @@ PREFIX_YEAR_RE = re.compile(r"^(?P<survey>[A-Z]{2,5})(?P<year>\d{4})[_-]?(?P<var
 SUFFIX_YEAR_RE = re.compile(r"^(?P<var>[A-Z0-9_]+)[_-](?P<survey>[A-Z]{2,5})(?P<year>\d{4})$")
 SURVEY_VAR_RE = re.compile(r"^(?P<survey>[A-Z]{2,5})[_-](?P<var>[A-Z0-9_]+)$")
 
-DEFAULT_DICT = Path("data/dictionary_lake.parquet")
+DEFAULT_DICT = Path("/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/dictionary_lake.parquet")
 DEFAULT_OUTPUT = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0adm/adm_step0_long.parquet"
 )

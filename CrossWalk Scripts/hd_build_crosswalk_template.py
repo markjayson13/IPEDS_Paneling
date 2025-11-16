@@ -10,7 +10,8 @@ import pandas as pd
 
 DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
 DEFAULT_DICT_LAKE_PATH = DATA_ROOT / "Parquets" / "dictionary_lake.parquet"
-DEFAULT_TEMPLATE_PATH = DATA_ROOT / "Paneled Datasets" / "Crosswalks" / "hd_crosswalk_template.csv"
+DEFAULT_CROSSWALK_DIR = DATA_ROOT / "Paneled Datasets" / "Crosswalks"
+DEFAULT_TEMPLATE_PATH = DEFAULT_CROSSWALK_DIR / "hd_crosswalk_template.csv"
 
 
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -45,6 +46,7 @@ def build_crosswalk_template(dict_lake: Path) -> pd.DataFrame:
     missing = set(required_cols) - set(df.columns)
     if missing:
         raise ValueError(f"Dictionary lake is missing required columns: {sorted(missing)}")
+    df["year"] = pd.to_numeric(df["year"], errors="raise")
 
     filtered = _filter_hd_ic(df)
     if filtered.empty:
@@ -89,13 +91,13 @@ def main() -> None:
         "--dict-lake",
         type=Path,
         default=DEFAULT_DICT_LAKE_PATH,
-        help="Path to the dictionary_lake.parquet file.",
+        help="Path to dictionary_lake.parquet.",
     )
     parser.add_argument(
         "--out",
         type=Path,
         default=DEFAULT_TEMPLATE_PATH,
-        help="Output path for the crosswalk template CSV.",
+        help="Output path for the HD/IC crosswalk template CSV.",
     )
     args = parser.parse_args()
 
