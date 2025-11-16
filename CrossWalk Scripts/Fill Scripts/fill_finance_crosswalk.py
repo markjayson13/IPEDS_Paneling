@@ -13,12 +13,15 @@ You MUST review the output (finance_crosswalk_filled.csv) before using it in pro
 """
 
 from pathlib import Path
+import re
+
 import pandas as pd
 
 
 # Assumes you run this from the repo root where finance_crosswalk_template.csv lives.
 CROSSWALK_IN = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_template.csv")
 CROSSWALK_OUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/finance_crosswalk_filled.csv")
+OVERRIDES_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_overrides.csv")
 
 CONCEPTS = {
     "IS_REVENUES_TOTAL",
@@ -54,16 +57,48 @@ IGNORED_CONCEPTS = {
     "IS_NET_INCOME",
 }
 
+
+def _contains_any(text: str, *terms: str) -> bool:
+    return any(term in text for term in terms)
+
+
+def _match_function_total(text: str, term: str) -> bool:
+    """Return True when `text` clearly represents the total for the requested function."""
+    if term not in text:
+        return False
+
+    if _contains_any(text, "expenses", "expense", "expenditures"):
+        return True
+
+    if "total" not in text:
+        return False
+
+    detail_terms = ("salaries", "wages", "benefits", "fringe")
+    if any(detail in text for detail in detail_terms):
+        return False
+
+    pattern = rf"(?:{term}\W{{0,12}}total|total\W{{0,12}}{term})"
+    return bool(re.search(pattern, text))
+
+
+def _strip_str_cols(df: pd.DataFrame, cols: tuple[str, ...]) -> None:
+    for col in cols:
+        if col in df.columns:
+            df[col] = df[col].apply(lambda v: v.strip() if isinstance(v, str) else v)
+
+
 def assign_concept(label: str, form_family: str, base_key: str) -> str | None:
     """Heuristic mapping from source_label_norm to the conceptual schema."""
     if not isinstance(label, str):
         return None
-    s = label.lower().strip()
+    s = " ".join(label.lower().split())
 
     # ENDOWMENTS / INVESTMENTS
     if (
-        ("investments" in s and "long-term" in s)
-        or ("investments" in s and "long term" in s)
+        ("long-term investments" in s)
+        or ("long term investments" in s)
+        or ("investments" in s and "noncurrent" in s)
+        or ("investments" in s and "assets" in s)
         or ("investments" in s and "fair value" in s)
     ):
         return "BS_ASSETS_INVESTMENTS_TOTAL"
@@ -84,12 +119,25 @@ def assign_concept(label: str, form_family: str, base_key: str) -> str | None:
         return "IS_EXPENSES_TOTAL"
 
     # REVENUES: TUITION, DISCOUNTS, AUXILIARY, ETC.
-    if ("tuition and fees" in s or "tuition fees" in s or "net tuition" in s) and (
-        "after deducting discounts" in s
-        or "net of discounts" in s
-        or "net of scholarship allowances" in s
-        or "net of scholarships" in s
-        or "net" in s
+    tuition_phrases = (
+        "tuition and fees",
+        "tuition & fees",
+        "tuition fees",
+        "net tuition",
+    )
+    tuition_mentions = any(p in s for p in tuition_phrases) or ("tuition" in s and "fees" in s)
+    net_markers = (
+        "after deducting discounts",
+        "net of discounts",
+        "net of scholarship allowances",
+        "net of scholarships",
+        "(net)",
+        "net of discounts and allowances",
+    )
+    if tuition_mentions and (
+        any(marker in s for marker in net_markers)
+        or "net tuition" in s
+        or "net of allowance" in s
     ):
         return "REV_TUITION_NET"
     if (
@@ -124,17 +172,17 @@ def assign_concept(label: str, form_family: str, base_key: str) -> str | None:
         return "REV_INVESTMENT_RETURN"
 
     # EXPENSES BY FUNCTION
-    if ("instruction" in s and "expenses" in s) or s.startswith("instruction"):
+    if _match_function_total(s, "instruction"):
         return "EXP_INSTRUCTION"
-    if ("research" in s and "expenses" in s) or s.startswith("research"):
+    if _match_function_total(s, "research"):
         return "EXP_RESEARCH"
-    if ("public service" in s and "expenses" in s) or s.startswith("public service"):
+    if _match_function_total(s, "public service"):
         return "EXP_PUBLIC_SERVICE"
-    if ("academic support" in s and "expenses" in s) or s.startswith("academic support"):
+    if _match_function_total(s, "academic support"):
         return "EXP_ACADEMIC_SUPPORT"
-    if ("student services" in s and "expenses" in s) or s.startswith("student services"):
+    if _match_function_total(s, "student services"):
         return "EXP_STUDENT_SERVICES"
-    if ("institutional support" in s and "expenses" in s) or s.startswith("institutional support"):
+    if _match_function_total(s, "institutional support"):
         return "EXP_INSTITUTIONAL_SUPPORT"
     if "operations and maintenance of plant" in s or "operation and maintenance of plant" in s:
         return "EXP_OPERATIONS_PLANT"
@@ -231,6 +279,86 @@ def _merge_intervals_for_group(g: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(merged_rows)
 
 
+def _apply_manual_overrides(cw: pd.DataFrame) -> pd.DataFrame:
+    if not OVERRIDES_PATH.exists():
+        return cw
+
+    overrides = pd.read_csv(OVERRIDES_PATH)
+    overrides.columns = [c.strip() for c in overrides.columns]
+
+    required = {"form_family", "base_key", "year_start", "year_end", "concept_key"}
+    missing = required - set(overrides.columns)
+    if missing:
+        raise ValueError(
+            f"finance_crosswalk_overrides.csv is missing required columns: {sorted(missing)}"
+        )
+
+    overrides = overrides.copy()
+    _strip_str_cols(overrides, ("form_family", "base_key"))
+    overrides["concept_key"] = overrides["concept_key"].fillna("").astype(str).str.strip()
+
+    for col in ("year_start", "year_end"):
+        overrides[col] = pd.to_numeric(overrides[col], errors="coerce").astype("Int64")
+
+    if "weight" not in overrides.columns:
+        overrides["weight"] = 1.0
+    overrides["weight"] = pd.to_numeric(overrides["weight"], errors="coerce").fillna(1.0)
+
+    merge_cols = ["form_family", "base_key", "year_start", "year_end"]
+    merged = cw.merge(
+        overrides[merge_cols + ["concept_key", "weight"]],
+        on=merge_cols,
+        how="left",
+        suffixes=("", "_ov"),
+    )
+
+    mask = merged["concept_key_ov"].notna() & merged["concept_key_ov"].astype(str).str.strip().ne("")
+    applied = int(mask.sum())
+    if applied:
+        print(f"Applied {applied} manual overrides from {OVERRIDES_PATH}")
+    else:
+        print(f"Manual overrides file {OVERRIDES_PATH} loaded but no rows matched template keys.")
+
+    merged.loc[mask, "concept_key"] = merged.loc[mask, "concept_key_ov"]
+    merged.loc[mask, "weight"] = merged.loc[mask, "weight_ov"]
+
+    return merged.drop(columns=["concept_key_ov", "weight_ov"])
+
+
+def _export_suspect_core(cw: pd.DataFrame) -> None:
+    if "source_label_norm" not in cw.columns:
+        print("\nsource_label_norm column missing; cannot produce suspect core CSV.")
+        return
+
+    core_pattern = (
+        "instruction|research|public service|academic support|student services|institutional support|"
+        "operation and maintenance of plant|operations and maintenance of plant|"
+        "tuition|fees|scholarship|scholarships|student aid|grants to students|"
+        "endowment|auxiliary|appropriations|grants and contracts|investment income|investment return"
+    )
+
+    mask_blank = cw["concept_key"].astype(str).str.strip().eq("")
+    label_str = cw["source_label_norm"].fillna("").astype(str)
+    suspect_core = cw[mask_blank & label_str.str.contains(core_pattern, case=False, regex=True)]
+
+    suspect_path = CROSSWALK_OUT.with_name("finance_crosswalk_suspect_core.csv")
+    if not suspect_core.empty:
+        cols = [
+            "form_family",
+            "base_key",
+            "year_start",
+            "year_end",
+            "source_var",
+            "source_label",
+            "source_label_norm",
+        ]
+        existing_cols = [c for c in cols if c in suspect_core.columns]
+        suspect_core[existing_cols].to_csv(suspect_path, index=False)
+        print(f"\nWrote {len(suspect_core)} suspect core rows with blank concept_key to {suspect_path}")
+    else:
+        print("\nNo suspect core rows with blank concept_key.")
+
+
 def main() -> None:
     cw = pd.read_csv(CROSSWALK_IN)
     cw.columns = [c.strip() for c in cw.columns]
@@ -240,6 +368,16 @@ def main() -> None:
 
     # Drop any pre-existing balance sheet concepts; we no longer auto-fill those.
     cw.loc[cw["concept_key"].isin(IGNORED_CONCEPTS), "concept_key"] = ""
+
+    _strip_str_cols(cw, ("form_family", "base_key"))
+    for col in ("year_start", "year_end"):
+        if col in cw.columns:
+            cw[col] = pd.to_numeric(cw[col], errors="coerce").astype("Int64")
+
+    if "weight" not in cw.columns:
+        cw["weight"] = 1.0
+
+    cw = _apply_manual_overrides(cw)
 
     mask_blank = cw["concept_key"].isna() | (cw["concept_key"].astype(str).str.strip() == "")
     cw.loc[mask_blank, "concept_key"] = cw.loc[mask_blank].apply(
@@ -251,8 +389,6 @@ def main() -> None:
         axis=1,
     )
 
-    if "weight" not in cw.columns:
-        cw["weight"] = 1.0
     cw["weight"] = pd.to_numeric(cw["weight"], errors="coerce").fillna(1.0)
 
     print("concept_key counts after auto-fill:")
@@ -289,6 +425,8 @@ def main() -> None:
     unknown = set(cw["concept_key"].dropna().unique()) - CONCEPTS - {""}
     if unknown:
         print("WARNING: crosswalk contains concept_keys not in the schema:", sorted(unknown))
+
+    _export_suspect_core(cw)
 
     cw.to_csv(CROSSWALK_OUT, index=False)
     print(f"Wrote filled crosswalk to {CROSSWALK_OUT}")

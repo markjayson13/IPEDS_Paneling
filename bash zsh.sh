@@ -3,31 +3,30 @@
 Dictionary/01_ingest_dictionaries.py
 
 # Panelize raw data scripts:
-Panelize Scripts/build_raw_panel.py
-Panelize Scripts/panelize_raw.py
-Panelize Scripts/merge_raw_panels.py
+python3 Scripts/build_raw_panel.py
+python3 Scripts/panelize_raw.py
+python3 Scripts/merge_raw_panels.py
 
 #Fiannce Unify and crosswalk scripts:
-Unification Scripts/unify_finance.py
-CrossWalk Scripts/finance_build_crosswalk_template.py
-Harmonize Scripts/harmonize_finance_concepts.py
-Validation Scripts/finance_validate_panel.py
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_finance.py"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/finance_build_crosswalk_template.py"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Harmonize Scripts/harmonize_finance_concepts.py"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Validation Scripts/finance_validate_panel.py"
 
 # Enrollment Unify and crosswalk scripts:
-Unification /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_enrollment.py
-Unification /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/build_efres_residency_buckets.py
-CrossWalk /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/enrollment_build_crosswalk_template.py
-CrossWalk /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/autofill_enrollment_crosswalk_core.py
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_enrollment.py"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/build_efres_residency_buckets.py"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/enrollment_build_crosswalk_template.py"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/autofill_enrollment_crosswalk_core.py"
 
 #HD and IC Unify and crosswalk scripts:
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/stabilize_hd.py" --run-smoke-test
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/hd_build_crosswalk_template.py"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/Fill Scripts/auto_fill_hd_crosswalk.py"
-
+_
 # SFA Unify and crosswalk scripts:
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_sfa.py"
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/sfa_build_crosswalk_template.py"
-python3 auto_fill_sfa_crosswalk.py
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/Fill Scripts/auto_fill_sfa_crosswalk.py"
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Harmonize Scripts/harmonize_sfa_concepts.py"
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Validation Scripts/validate_sfa_panel.py"
 

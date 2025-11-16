@@ -82,11 +82,16 @@ def auto_fill_concepts(
     if "label" not in df.columns:
         raise KeyError("Expected column 'label' in crosswalk template.")
 
+    df["concept_key"] = df["concept_key"].astype("object")
+
     df["source_var"] = df["source_var"].astype(str).str.strip().str.upper()
 
     # Identify rows that are already filled (do not override)
-    ck = df["concept_key"].astype(str)
-    already_filled = ck.str.strip().ne("") & ck.notna()
+    raw_ck = df["concept_key"]
+    ck_str = raw_ck.astype(str)
+    trimmed = ck_str.str.strip()
+    empty_mask = raw_ck.isna() | trimmed.eq("") | trimmed.str.lower().eq("nan")
+    already_filled = ~empty_mask
 
     logging.info("Template has %d rows total.", len(df))
     logging.info("Rows with pre-filled concept_key: %d", already_filled.sum())
