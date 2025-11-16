@@ -44,6 +44,13 @@ def _normalize_survey_label(label: str) -> str:
     return SURVEY_SYNONYMS.get(cleaned, cleaned)
 
 
+def _first_non_empty(series: pd.Series):
+    for val in series:
+        if pd.notna(val) and str(val).strip():
+            return val
+    return series.iloc[0] if not series.empty else pd.NA
+
+
 def _prepare_crosswalk_df(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [c.lower() for c in df.columns]
@@ -73,6 +80,19 @@ def _prepare_crosswalk_df(df: pd.DataFrame) -> pd.DataFrame:
             "Crosswalk has year_start > year_end for these rows:\n"
             f"{bad_rows.to_string(index=False)}"
         )
+    agg = {"year_start": "min", "year_end": "max"}
+    if "concept_key" in df.columns:
+        agg["concept_key"] = "first"
+    if "varlab" in df.columns:
+        agg["varlab"] = _first_non_empty
+    if "notes" in df.columns:
+        agg["notes"] = _first_non_empty
+    df = (
+        df.groupby(["survey", "source_var"], as_index=False)
+        .agg(agg)
+        .sort_values(["survey", "source_var", "year_start"])
+        .reset_index(drop=True)
+    )
     return df
 
 

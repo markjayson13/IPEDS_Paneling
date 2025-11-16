@@ -1,6 +1,70 @@
 # Code 
+
+python3 "Download Scripts/download_ipeds.py" \
+--out-root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
+--years 2004 (line 2024)
+
 #Dictionary
 python3 Dictionary/01_ingest_dictionaries.py
+
+#Crosswalks
+python3 "CrossWalk Scripts/hd_build_crosswalk_template.py"
+python3 "CrossWalk Scripts/adm_build_crosswalk_template.py"
+python3 "CrossWalk Scripts/enrollment_build_crosswalk_template.py"
+python3 "CrossWalk Scripts/sfa_build_crosswalk_template.py"
+python3 "CrossWalk Scripts/finance_build_crosswalk_template.py"
+    #Auto fill crosswalks
+    python3 "CrossWalk Scripts/Fill Scripts/auto_fill_hd_crosswalk.py"
+    python3 "CrossWalk Scripts/Fill Scripts/auto_fill_sfa_crosswalk.py"
+    python3 "CrossWalk Scripts/Fill Scripts/autofill_enrollment_crosswalk_core.py"
+    python3 "CrossWalk Scripts/Fill Scripts/fill_finance_crosswalk.py"
+
+#Step 0 Unify scripts:
+python3 "Unification Scripts/unify_admissions.py"
+python3 "Unification Scripts/unify_enrollment.py"
+python3 "Unification Scripts/unify_sfa.py"
+python3 "Unification Scripts/unify_finance.py"
+python3 "Unification Scripts/combine_step0_finance.py" 
+python3 "Unification Scripts/build_efres_residency_buckets.py" 
+
+#Harmonize scripts:
+python3 "Harmonize Scripts/harmonize_admissions.py"
+python3 "Harmonize Scripts/harmonize_enrollment_concepts.py"
+python3 "Harmonize Scripts/harmonize_sfa_concepts.py"
+python3 "Harmonize Scripts/harmonize_finance_concepts.py"
+python3 "Harmonize Scripts/stabilize_hd.py"
+
+#Global Harmonization & Panel Build
+python3 harmonize_new.py \
+  --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas"\
+  --lake "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet" \
+  --years 2004:2024 \
+  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long.parquet" \
+  --rules validation_rules.yaml \
+  --strict-release \
+  --strict-coverage
+
+# Final Wide Panel
+python3 panelize_panel.py \
+  --source "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long.parquet" \
+  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Final/panel_wide.csv"
+
+# Validation scripts:
+python3 "Validation Scripts/hd_validate_master_panel.py"
+python3 "Validation Scripts/validate_admissions.py"
+python3 "Validation Scripts/validate_enrollment_panel.py"
+python3 "Validation Scripts/validate_sfa_panel.py"
+python3 "Validation Scripts/finance_validate_panel.py"
+
+
+
+
+
+
+
+
+
+
 
 # Panelize raw data scripts:
 python3 Scripts/build_raw_panel.py
@@ -40,7 +104,6 @@ python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scri
 python3 "CrossWalk Scripts/Fill Scripts/fill_finance_crosswalk.py"
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Harmonize Scripts/harmonize_finance_concepts.py"
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Validation Scripts/finance_validate_panel.py"
-
 
 
 
