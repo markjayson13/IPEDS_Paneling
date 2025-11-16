@@ -44,7 +44,6 @@ python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Validation Scr
 
 
 
-
 # 1. Build dictionary lake (run once, or when dictionaries change)
 python3 01_ingest_dictionaries.py \
   --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \

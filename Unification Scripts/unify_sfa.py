@@ -18,6 +18,7 @@ SURVEY_YEAR_CANDIDATES = ["survey_year", "SURVEY_YEAR", "year", "YEAR", "panel_y
 SURVEY_HINTS = ("SFA", "STUDENT FINANCIAL AID", "NET PRICE", "NET-PRICE")
 BASE_STEP0_SFA_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0sfa")
 BASE_SFA_LONG_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAlong")
+DEFAULT_DICTIONARY_LAKE = Path("dictionary_lake.parquet")
 
 
 def _resolve_dict_columns(df: pd.DataFrame, candidates: Iterable[str], required: bool = True) -> str | None:
@@ -132,7 +133,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dictionary-lake",
         type=Path,
-        default=None,
+        default=DEFAULT_DICTIONARY_LAKE,
         help="Optional path to dictionary_lake.parquet to refine SFA variable selection.",
     )
     parser.add_argument("--unitid-col", type=str, default="UNITID", help="UNITID column name in the wide panel.")
