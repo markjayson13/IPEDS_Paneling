@@ -27,6 +27,9 @@ except ImportError as exc:  # pragma: no cover - startup guard
     raise
 
 ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas")
+TABLESDOC_ROOT = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/IPEDS ACCESS DB/IPEDS Database Tables Docs"
+)
 DEFAULT_OUTPUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
 DICT_NAME_PATTERN = re.compile(
     r"(?:^|[/_-])(dict|dictionary|varlist|variables?|layout|codebook)(?:$|[_-])",
@@ -52,6 +55,7 @@ RE_FILE = re.compile(
     r"(?P<y1>\d{2})(?P<y2>\d{2})?"
     r"(?:[_-])?(?P<suffix>[a-z0-9]+)?"
 )
+TABLESDOC_YEAR_RE = re.compile(r"IPEDS(\d{4})(\d{2})TablesDoc", re.IGNORECASE)
 SURVEY_HINT_TOKENS = {
     "ef": "EF",
     "efia": "E12",
@@ -467,6 +471,203 @@ def looks_like_dictionary_by_content(path: Path, max_rows: int = 50) -> bool:
     return has_var and has_label
 
 
+def iter_tablesdoc_workbooks(root: Path) -> list[Path]:
+    """
+    Return a sorted list of IPEDS TablesDoc Excel files:
+    e.g., IPEDS200405TablesDoc.xlsx, IPEDS200506TablesDoc.xlsx, ...
+    """
+    if not root.exists():
+        return []
+    paths = sorted(p for p in root.glob("IPEDS*TablesDoc.xlsx") if p.is_file())
+    return paths
+
+
+def parse_tablesdoc_year(path: Path) -> int | None:
+    """
+    Parse a canonical 'panel year' from an IPEDS TablesDoc filename.
+
+    Example: IPEDS200405TablesDoc.xlsx -> year=2004
+             IPEDS200708TablesDoc.xlsx -> year=2007
+    We use the first 4-digit group as the panel year we store in dictionary_lake.
+    """
+    match = TABLESDOC_YEAR_RE.search(path.stem)
+    if not match:
+        return None
+    start = int(match.group(1))
+    return start
+
+
+def load_tablesdoc_vartable(path: Path) -> pd.DataFrame:
+    """
+    Load the VarTableXX sheet from an IPEDS TablesDoc workbook and return
+    a normalized DataFrame with at least:
+
+      - varname
+      - vartitle
+      - longdescription
+      - survey_raw
+      - tablename
+    """
+    xls = pd.ExcelFile(path)
+
+    sheet_name = None
+    for sheet in xls.sheet_names:
+        if sheet.strip().lower().startswith("vartable"):
+            sheet_name = sheet
+            break
+    if sheet_name is None:
+        for sheet in xls.sheet_names:
+            df_preview = xls.parse(sheet_name=sheet, nrows=5, dtype=str)
+            cols = {str(c).strip().lower() for c in df_preview.columns if isinstance(c, str) or c is not None}
+            if "varname" in cols and any(c in cols for c in ["vartitle", "longdescription", "long description"]):
+                sheet_name = sheet
+                break
+    if sheet_name is None:
+        raise ValueError(f"Could not find VarTable-like sheet in TablesDoc: {path}")
+
+    df = xls.parse(sheet_name=sheet_name, dtype=str)
+    df.columns = [str(c).strip().lower() for c in df.columns]
+
+    var_col = next((c for c in df.columns if c == "varname"), None)
+    title_col = next((c for c in df.columns if c in {"vartitle", "var title"}), None)
+    long_col = next((c for c in df.columns if c in {"longdescription", "long description"}), None)
+    survey_col = next((c for c in df.columns if c == "survey"), None)
+    table_col = next((c for c in df.columns if c == "tablename"), None)
+
+    if var_col is None or title_col is None:
+        raise ValueError(f"TablesDoc {path} VarTable sheet missing varname/vartitle columns.")
+
+    out = pd.DataFrame()
+    out["varname"] = df[var_col].astype(str).str.strip()
+    out["vartitle"] = df[title_col].astype(str).str.strip()
+    if long_col is not None:
+        out["longdescription"] = df[long_col].astype(str).str.strip()
+    else:
+        out["longdescription"] = ""
+    if survey_col is not None:
+        out["survey_raw"] = df[survey_col].astype(str).str.strip()
+    else:
+        out["survey_raw"] = ""
+    if table_col is not None:
+        out["tablename"] = df[table_col].astype(str).str.strip()
+    else:
+        out["tablename"] = ""
+    out["sheet_name"] = sheet_name
+    out["table_title"] = out["tablename"]
+
+    out = out[out["varname"] != ""].reset_index(drop=True)
+    return out
+
+
+def build_tablesdoc_lake(root: Path) -> pd.DataFrame:
+    """
+    Build a dictionary-lake-style DataFrame from all IPEDS TablesDoc workbooks
+    under TABLESDOC_ROOT.
+
+    Columns will include:
+      - year
+      - survey_hint
+      - survey (canonical)
+      - varname
+      - varlab
+      - table_name
+      - long_description
+      - source
+    """
+
+    def _clean(value: object) -> str:
+        if value is None:
+            return ""
+        text = str(value).strip()
+        if text.lower() in {"nan", "none"}:
+            return ""
+        return text
+
+    records: list[dict] = []
+    for path in iter_tablesdoc_workbooks(root):
+        year = parse_tablesdoc_year(path)
+        if year is None:
+            print(f"[WARN] Could not parse year from TablesDoc filename: {path}")
+            continue
+        try:
+            df = load_tablesdoc_vartable(path)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[WARN] Skipping TablesDoc {path} due to error: {exc}")
+            continue
+
+        for row in df.itertuples(index=False):
+            varname = _clean(row.varname)
+            if not varname:
+                continue
+            varlab = _clean(getattr(row, "vartitle", ""))
+            longdesc = _clean(getattr(row, "longdescription", ""))
+            raw_survey = _clean(getattr(row, "survey_raw", ""))
+            tablename = _clean(getattr(row, "tablename", ""))
+            sheet_name = _clean(getattr(row, "sheet_name", "VarTable"))
+            table_title = _clean(getattr(row, "table_title", tablename))
+
+            survey_hint_token = raw_survey or tablename
+            canon = canonicalize_survey(survey_hint_token or "")
+            if canon in {"", "OTHER"}:
+                prefix_match = VAR_PREFIX_RE.match(varname)
+                prefix_hint = prefix_match.group(1).upper() if prefix_match else ""
+                if prefix_hint:
+                    canon = canonicalize_survey(prefix_hint)
+            else:
+                prefix_match = VAR_PREFIX_RE.match(varname)
+                prefix_hint = prefix_match.group(1).upper() if prefix_match else ""
+
+            display_hint = map_survey_hint(prefix_hint or canon, survey_hint_token or canon)
+            subsurvey = _infer_subsurvey(tablename, varlab, raw_survey)
+            source_label = varlab or varname
+            source_label_norm = _norm_text(source_label)
+            var_name_norm = _norm_text(varname)
+            table_name_norm = tablename.strip().lower()
+            search_text = f"{source_label_norm} || {var_name_norm}".strip()
+            dict_row_sha256 = hashlib.sha256(
+                f"{varname.lower()}|{source_label_norm}|{table_name_norm}".encode("utf-8")
+            ).hexdigest()
+
+            records.append(
+                {
+                    "year": year,
+                    "survey_hint": display_hint,
+                    "survey": canon or "OTHER",
+                    "source_var": varname,
+                    "varname": varname,
+                    "var_name": varname,
+                    "source_label": source_label,
+                    "label": source_label,
+                    "label_norm": source_label_norm,
+                    "source_label_norm": source_label_norm,
+                    "var_name_norm": var_name_norm,
+                    "source_var_norm": varname.lower(),
+                    "search_text": search_text,
+                    "code_norm": varname.upper(),
+                    "table_name": tablename,
+                    "table_name_norm": table_name_norm,
+                    "table_title": table_title or tablename,
+                    "data_filename": "",
+                    "dict_file": str(path),
+                    "dict_filename": path.name,
+                    "filename": path.name,
+                    "sheet_name": sheet_name or "VarTable",
+                    "prefix_hint": prefix_hint,
+                    "prefix_token": prefix_hint,
+                    "release": "",
+                    "subsurvey": subsurvey,
+                    "varlab": varlab,
+                    "long_description": longdesc,
+                    "source": "tablesdoc",
+                    "dict_row_sha256": dict_row_sha256,
+                }
+            )
+
+    if not records:
+        return pd.DataFrame()
+    return pd.DataFrame.from_records(records)
+
+
 def iter_dictionary_files(year_dir: Path) -> Iterable[Path]:
     """Yield candidate dictionary files under a given year directory."""
     for path in year_dir.rglob("*"):
@@ -599,7 +800,34 @@ def main() -> None:
     if not rows:
         sys.exit("No dictionary files found. Did you run the downloader?")
 
-    lake = pd.concat(rows, ignore_index=True)
+    lake_xsec = pd.concat(rows, ignore_index=True)
+    if "varlab" not in lake_xsec.columns:
+        lake_xsec["varlab"] = lake_xsec.get("source_label", "")
+    if "long_description" not in lake_xsec.columns:
+        lake_xsec["long_description"] = ""
+    if "source" not in lake_xsec.columns:
+        lake_xsec["source"] = "cross_sectional"
+    else:
+        lake_xsec["source"] = lake_xsec["source"].fillna("cross_sectional")
+    for col in ["survey_hint", "survey", "table_name"]:
+        if col not in lake_xsec.columns:
+            lake_xsec[col] = ""
+
+    tablesdoc_lake = build_tablesdoc_lake(TABLESDOC_ROOT)
+    if not tablesdoc_lake.empty:
+        for col in ["survey_hint", "survey", "varlab", "table_name", "long_description", "source"]:
+            if col not in lake_xsec.columns:
+                lake_xsec[col] = ""
+        missing_cols = set(lake_xsec.columns) - set(tablesdoc_lake.columns)
+        for col in missing_cols:
+            tablesdoc_lake[col] = None
+        lake = pd.concat([lake_xsec, tablesdoc_lake[lake_xsec.columns]], ignore_index=True)
+    else:
+        lake = lake_xsec
+    if "source" not in lake.columns:
+        lake["source"] = "cross_sectional"
+    else:
+        lake["source"] = lake["source"].fillna("cross_sectional")
     lake["source_label_norm"] = normalize_label(lake.get("source_label"))
     lake["source_var"] = lake["source_var"].astype(str).str.strip()
     lake["source_var_norm"] = lake["source_var"].str.lower()
@@ -754,9 +982,9 @@ def main() -> None:
         .reset_index(name="n_rows")
     )
     ingest_profile.to_csv(args.output.with_name("ingest_profile.csv"), index=False)
-    print("\n=== Ingest profile (year x survey, first 20 rows) ===")
-    with pd.option_context("display.max_rows", 20, "display.max_columns", 3):
-        print(ingest_profile.head(20).to_string(index=False))
+    print("\n=== Ingest profile (year x survey, first 30 rows) ===")
+    with pd.option_context("display.max_rows", 30, "display.max_columns", 5):
+        print(ingest_profile.head(30).to_string(index=False))
 
     dup_mask = lake.duplicated(["year", "survey", "label_norm", "varname"], keep=False)
     ingest_dupes = (
