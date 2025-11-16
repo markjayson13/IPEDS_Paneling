@@ -11,7 +11,8 @@ import pandas as pd
 
 DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
 DEFAULT_CROSSWALK_DIR = DATA_ROOT / "Paneled Datasets" / "Crosswalks"
-DEFAULT_CROSSWALK_PATH = DEFAULT_CROSSWALK_DIR / "hd_crosswalk.csv"
+DEFAULT_FILLED_CROSSWALK_DIR = DEFAULT_CROSSWALK_DIR / "Filled"
+DEFAULT_CROSSWALK_PATH = DEFAULT_FILLED_CROSSWALK_DIR / "hd_crosswalk.csv"
 DEFAULT_WIDE_DIR = DATA_ROOT / "Parquets" / "Unify" / "HDICwide"
 DEFAULT_OUTPUT_PATH = DEFAULT_WIDE_DIR / "hd_master_panel.parquet"
 

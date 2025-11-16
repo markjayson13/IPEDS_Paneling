@@ -21,6 +21,7 @@ CrossWalk /Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scr
 #HD and IC Unify and crosswalk scripts:
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/stabilize_hd.py" --run-smoke-test
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/hd_build_crosswalk_template.py"
+python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/Fill Scripts/auto_fill_hd_crosswalk.py"
 
 # SFA Unify and crosswalk scripts:
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_sfa.py"

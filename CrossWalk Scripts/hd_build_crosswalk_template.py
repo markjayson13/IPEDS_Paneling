@@ -7,11 +7,12 @@ from typing import Iterable
 
 import pandas as pd
 
-
 DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
 DEFAULT_DICT_LAKE_PATH = DATA_ROOT / "Parquets" / "dictionary_lake.parquet"
 DEFAULT_CROSSWALK_DIR = DATA_ROOT / "Paneled Datasets" / "Crosswalks"
+DEFAULT_FILLED_CROSSWALK_DIR = DEFAULT_CROSSWALK_DIR / "Filled"
 DEFAULT_TEMPLATE_PATH = DEFAULT_CROSSWALK_DIR / "hd_crosswalk_template.csv"
+DEFAULT_FILLED_CROSSWALK_PATH = DEFAULT_FILLED_CROSSWALK_DIR / "hd_crosswalk.csv"
 
 
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -110,6 +111,7 @@ def main() -> None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     template.to_csv(args.out, index=False)
     print(f"Wrote {len(template):,} rows to {args.out}")
+    print(f"When you finish curating the crosswalk, place the filled CSV at {DEFAULT_FILLED_CROSSWALK_PATH}")
 
 
 if __name__ == "__main__":
