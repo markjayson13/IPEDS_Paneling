@@ -10,12 +10,14 @@ python3 Dictionary/01_ingest_dictionaries.py
 
 #Crosswalks
 python3 "CrossWalk Scripts/hd_build_crosswalk_template.py"
+python3 "CrossWalk Scripts/ic_ay_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/adm_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/enrollment_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/sfa_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/finance_build_crosswalk_template.py"
     #Auto fill crosswalks
     python3 "CrossWalk Scripts/Fill Scripts/auto_fill_hd_crosswalk.py"
+    python3 "CrossWalk Scripts/Fill Scripts/fill_ic_ay_crosswalk.py"
     python3 "CrossWalk Scripts/Fill Scripts/auto_fill_sfa_crosswalk.py"
     python3 "CrossWalk Scripts/Fill Scripts/autofill_enrollment_crosswalk_core.py"
     python3 "CrossWalk Scripts/Fill Scripts/fill_finance_crosswalk.py"
@@ -105,9 +107,12 @@ python3 "Validation Scripts/validate_enrollment_panel.py"
 #Fiannce Unify and crosswalk scripts:
 python3 "CrossWalk Scripts/finance_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/Fill Scripts/fill_finance_crosswalk.py"
+python3 "Unification Scripts/combine_step0_finance.py"
 python3 "Harmonize Scripts/harmonize_finance_concepts.py" \
-  --step0 "/Users/.../Step0Finlong/finance_step0_long.parquet"
-python3 "Validation Scripts/finance_validate_panel.py"
+  --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0Finlong/finance_step0_long.parquet"
+python3 "Validation Scripts/finance_validate_panel.py" \
+  --finance-panel "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_concepts_wide.parquet"
+
 
 
 

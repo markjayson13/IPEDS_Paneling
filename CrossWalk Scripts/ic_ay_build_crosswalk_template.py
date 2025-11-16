@@ -26,6 +26,7 @@ CHARGE_KEYWORDS = (
 
 LABEL_CANDIDATES = ["label", "var_label", "varlab", "varname_label"]
 SURVEY_HINT_COLS = ["survey_group", "survey_hint", "survey_component", "component"]
+FILENAME_HINT_COLS = ["dict_filename", "data_filename", "filename", "dict_file"]
 
 
 def _resolve_column(df: pd.DataFrame, candidates: Iterable[str], *, required: bool = True) -> Optional[str]:
@@ -47,15 +48,33 @@ def _first_non_empty(series: pd.Series) -> str:
 
 
 def _ic_ay_mask(df: pd.DataFrame, survey_col: str) -> pd.Series:
-    survey = df[survey_col].astype(str)
-    mask = survey.str.contains("IC", case=False, na=False) & survey.str.contains("AY", case=False, na=False)
+    survey = df[survey_col].astype(str).str.upper()
+    survey_ic = survey.str.contains("IC", na=False)
+
+    file_mask = pd.Series(False, index=df.index)
+    for col in FILENAME_HINT_COLS:
+        if col in df.columns:
+            values = df[col].astype(str).str.lower()
+            file_mask |= values.str.contains("ic", na=False) & values.str.contains("ay", na=False)
+
+    table_mask = pd.Series(False, index=df.index)
+    if "table_name" in df.columns:
+        table_values = df["table_name"].astype(str).str.lower()
+        table_mask |= table_values.str.contains("icay", na=False)
+        table_mask |= table_values.str.contains("student charges", na=False)
+
+    hint_mask = pd.Series(False, index=df.index)
     for col in SURVEY_HINT_COLS:
         if col in df.columns:
             hints = df[col].astype(str).str.lower()
-            mask |= hints.str.contains("ic_ay", na=False)
-            mask |= hints.str.contains("student charges", na=False)
-            mask |= hints.str.contains("academic year", na=False)
-    return mask
+            hint_mask |= hints.str.contains("ic_ay", na=False)
+            hint_mask |= hints.str.contains("student charges", na=False)
+            hint_mask |= hints.str.contains("academic year", na=False)
+
+    var_mask = df["source_var"].astype(str).str.upper().str.match(r"^CHG\d+$", na=False)
+
+    combined = (survey_ic & (file_mask | table_mask | hint_mask)) | var_mask
+    return combined
 
 
 def build_crosswalk_template(dict_lake: Path) -> pd.DataFrame:
