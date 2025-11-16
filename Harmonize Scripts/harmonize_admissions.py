@@ -14,7 +14,7 @@ DEFAULT_STEP0 = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0adm/adm_step0_long.parquet"
 )
 DEFAULT_CROSSWALK = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/adm_crosswalk.csv"
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/adm_crosswalk_filled.csv"
 )
 DEFAULT_OUT_LONG = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/ADMlong/adm_concepts_long.parquet"

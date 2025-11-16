@@ -24,6 +24,9 @@ DEFAULT_DICT = Path("/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/di
 DEFAULT_OUTPUT = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/adm_crosswalk.csv"
 )
+DEFAULT_FILLED_OUTPUT = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/adm_crosswalk_filled.csv"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,6 +34,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--step0", type=Path, default=DEFAULT_STEP0, help="Admissions step0 long parquet path")
     parser.add_argument("--dictionary-lake", type=Path, default=DEFAULT_DICT, help="dictionary_lake.parquet path")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Destination CSV for manual editing")
+    parser.add_argument(
+        "--filled-output",
+        type=Path,
+        default=DEFAULT_FILLED_OUTPUT,
+        help="Optional path for a pre-filled Admissions crosswalk (concept keys + SAT split).",
+    )
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args()
 
@@ -122,6 +131,132 @@ def build_template(summary: pd.DataFrame, dictionary: pd.DataFrame, var_col: str
     return template
 
 
+def fill_adm_crosswalk(template: pd.DataFrame) -> pd.DataFrame:
+    """Populate concept keys and SAT old/new splits for the Admissions crosswalk."""
+
+    required_cols = {"concept_key", "source_var", "year_start", "year_end"}
+    missing = required_cols - set(template.columns)
+    if missing:
+        raise ValueError(f"Admissions crosswalk template is missing columns: {missing}")
+
+    df = template.copy()
+    df["source_var"] = df["source_var"].astype(str).str.strip().str.upper()
+    if "concept_key" not in df.columns:
+        df["concept_key"] = ""
+
+    mapping_simple = {
+        "APPLCN": "ADM_N_APPLICANTS_TOTAL",
+        "APPLCNM": "ADM_N_APPLICANTS_MEN",
+        "APPLCNW": "ADM_N_APPLICANTS_WOMEN",
+        "ADMSSN": "ADM_N_ADMITTED_TOTAL",
+        "ADMSSNM": "ADM_N_ADMITTED_MEN",
+        "ADMSSNW": "ADM_N_ADMITTED_WOMEN",
+        "ENRLT": "ADM_N_ENROLLED_TOTAL",
+        "ENRLTM": "ADM_N_ENROLLED_MEN",
+        "ENRLTW": "ADM_N_ENROLLED_WOMEN",
+        "SATNUM": "ADM_N_SAT_SUBMIT",
+        "ACTNUM": "ADM_N_ACT_SUBMIT",
+        "ACTCM25": "ADM_ACT_COMP_25_PCT",
+        "ACTCM75": "ADM_ACT_COMP_75_PCT",
+        "ACTEN25": "ADM_ACT_ENGL_25_PCT",
+        "ACTEN75": "ADM_ACT_ENGL_75_PCT",
+        "ACTMT25": "ADM_ACT_MATH_25_PCT",
+        "ACTMT75": "ADM_ACT_MATH_75_PCT",
+        "ACTWR25": "ADM_ACT_WRIT_25_PCT_OLD",
+        "ACTWR75": "ADM_ACT_WRIT_75_PCT_OLD",
+        "SATWR25": "ADM_SAT_WRIT_25_PCT_OLD",
+        "SATWR75": "ADM_SAT_WRIT_75_PCT_OLD",
+    }
+
+    sat_split_year = 2016
+    sat_vars = {"SATVR25", "SATVR75", "SATMT25", "SATMT75"}
+    rows: list[pd.Series] = []
+
+    for _, row in df.iterrows():
+        sv = str(row["source_var"]).strip().upper()
+        if sv in sat_vars:
+            continue
+        new_row = row.copy()
+        concept = mapping_simple.get(sv)
+        if concept:
+            new_row["concept_key"] = concept
+        else:
+            if not str(new_row.get("concept_key", "")).strip():
+                logging.warning("No concept_key mapping for source_var=%s; leaving blank in filled crosswalk.", sv)
+        rows.append(new_row)
+
+    sat_mapping = {
+        "SATVR25": ("ADM_SAT_CR_25_PCT_OLD", "ADM_SAT_EBRW_25_PCT_NEW"),
+        "SATVR75": ("ADM_SAT_CR_75_PCT_OLD", "ADM_SAT_EBRW_75_PCT_NEW"),
+        "SATMT25": ("ADM_SAT_MATH_25_PCT_OLD", "ADM_SAT_MATH_25_PCT_NEW"),
+        "SATMT75": ("ADM_SAT_MATH_75_PCT_OLD", "ADM_SAT_MATH_75_PCT_NEW"),
+    }
+
+    for sv, (old_ck, new_ck) in sat_mapping.items():
+        subset = df.loc[df["source_var"] == sv]
+        if subset.empty:
+            logging.warning("Expected SAT variable %s not found in template; skipping split.", sv)
+            continue
+        for _, base in subset.iterrows():
+            year_start = int(base["year_start"])
+            year_end = int(base["year_end"])
+            if year_start > year_end:
+                continue
+            old_end = min(year_end, sat_split_year - 1)
+            if year_start <= old_end:
+                old_row = base.copy()
+                old_row["concept_key"] = old_ck
+                old_row["year_start"] = year_start
+                old_row["year_end"] = old_end
+                rows.append(old_row)
+            new_start = max(year_start, sat_split_year)
+            if new_start <= year_end:
+                new_row = base.copy()
+                new_row["concept_key"] = new_ck
+                new_row["year_start"] = new_start
+                new_row["year_end"] = year_end
+                rows.append(new_row)
+
+    filled = pd.DataFrame(rows).reset_index(drop=True)
+    present = set(filled["concept_key"].astype(str).str.strip().unique())
+    expected = {
+        "ADM_N_APPLICANTS_TOTAL",
+        "ADM_N_APPLICANTS_MEN",
+        "ADM_N_APPLICANTS_WOMEN",
+        "ADM_N_ADMITTED_TOTAL",
+        "ADM_N_ADMITTED_MEN",
+        "ADM_N_ADMITTED_WOMEN",
+        "ADM_N_ENROLLED_TOTAL",
+        "ADM_N_ENROLLED_MEN",
+        "ADM_N_ENROLLED_WOMEN",
+        "ADM_N_ACT_SUBMIT",
+        "ADM_N_SAT_SUBMIT",
+        "ADM_ACT_COMP_25_PCT",
+        "ADM_ACT_COMP_75_PCT",
+        "ADM_ACT_ENGL_25_PCT",
+        "ADM_ACT_ENGL_75_PCT",
+        "ADM_ACT_MATH_25_PCT",
+        "ADM_ACT_MATH_75_PCT",
+        "ADM_ACT_WRIT_25_PCT_OLD",
+        "ADM_ACT_WRIT_75_PCT_OLD",
+        "ADM_SAT_CR_25_PCT_OLD",
+        "ADM_SAT_CR_75_PCT_OLD",
+        "ADM_SAT_EBRW_25_PCT_NEW",
+        "ADM_SAT_EBRW_75_PCT_NEW",
+        "ADM_SAT_MATH_25_PCT_OLD",
+        "ADM_SAT_MATH_25_PCT_NEW",
+        "ADM_SAT_MATH_75_PCT_OLD",
+        "ADM_SAT_MATH_75_PCT_NEW",
+    }
+    missing_expected = expected - {key for key in present if key}
+    if missing_expected:
+        logging.warning(
+            "Filled Admissions crosswalk missing expected concept_keys: %s",
+            ", ".join(sorted(missing_expected)),
+        )
+    return filled
+
+
 def main() -> None:
     args = parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO), format="%(levelname)s %(message)s")
@@ -136,7 +271,10 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     template.to_csv(args.output, index=False)
     logging.info("Wrote Admissions crosswalk template (%d rows) to %s", len(template), args.output)
-    logging.info("Fill concept_key and adjust SAT/ACT year ranges per manual spec before harmonization.")
+    filled = fill_adm_crosswalk(template)
+    args.filled_output.parent.mkdir(parents=True, exist_ok=True)
+    filled.to_csv(args.filled_output, index=False)
+    logging.info("Wrote filled Admissions crosswalk (%d rows) to %s", len(filled), args.filled_output)
 
 
 if __name__ == "__main__":
