@@ -22,6 +22,7 @@ import pandas as pd
 CROSSWALK_IN = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_template.csv")
 CROSSWALK_OUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/finance_crosswalk_filled.csv")
 OVERRIDES_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_overrides.csv")
+STEP0_SAMPLE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Step0/finance_step0_long_2004.parquet")
 
 CONCEPTS = {
     "IS_REVENUES_TOTAL",
@@ -70,15 +71,20 @@ def _match_function_total(text: str, term: str) -> bool:
     if _contains_any(text, "expenses", "expense", "expenditures"):
         return True
 
-    if "total" not in text:
-        return False
+    if "total" in text:
+        detail_terms = ("salaries", "wages", "benefits", "fringe")
+        if any(detail in text for detail in detail_terms):
+            return False
 
-    detail_terms = ("salaries", "wages", "benefits", "fringe")
-    if any(detail in text for detail in detail_terms):
-        return False
+        pattern = rf"(?:{term}\W{{0,12}}total|total\W{{0,12}}{term})"
+        if re.search(pattern, text):
+            return True
 
-    pattern = rf"(?:{term}\W{{0,12}}total|total\W{{0,12}}{term})"
-    return bool(re.search(pattern, text))
+    # Fallback for labels that are literally just the function name.
+    if text.strip() == term:
+        return True
+
+    return False
 
 
 def _strip_str_cols(df: pd.DataFrame, cols: tuple[str, ...]) -> None:
@@ -138,6 +144,12 @@ def assign_concept(label: str, form_family: str, base_key: str) -> str | None:
         any(marker in s for marker in net_markers)
         or "net tuition" in s
         or "net of allowance" in s
+    ):
+        return "REV_TUITION_NET"
+    if (
+        "tuition and fees, net" in s
+        or "tuition and fees net" in s
+        or "net tuition and fees" in s
     ):
         return "REV_TUITION_NET"
     if (
@@ -359,12 +371,88 @@ def _export_suspect_core(cw: pd.DataFrame) -> None:
         print("\nNo suspect core rows with blank concept_key.")
 
 
+def inspect_endowment_base_keys(
+    step0_path: Path | str | None = None,
+    filled_crosswalk: Path | str | None = None,
+) -> None:
+    """
+    Helper for manual inspection of endowment base_keys.
+
+    Reads a Step 0 long file (defaulting to STEP0_SAMPLE) and the filled crosswalk to
+    summarize which base_keys currently map to BS_ENDOWMENT_FMV and which base_keys
+    appear for the F1 component families. Intended to be invoked manually in REPL.
+    """
+    step0_path = Path(step0_path) if step0_path else STEP0_SAMPLE
+    filled_crosswalk = Path(filled_crosswalk) if filled_crosswalk else CROSSWALK_OUT
+
+    if not step0_path.exists():
+        print(f"Step 0 sample not found: {step0_path}")
+        return
+    if not filled_crosswalk.exists():
+        print(f"Filled crosswalk not found: {filled_crosswalk}")
+        return
+
+    try:
+        step0 = pd.read_parquet(step0_path)
+    except Exception as exc:  # pragma: no cover - debug helper
+        print(f"Failed to load Step 0 sample {step0_path}: {exc}")
+        return
+
+    try:
+        crosswalk = pd.read_csv(filled_crosswalk)
+    except Exception as exc:  # pragma: no cover - debug helper
+        print(f"Failed to load crosswalk {filled_crosswalk}: {exc}")
+        return
+
+    if "concept_key" not in crosswalk.columns:
+        print("Crosswalk is missing concept_key column; cannot inspect endowments.")
+    else:
+        endow = crosswalk[crosswalk["concept_key"] == "BS_ENDOWMENT_FMV"]
+        if endow.empty:
+            print("No BS_ENDOWMENT_FMV rows present in filled crosswalk.")
+        else:
+            cols = [c for c in ["form_family", "base_key", "year_start", "year_end"] if c in endow.columns]
+            print("\nCrosswalk BS_ENDOWMENT_FMV entries:")
+            if cols:
+                preview = endow[cols].drop_duplicates().sort_values(cols)
+                print(preview.to_string(index=False))
+            fam_counts = endow["form_family"].value_counts(dropna=False)
+            print("\nCounts by form_family:")
+            print(fam_counts.to_string())
+
+    required_cols = {"form_family", "base_key"}
+    if not required_cols.issubset(step0.columns):
+        print(f"Step 0 file lacks required columns: {sorted(required_cols - set(step0.columns))}")
+        return
+
+    comp_fams = {"F1_COMP_F", "F1_COMP_G"}
+    comp_rows = step0[step0["form_family"].isin(comp_fams)].copy()
+    value_col = next((col for col in ("value", "amount", "reported_value") if col in comp_rows.columns), None)
+    if value_col:
+        comp_rows = comp_rows[comp_rows[value_col].notna()]
+
+    if comp_rows.empty:
+        print("\nNo component-family rows found in Step 0 sample.")
+        return
+
+    print("\nComponent family base_keys observed in Step 0 sample:")
+    base_key_summary = (
+        comp_rows[["form_family", "base_key"]]
+        .drop_duplicates()
+        .sort_values(["form_family", "base_key"])
+    )
+    for fam, subset in base_key_summary.groupby("form_family"):
+        keys = ", ".join(subset["base_key"].astype(str))
+        print(f"  {fam}: {keys}")
+
+
 def main() -> None:
     cw = pd.read_csv(CROSSWALK_IN)
     cw.columns = [c.strip() for c in cw.columns]
 
     if "concept_key" not in cw.columns:
         cw["concept_key"] = ""
+    cw["concept_key"] = cw["concept_key"].astype("string")
 
     # Drop any pre-existing balance sheet concepts; we no longer auto-fill those.
     cw.loc[cw["concept_key"].isin(IGNORED_CONCEPTS), "concept_key"] = ""
@@ -378,6 +466,7 @@ def main() -> None:
         cw["weight"] = 1.0
 
     cw = _apply_manual_overrides(cw)
+    cw["concept_key"] = cw["concept_key"].astype("string")
 
     mask_blank = cw["concept_key"].isna() | (cw["concept_key"].astype(str).str.strip() == "")
     cw.loc[mask_blank, "concept_key"] = cw.loc[mask_blank].apply(
@@ -425,6 +514,24 @@ def main() -> None:
     unknown = set(cw["concept_key"].dropna().unique()) - CONCEPTS - {""}
     if unknown:
         print("WARNING: crosswalk contains concept_keys not in the schema:", sorted(unknown))
+
+    endow = cw[cw["concept_key"] == "BS_ENDOWMENT_FMV"]
+    if not endow.empty:
+        print("\nBS_ENDOWMENT_FMV mappings by form_family:")
+        print(endow["form_family"].value_counts(dropna=False))
+        preview_cols = ["form_family", "base_key", "year_start", "year_end"]
+        preview_cols = [c for c in preview_cols if c in endow.columns]
+        if preview_cols:
+            preview = (
+                endow[preview_cols]
+                .drop_duplicates()
+                .sort_values(preview_cols)
+                .head(20)
+            )
+            print("\nSample of BS_ENDOWMENT_FMV rows:")
+            print(preview.to_string(index=False))
+    else:
+        print("\nWARNING: no BS_ENDOWMENT_FMV mappings found in crosswalk.")
 
     _export_suspect_core(cw)
 

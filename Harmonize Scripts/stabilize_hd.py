@@ -15,6 +15,13 @@ DEFAULT_FILLED_CROSSWALK_DIR = DEFAULT_CROSSWALK_DIR / "Filled"
 DEFAULT_CROSSWALK_PATH = DEFAULT_FILLED_CROSSWALK_DIR / "hd_crosswalk.csv"
 DEFAULT_WIDE_DIR = DATA_ROOT / "Parquets" / "Unify" / "HDICwide"
 DEFAULT_OUTPUT_PATH = DEFAULT_WIDE_DIR / "hd_master_panel.parquet"
+DEFAULT_RAW_PANEL_PATH = DATA_ROOT / "Parquets" / "panel_long_hd_ic.parquet"
+
+SURVEY_SYNONYMS = {
+    "INSTITUTIONALCHARACTERISTICS": "HD",
+    "INSTITUTIONALCHARACTERISTICSIC": "IC",
+    "INSTITUTIONALCHARACTERISTICSIC_A": "IC",
+}
 
 EVER_TRUE_COLS = ["STABLE_HBCU", "STABLE_TRIBAL"]
 GAP_FILL_COLS = [
@@ -32,6 +39,11 @@ CARNEGIE_COLS = [
 ]
 
 
+def _normalize_survey_label(label: str) -> str:
+    cleaned = label.strip().upper().replace(" ", "")
+    return SURVEY_SYNONYMS.get(cleaned, cleaned)
+
+
 def _prepare_crosswalk_df(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [c.lower() for c in df.columns]
@@ -40,8 +52,8 @@ def _prepare_crosswalk_df(df: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Crosswalk missing required columns: {sorted(missing)}")
 
-    df["survey"] = df["survey"].astype(str).str.upper()
-    df["source_var"] = df["source_var"].astype(str)
+    df["survey"] = df["survey"].astype(str).map(_normalize_survey_label)
+    df["source_var"] = df["source_var"].astype(str).str.upper()
     df["concept_key"] = df["concept_key"].astype(str)
     df["year_start"] = pd.to_numeric(df["year_start"], errors="coerce").astype("Int64")
     df["year_end"] = pd.to_numeric(df["year_end"], errors="coerce").astype("Int64")
@@ -100,6 +112,8 @@ def _expand_crosswalk(df: pd.DataFrame) -> pd.DataFrame:
 def _prepare_raw_panel_df(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [c.lower() for c in df.columns]
+    if "varname" not in df.columns and "source_var" in df.columns:
+        df["varname"] = df["source_var"]
     required = {"unitid", "year", "survey", "varname", "value"}
     missing = required - set(df.columns)
     if missing:
@@ -110,7 +124,7 @@ def _prepare_raw_panel_df(df: pd.DataFrame) -> pd.DataFrame:
     if df["unitid"].isna().any() or df["year"].isna().any():
         raise ValueError("Input panel has missing unitid or year values.")
     df["survey"] = df["survey"].astype(str).str.upper()
-    df["varname"] = df["varname"].astype(str)
+    df["varname"] = df["varname"].astype(str).str.upper()
     return df
 
 
@@ -161,7 +175,8 @@ def _normalize_binary_flag(df: pd.DataFrame, col: str) -> None:
     numeric = pd.to_numeric(df[col], errors="coerce")
     mask_yes = numeric == 1
     mask_no = numeric.isin({0, 2})
-    unexpected = numeric[~(mask_yes | mask_no | numeric.isna())].unique()
+    mask_missing = numeric.isin({-3, -2, -1})
+    unexpected = numeric[~(mask_yes | mask_no | mask_missing | numeric.isna())].unique()
     if len(unexpected):
         raise ValueError(
             f"{col} contains unexpected codes {sorted(map(float, unexpected))}. "
@@ -170,6 +185,7 @@ def _normalize_binary_flag(df: pd.DataFrame, col: str) -> None:
     normalized = pd.Series(np.nan, index=df.index, dtype="float64")
     normalized[mask_yes] = 1.0
     normalized[mask_no] = 0.0
+    normalized[mask_missing] = np.nan
     df[col] = normalized
 
 
@@ -404,8 +420,8 @@ def main() -> None:
     parser.add_argument(
         "--input",
         type=Path,
-        required=False,
-        help="Path to long-form raw HD/IC panel (panel_long_raw.parquet).",
+        default=DEFAULT_RAW_PANEL_PATH,
+        help="Path to long-form raw HD/IC panel (panel_long_hd_ic.parquet).",
     )
     parser.add_argument(
         "--crosswalk",

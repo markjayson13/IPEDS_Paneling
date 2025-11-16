@@ -9,8 +9,9 @@ import numpy as np
 import pandas as pd
 
 DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
-DEFAULT_RAW_HDIC = DATA_ROOT / "Parquets" / "Unify" / "HDIClong" / "hd_ic_long.parquet"
-DEFAULT_MASTER = DATA_ROOT / "Parquets" / "Unify" / "HDICwide" / "hd_master_panel.parquet"
+DEFAULT_RAW_HDIC = DATA_ROOT / "Parquets" / "panel_long_hd_ic.parquet"
+DEFAULT_MASTER = DATA_ROOT / "Paneled Datasets" / "Final" / "hd_master_panel.csv"
+FALLBACK_MASTER = DATA_ROOT / "Parquets" / "Unify" / "HDICwide" / "hd_master_panel.parquet"
 
 CARNEGIE_COLS: List[str] = [
     "CARNEGIE_2005",
@@ -43,6 +44,8 @@ def load_raw_hd(raw_path: Path) -> pd.DataFrame:
         raise SystemExit(f"Raw HD/IC file not found: {raw_path}")
     df = pd.read_parquet(raw_path)
     df.columns = [c.lower() for c in df.columns]
+    if "varname" not in df.columns and "source_var" in df.columns:
+        df["varname"] = df["source_var"]
     required = {"unitid", "year", "survey", "varname", "value"}
     missing = required - set(df.columns)
     if missing:
@@ -53,9 +56,17 @@ def load_raw_hd(raw_path: Path) -> pd.DataFrame:
 
 
 def load_master(master_path: Path) -> pd.DataFrame:
-    if not master_path.exists():
-        raise SystemExit(f"Master spine not found: {master_path}")
-    df = pd.read_parquet(master_path)
+    target = master_path
+    if not target.exists():
+        if master_path == DEFAULT_MASTER and FALLBACK_MASTER.exists():
+            print(f"[INFO] Default master not found; falling back to {FALLBACK_MASTER}")
+            target = FALLBACK_MASTER
+        else:
+            raise SystemExit(f"Master spine not found: {master_path}")
+    if target.suffix.lower() == ".parquet":
+        df = pd.read_parquet(target)
+    else:
+        df = pd.read_csv(target)
     df.columns = [c.upper() for c in df.columns]
     required = {"UNITID", "YEAR"}
     missing = required - set(df.columns)
