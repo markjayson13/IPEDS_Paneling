@@ -30,7 +30,11 @@ ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional D
 TABLESDOC_ROOT = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/IPEDS ACCESS DB/IPEDS Database Tables Docs"
 )
-DEFAULT_OUTPUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
+DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
+DICT_PARQUET_PATH = DATA_ROOT / "Parquets" / "Dictionary" / "dictionary_lake.parquet"
+INGEST_PROFILE_PATH = DATA_ROOT / "Checks" / "Dictionary" / "ingest_profile.csv"
+DICTIONARY_PROFILE_PATH = DATA_ROOT / "Artifacts" / "dictionary_profile.csv"
+DEFAULT_OUTPUT = DICT_PARQUET_PATH
 DICT_NAME_PATTERN = re.compile(
     r"(?:^|[/_-])(dict|dictionary|varlist|variables?|layout|codebook)(?:$|[_-])",
     re.IGNORECASE,
@@ -203,6 +207,29 @@ def canonicalize_survey(value: str) -> str:
             return canon
     return token or "OTHER"
 
+
+def canonical_survey_from_tablename(table: str) -> str | None:
+    """
+    Derive a canonical survey code from an Access table name, giving priority to
+    table prefixes that identify the authoritative survey/component.
+    """
+    if not isinstance(table, str):
+        return None
+    tname = table.strip().upper()
+    if not tname:
+        return None
+    if tname.startswith("HD"):
+        return "HD"
+    if tname.startswith("IC"):
+        return "IC"
+    if tname.startswith("C"):
+        return "C"
+    if tname.startswith(("E1D", "EFIA", "EFIB", "EFIC", "EFID", "EFFY")):
+        return "E12"
+    if tname.startswith("EF"):
+        return "EF"
+    return None
+
 SURVEY_HINT_BY_PREFIX = {
     "F1A": "Finance",
     "F2A": "Finance",
@@ -360,7 +387,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=DEFAULT_OUTPUT,
+        default=DICT_PARQUET_PATH,
         help="Output parquet file (default: dictionary_lake.parquet)",
     )
     return parser.parse_args()
@@ -606,18 +633,17 @@ def build_tablesdoc_lake(root: Path) -> pd.DataFrame:
             sheet_name = _clean(getattr(row, "sheet_name", "VarTable"))
             table_title = _clean(getattr(row, "table_title", tablename))
 
+            prefix_match = VAR_PREFIX_RE.match(varname)
+            prefix_hint = prefix_match.group(1).upper() if prefix_match else ""
+            table_survey = canonical_survey_from_tablename(tablename)
             survey_hint_token = raw_survey or tablename
-            canon = canonicalize_survey(survey_hint_token or "")
-            if canon in {"", "OTHER"}:
-                prefix_match = VAR_PREFIX_RE.match(varname)
-                prefix_hint = prefix_match.group(1).upper() if prefix_match else ""
-                if prefix_hint:
-                    canon = canonicalize_survey(prefix_hint)
-            else:
-                prefix_match = VAR_PREFIX_RE.match(varname)
-                prefix_hint = prefix_match.group(1).upper() if prefix_match else ""
-
-            display_hint = map_survey_hint(prefix_hint or canon, survey_hint_token or canon)
+            hint_survey = canonicalize_survey(survey_hint_token or "")
+            canon = table_survey or hint_survey
+            if (not canon or canon == "OTHER") and prefix_hint:
+                canon = canonicalize_survey(prefix_hint)
+            if not canon:
+                canon = "OTHER"
+            survey_hint = survey_hint_token or canon
             subsurvey = _infer_subsurvey(tablename, varlab, raw_survey)
             source_label = varlab or varname
             source_label_norm = _norm_text(source_label)
@@ -631,7 +657,7 @@ def build_tablesdoc_lake(root: Path) -> pd.DataFrame:
             records.append(
                 {
                     "year": year,
-                    "survey_hint": display_hint,
+                    "survey_hint": survey_hint,
                     "survey": canon or "OTHER",
                     "source_var": varname,
                     "varname": varname,
@@ -706,6 +732,7 @@ def main() -> None:
     root = args.root
     if not root.exists():
         sys.exit(f"Root directory not found: {root}")
+    parquet_path = args.output
 
     rows: list[pd.DataFrame] = []
     for year_dir in sorted(p for p in root.iterdir() if p.is_dir() and p.name.isdigit()):
@@ -941,15 +968,15 @@ def main() -> None:
         .reset_index(drop=True)
     )
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    lake.to_parquet(args.output, index=False, compression="snappy")
-    print(f"Wrote {len(lake):,} rows to {args.output}")
+    parquet_path.parent.mkdir(parents=True, exist_ok=True)
+    lake.to_parquet(parquet_path, index=False, compression="snappy")
+    print(f"Wrote {len(lake):,} rows to {parquet_path}")
 
     if not dup_rows.empty:
-        dup_path = args.output.with_name("dictionary_lake_duplicates.csv")
+        dup_path = parquet_path.with_name("dictionary_lake_duplicates.csv")
         dup_rows.sort_values(dedup_key).to_csv(dup_path, index=False)
         print(f"Duplicate rows written to {dup_path}")
-        dup_rows.to_csv(args.output.with_name("dictionary_duplicates.csv"), index=False)
+        dup_rows.to_csv(parquet_path.with_name("dictionary_duplicates.csv"), index=False)
 
     top_labels = (
         lake.groupby(["year", "survey_hint", "source_label_norm"], dropna=False)
@@ -961,7 +988,7 @@ def main() -> None:
         .groupby(["year", "survey_hint"], as_index=False)
         .head(25)
     )
-    top_path = args.output.with_name("dictionary_lake_top_labels.csv")
+    top_path = parquet_path.with_name("dictionary_lake_top_labels.csv")
     top_labels.to_csv(top_path, index=False)
     print(f"Top label summary written to {top_path}")
 
@@ -970,18 +997,21 @@ def main() -> None:
         .size()
         .reset_index(name="row_count")
     )
-    profile_csv_path = args.output.with_name("dictionary_profile.csv")
-    profile.to_csv(profile_csv_path, index=False)
-    profile_path = args.output.with_name("dictionary_lake_columns_profile.json")
+    DICTIONARY_PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    profile.to_csv(DICTIONARY_PROFILE_PATH, index=False)
+    profile_path = parquet_path.with_name("dictionary_lake_columns_profile.json")
     profile.to_json(profile_path, orient="records", indent=2)
-    print(f"Dictionary profile written to {profile_path}")
+    print(f"Dictionary profile written to {DICTIONARY_PROFILE_PATH}")
+    print(f"Dictionary columns profile written to {profile_path}")
 
     ingest_profile = (
         lake.groupby(["year", "survey"], dropna=False)
         .size()
         .reset_index(name="n_rows")
     )
-    ingest_profile.to_csv(args.output.with_name("ingest_profile.csv"), index=False)
+    INGEST_PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ingest_profile.to_csv(INGEST_PROFILE_PATH, index=False)
+    print(f"Ingest profile written to {INGEST_PROFILE_PATH}")
     print("\n=== Ingest profile (year x survey, first 30 rows) ===")
     with pd.option_context("display.max_rows", 30, "display.max_columns", 5):
         print(ingest_profile.head(30).to_string(index=False))
@@ -991,7 +1021,7 @@ def main() -> None:
         lake.loc[dup_mask]
         .sort_values(["year", "survey", "label_norm", "varname"])
     )
-    ingest_dupes.to_csv(args.output.with_name("ingest_possible_dupes.csv"), index=False)
+    ingest_dupes.to_csv(parquet_path.with_name("ingest_possible_dupes.csv"), index=False)
 
 
 if __name__ == "__main__":

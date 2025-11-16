@@ -2,7 +2,6 @@
 #Dictionary
 python3 Dictionary/01_ingest_dictionaries.py
 
-
 # Panelize raw data scripts:
 python3 Scripts/build_raw_panel.py
 python3 Scripts/panelize_raw.py
