@@ -9,8 +9,8 @@
 #Fiannce Unify and crosswalk scripts:
 # unify_finance.py
 # finance_build_crosswalk_template.py 
-# harmonize_finance_concepts.py
-# finance_validate_panel.py
+Harmonize Scripts/harmonize_finance_concepts.py
+Validation Scripts/finance_validate_panel.py
 
 # Enrollment Unify and crosswalk scripts:
 Unification Scripts/unify_enrollment.py
@@ -23,12 +23,16 @@ Unification Scripts/stabilize_hd.py
 CrossWalk Scripts/hd_build_crosswalk_template.py
 
 # SFA Unify and crosswalk scripts:
-
+Unification Scripts/unify_sfa.py
+CrossWalk Scripts/sfa_build_crosswalk_template.py
+Harmonize Scripts/harmonize_sfa_concepts.py
+Validation Scripts/validate_sfa_panel.py
 
 #ADM Unify and crosswalk scripts:
-
-
-
+Unification Scripts/unify_admissions.py
+CrossWalk Scripts/adm_build_crosswalk_template.py
+Harmonize Scripts/harmonize_admissions.py
+Validation Scripts/validate_admissions.py
 
 # 1. Build dictionary lake (run once, or when dictionaries change)
 python3 01_ingest_dictionaries.py \
