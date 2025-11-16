@@ -11,6 +11,14 @@ from typing import Iterable, List
 
 import pandas as pd
 
+DEFAULT_DICTIONARY = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet"
+)
+DEFAULT_YEARS = "2004-2024"
+DEFAULT_OUTPUT = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/enrollment_crosswalk_template.csv"
+)
+
 
 def parse_years(expr: str) -> List[int]:
     tokens: List[str] = []
@@ -63,9 +71,24 @@ def select_enrollment_vars(lake: pd.DataFrame, years: Iterable[int]) -> pd.DataF
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dictionary", type=Path, required=True, help="Path to dictionary_lake.parquet")
-    parser.add_argument("--years", type=str, required=True, help='Year range (e.g. "2004-2024" or "2010 2011")')
-    parser.add_argument("--output", type=Path, required=True, help="CSV output path for the template")
+    parser.add_argument(
+        "--dictionary",
+        type=Path,
+        default=DEFAULT_DICTIONARY,
+        help=f"Path to dictionary_lake.parquet. Default: {DEFAULT_DICTIONARY}",
+    )
+    parser.add_argument(
+        "--years",
+        type=str,
+        default=DEFAULT_YEARS,
+        help='Year range (e.g. "2004-2024" or "2010 2011"). Default: %(default)s',
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_OUTPUT,
+        help=f"CSV output path for the template. Default: {DEFAULT_OUTPUT}",
+    )
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args()
 

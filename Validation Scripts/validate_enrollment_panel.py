@@ -34,16 +34,27 @@ EF_TOTAL = "EF_HEAD_ALL_UG_TOT_ALL"
 E12_TOTAL = "E12_HEAD_ALL_UG_TOT_ALL"
 
 TOLERANCE = 1.0  # headcount tolerance
+DEFAULT_INPUT = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrollwide/enrollment_concepts_wide.parquet"
+)
+DEFAULT_OUTPUT_DIR = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Checks/Enrollment"
+)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, required=True, help="Path to enrollment_concepts_wide.parquet")
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=DEFAULT_INPUT,
+        help=f"Path to enrollment_concepts_wide.parquet. Default: {DEFAULT_INPUT}",
+    )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        required=True,
-        help="Directory to store validation CSV outputs",
+        default=DEFAULT_OUTPUT_DIR,
+        help=f"Directory to store validation CSV outputs. Default: {DEFAULT_OUTPUT_DIR}",
     )
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args()

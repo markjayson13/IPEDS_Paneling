@@ -96,10 +96,11 @@ python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Harmonize Scri
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Validation Scripts/validate_admissions.py"
 
 # Enrollment Unify and crosswalk scripts:
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/build_efres_residency_buckets.py" --efres "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/efres_long.parquet" --hd "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/HD/hd_state_panel.parquet" --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/efres_residency_buckets.parquet"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/enrollment_build_crosswalk_template.py" --dictionary "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet" --years "2004-2024" --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/enrollment_crosswalk_template.csv"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/Fill Scripts/autofill_enrollment_crosswalk_core.py" --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/enrollment_crosswalk_template.csv" --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/enrollment_crosswalk_autofilled.csv"
-python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_enrollment.py" --dictionary "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet" --panel-root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections" --years "2004-2024" --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/enrollment_step0_long.parquet"
+python3 "Unification Scripts/build_efres_residency_buckets.py"
+python3 "CrossWalk Scripts/enrollment_build_crosswalk_template.py"
+python3 "CrossWalk Scripts/Fill Scripts/autofill_enrollment_crosswalk_core.py"
+python3 "Unification Scripts/unify_enrollment.py"
+python3 "Validation Scripts/validate_enrollment_panel.py"
 
 #Fiannce Unify and crosswalk scripts:
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_finance.py"

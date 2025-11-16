@@ -11,6 +11,17 @@ from typing import Iterable, List
 
 import pandas as pd
 
+DEFAULT_DICTIONARY = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet"
+)
+DEFAULT_PANEL_ROOT = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections"
+)
+DEFAULT_YEARS = "2004-2024"
+DEFAULT_OUTPUT = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/enrollment_step0_long.parquet"
+)
+
 
 def parse_years(expr: str) -> List[int]:
     tokens: List[str] = []
@@ -152,10 +163,30 @@ def attach_metadata(long_df: pd.DataFrame, lake_year: pd.DataFrame) -> pd.DataFr
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dictionary", type=Path, required=True, help="Path to dictionary_lake.parquet")
-    parser.add_argument("--panel-root", type=Path, required=True, help="Directory containing panel_wide_raw files")
-    parser.add_argument("--years", type=str, required=True, help='Year range (e.g. "2004-2024" or "2010 2011")')
-    parser.add_argument("--output", type=Path, required=True, help="Output parquet path for step0 long data")
+    parser.add_argument(
+        "--dictionary",
+        type=Path,
+        default=DEFAULT_DICTIONARY,
+        help=f"Path to dictionary_lake.parquet. Default: {DEFAULT_DICTIONARY}",
+    )
+    parser.add_argument(
+        "--panel-root",
+        type=Path,
+        default=DEFAULT_PANEL_ROOT,
+        help=f"Directory containing panel_wide_raw files. Default: {DEFAULT_PANEL_ROOT}",
+    )
+    parser.add_argument(
+        "--years",
+        type=str,
+        default=DEFAULT_YEARS,
+        help='Year range (e.g. "2004-2024" or "2010 2011"). Default: %(default)s',
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_OUTPUT,
+        help=f"Output parquet path for step0 long data. Default: {DEFAULT_OUTPUT}",
+    )
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args()
 

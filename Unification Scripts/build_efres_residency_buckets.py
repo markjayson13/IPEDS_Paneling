@@ -75,12 +75,37 @@ BUCKET_COLS = {
     "UNKNOWN": "EF_RES_FTFT_UG_RES_UNKNOWN",
 }
 
+DEFAULT_EFRES = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/efres_long.parquet"
+)
+DEFAULT_HD = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/HD/hd_state_panel.parquet"
+)
+DEFAULT_OUTPUT = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/efres_residency_buckets.parquet"
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--efres", type=Path, required=True, help="EF residence long file (csv/parquet)")
-    parser.add_argument("--hd", type=Path, required=True, help="HD file with institution state codes")
-    parser.add_argument("--output", type=Path, required=True, help="Output parquet path")
+    parser.add_argument(
+        "--efres",
+        type=Path,
+        default=DEFAULT_EFRES,
+        help=f"EF residence long file (csv/parquet). Default: {DEFAULT_EFRES}",
+    )
+    parser.add_argument(
+        "--hd",
+        type=Path,
+        default=DEFAULT_HD,
+        help=f"HD file with institution state codes. Default: {DEFAULT_HD}",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_OUTPUT,
+        help=f"Output parquet path. Default: {DEFAULT_OUTPUT}",
+    )
     parser.add_argument("--year-col", default="YEAR")
     parser.add_argument("--unitid-col", default="UNITID")
     parser.add_argument("--res-col", default="RES_STATE")
@@ -216,5 +241,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
 
