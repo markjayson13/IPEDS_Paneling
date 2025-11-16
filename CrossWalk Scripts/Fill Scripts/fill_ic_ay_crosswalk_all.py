@@ -11,9 +11,12 @@ import pandas as pd
 
 HERE = Path(__file__).resolve()
 PROJECT_ROOT = HERE.parents[2]
-DEFAULT_INPUT = PROJECT_ROOT / "Paneled Datasets" / "Crosswalks" / "ic_ay_crosswalk_autofilled.csv"
-DEFAULT_TEMPLATE_FALLBACK = PROJECT_ROOT / "Paneled Datasets" / "Crosswalks" / "ic_ay_crosswalk_template.csv"
-DEFAULT_OUTPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled")
+DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
+CROSSWALK_DIR = DATA_ROOT / "Paneled Datasets" / "Crosswalks"
+FILLED_DIR = CROSSWALK_DIR / "Filled"
+DEFAULT_INPUT = CROSSWALK_DIR / "ic_ay_crosswalk_autofilled.csv"
+DEFAULT_TEMPLATE_FALLBACK = CROSSWALK_DIR / "ic_ay_crosswalk_template.csv"
+DEFAULT_OUTPUT_DIR = FILLED_DIR
 DEFAULT_OUTPUT_NAME = "ic_ay_crosswalk_all.csv"
 SUMMARY_NAME = "ic_ay_crosswalk_all_summary.csv"
 
@@ -46,13 +49,28 @@ def parse_args() -> argparse.Namespace:
 
 
 def resolve_input(path: Path | None) -> Path:
-    if path and path.exists():
-        return path
-    if DEFAULT_INPUT.exists():
-        return DEFAULT_INPUT
-    if DEFAULT_TEMPLATE_FALLBACK.exists():
-        print(f"Primary input missing. Using fallback template at {DEFAULT_TEMPLATE_FALLBACK}")
-        return DEFAULT_TEMPLATE_FALLBACK
+    candidates = []
+    if path:
+        candidates.append(path)
+    candidates.extend(
+        [
+            DEFAULT_INPUT,
+            FILLED_DIR / "ic_ay_crosswalk_autofilled.csv",
+            CROSSWALK_DIR / "ic_ay_crosswalk_autofilled.csv",
+            DEFAULT_TEMPLATE_FALLBACK,
+            PROJECT_ROOT / "Paneled Datasets" / "Crosswalks" / "ic_ay_crosswalk_autofilled.csv",
+            PROJECT_ROOT / "Paneled Datasets" / "Crosswalks" / "ic_ay_crosswalk_template.csv",
+        ]
+    )
+    seen = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            if candidate != path:
+                print(f"Using input file: {candidate}")
+            return candidate
     raise SystemExit("No available IC_AY crosswalk input. Provide --input pointing to a CSV file.")
 
 

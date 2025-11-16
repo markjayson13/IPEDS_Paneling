@@ -33,6 +33,7 @@ python3 "Unification Scripts/build_efres_residency_buckets.py"
 #Harmonize scripts:
 python3 "Harmonize Scripts/harmonize_admissions.py"
 python3 "Harmonize Scripts/harmonize_enrollment_concepts.py"
+python3 "Harmonize Scripts/stabilize_ic_ay.py" --overwrite
 python3 "Harmonize Scripts/harmonize_sfa_concepts.py"
 python3 "Harmonize Scripts/harmonize_finance_concepts.py"
 python3 "Harmonize Scripts/stabilize_hd.py"

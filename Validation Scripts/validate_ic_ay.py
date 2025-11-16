@@ -10,9 +10,10 @@ import numpy as np
 import pandas as pd
 
 DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
-DEFAULT_IC_AY_PANEL = DATA_ROOT / "Parquets" / "Unify" / "HDICwide" / "ic_ay_master_panel.parquet"
+DEFAULT_IC_AY_PANEL = DATA_ROOT / "Parquets" / "Unify" / "ICAYwide" / "icay_concepts_wide.parquet"
 DEFAULT_HD_PANEL = DATA_ROOT / "Parquets" / "Unify" / "HDICwide" / "hd_master_panel.parquet"
 DEFAULT_VALIDATION_DIR = DATA_ROOT / "Parquets" / "Validation"
+DEFAULT_CROSSWALK_PATH = DATA_ROOT / "Paneled Datasets" / "Crosswalks" / "Filled" / "ic_ay_crosswalk_all.csv"
 
 UNITID_CANDIDATES = ["UNITID", "unitid", "UNIT_ID", "unit_id"]
 YEAR_CANDIDATES = ["YEAR", "year", "SURVEY_YEAR", "survey_year"]
@@ -27,9 +28,15 @@ PRICE_COLS = [
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--ic-ay", type=Path, default=DEFAULT_IC_AY_PANEL, help="ic_ay_master_panel path")
+    parser.add_argument("--ic-ay", type=Path, default=DEFAULT_IC_AY_PANEL, help="Path to icay_concepts_wide parquet")
     parser.add_argument("--hd", type=Path, default=DEFAULT_HD_PANEL, help="hd_master_panel path for attributes")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_VALIDATION_DIR, help="Output directory for reports")
+    parser.add_argument(
+        "--crosswalk",
+        type=Path,
+        default=DEFAULT_CROSSWALK_PATH,
+        help="Path to the filled IC_AY crosswalk (ic_ay_crosswalk_all.csv)",
+    )
     return parser.parse_args()
 
 
@@ -171,6 +178,14 @@ def flag_large_growth(means: pd.DataFrame, price_cols: List[str], out_dir: Path)
 
 def main() -> None:
     args = parse_args()
+    crosswalk_path = args.crosswalk
+    if crosswalk_path and crosswalk_path.exists():
+        print(f"Using filled IC_AY crosswalk from {crosswalk_path}")
+    else:
+        print(
+            f"Warning: expected filled IC_AY crosswalk at {crosswalk_path} "
+            "was not found. Proceeding with validation of the master panel."
+        )
     ic = _ensure_unitid_year(_load_panel(args.ic_ay))
     hd = _ensure_unitid_year(_load_panel(args.hd))
     if not {"CONTROL", "SECTOR"}.issubset(hd.columns):
