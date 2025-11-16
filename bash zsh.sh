@@ -1,14 +1,17 @@
 # Code 
 
+#Dictionary
+Dictionary/01_ingest_dictionaries.py
 
-# 01_ingest_dictionaries.py 
+# Panelize raw data scripts:
+Panelize Scripts/build_raw_panel.py
+Panelize Scripts/panelize_raw.py
+Panelize Scripts/merge_raw_panels.py
 
-# build_raw_panel.py panelize_raw.py 
-# merge_raw_panels.py 
 
 #Fiannce Unify and crosswalk scripts:
-# unify_finance.py
-# finance_build_crosswalk_template.py 
+Unification Scripts/unify_finance.py
+CrossWalk Scripts/finance_build_crosswalk_template.py
 Harmonize Scripts/harmonize_finance_concepts.py
 Validation Scripts/finance_validate_panel.py
 
@@ -33,6 +36,11 @@ Unification Scripts/unify_admissions.py
 CrossWalk Scripts/adm_build_crosswalk_template.py
 Harmonize Scripts/harmonize_admissions.py
 Validation Scripts/validate_admissions.py
+
+
+
+
+
 
 # 1. Build dictionary lake (run once, or when dictionaries change)
 python3 01_ingest_dictionaries.py \
