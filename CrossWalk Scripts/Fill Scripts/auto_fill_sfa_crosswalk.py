@@ -23,7 +23,9 @@ Default output:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -35,6 +37,81 @@ CROSSWALK_DIR = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks"
 )
 FILLED_DIR = CROSSWALK_DIR / "Filled"
+
+TOKEN_RE = re.compile(r"[A-Z0-9]+")
+YEAR_RE = re.compile(r"^(19|20)\d{2}$")
+STOPWORDS = {
+    "AVERAGE",
+    "AMOUNT",
+    "NUMBER",
+    "PERCENT",
+    "PERCENTAGE",
+    "OF",
+    "FOR",
+    "THE",
+    "A",
+    "AN",
+    "AND",
+    "OR",
+    "WITH",
+    "WITHOUT",
+    "STUDENTS",
+    "UNDERGRADUATES",
+    "RECEIVING",
+    "RECEIVED",
+    "AWARDED",
+    "TOTAL",
+    "TOTALS",
+    "FULLTIME",
+    "FULL",
+    "TIME",
+    "FTFT",
+    "FIRSTTIME",
+    "FIRST",
+    "DEGREE",
+    "CERTIFICATE",
+    "SEEKING",
+    "TITLE",
+    "IV",
+    "INCOME",
+    "COHORT",
+    "AMT",
+    "FORM",
+    "PART",
+    "PARTS",
+    "NET",
+    "PRICE",
+    "AVERAGE",
+    "MIDPOINT",
+    "IN",
+    "OUT",
+    "LESS",
+    "MORE",
+    "THAN",
+    "TO",
+    "BY",
+    "INSTITUTIONAL",
+    "FEDERAL",
+    "STATE",
+    "LOCAL",
+    "GRANT",
+    "GRANTS",
+    "AID",
+    "ASSISTANCE",
+    "LOAN",
+    "LOANS",
+    "PELL",
+    "STAFFORD",
+    "PLUS",
+    "SCHOLARSHIP",
+    "SCHOLARSHIPS",
+    "PUBLIC",
+    "PRIVATE",
+    "MILITARY",
+    "VETERAN",
+}
+MAX_SLUG_TOKENS = 8
+MAX_CONCEPT_LEN = 96
 
 
 def infer_concept_key(label: Optional[str], source_var: Optional[str]) -> Optional[str]:
@@ -67,6 +144,45 @@ def infer_concept_key(label: Optional[str], source_var: Optional[str]) -> Option
     return None
 
 
+def tokenize_label(label: Optional[str]) -> list[str]:
+    if not label:
+        return []
+    text = str(label).upper().replace("\\n", " ").replace("\n", " ").replace("\r", " ")
+    tokens = TOKEN_RE.findall(text)
+    cleaned: list[str] = []
+    for tok in tokens:
+        if not tok or tok in STOPWORDS:
+            continue
+        if YEAR_RE.match(tok):
+            continue
+        if tok.isdigit():
+            continue
+        cleaned.append(tok)
+    return cleaned
+
+
+def slug_from_label(label: Optional[str], source_var: str, used_keys: set[str]) -> str:
+    tokens = tokenize_label(label)
+    base_tokens = tokens[:MAX_SLUG_TOKENS]
+    if base_tokens:
+        slug = "SFA_" + "_".join(base_tokens)
+    else:
+        slug = f"SFA_VAR_{source_var}"
+    slug = re.sub(r"_+", "_", slug).strip("_")
+    if not slug.startswith("SFA_"):
+        slug = f"SFA_{slug}"
+    slug = slug[:MAX_CONCEPT_LEN]
+
+    candidate = slug
+    suffix = f"_VAR_{source_var}"
+    if candidate in used_keys and not candidate.endswith(suffix):
+        candidate = f"{candidate}_{suffix}".strip("_")
+    while candidate in used_keys:
+        fingerprint = hashlib.sha1(f"{candidate}|{source_var}".encode("utf-8")).hexdigest()[:6].upper()
+        candidate = f"{slug}_H{fingerprint}"
+    return candidate
+
+
 def auto_fill_concepts(
     input_csv: Path,
     output_csv: Path,
@@ -93,6 +209,9 @@ def auto_fill_concepts(
     empty_mask = raw_ck.isna() | trimmed.eq("") | trimmed.str.lower().eq("nan")
     already_filled = ~empty_mask
 
+    df["concept_key_source"] = ""
+    df.loc[already_filled, "concept_key_source"] = "existing"
+
     logging.info("Template has %d rows total.", len(df))
     logging.info("Rows with pre-filled concept_key: %d", already_filled.sum())
 
@@ -102,24 +221,43 @@ def auto_fill_concepts(
 
     logging.info("Attempting to auto-fill concept_key for %d rows.", len(to_fill))
 
-    filled_count = 0
-    for idx, row in to_fill.iterrows():
-        concept = infer_concept_key(row.get("label"), row.get("source_var"))
-        if concept:
-            df.at[idx, "concept_key"] = concept
-            filled_count += 1
+    used_keys = set(df.loc[already_filled, "concept_key"].astype(str).str.strip().tolist())
+    used_keys.discard("")
 
-    logging.info("Auto-filled concept_key for %d rows.", filled_count)
+    filled_counts = {"net_price": 0, "label_slug": 0}
+    for idx, row in to_fill.iterrows():
+        raw_var = row.get("source_var", "")
+        source_var = str(raw_var or "").strip().upper() or f"ROW_{idx}"
+        concept = infer_concept_key(row.get("label"), source_var)
+        source = "net_price"
+        if not concept:
+            concept = slug_from_label(row.get("label"), source_var, used_keys)
+            source = "label_slug"
+        if concept in used_keys and source == "net_price":
+            # Ensure uniqueness for heuristics that return static names
+            concept = slug_from_label(row.get("label"), source_var, used_keys)
+            source = "label_slug"
+        df.at[idx, "concept_key"] = concept
+        df.at[idx, "concept_key_source"] = source
+        used_keys.add(concept)
+        filled_counts[source] += 1
+
+    if filled_counts["net_price"] or filled_counts["label_slug"]:
+        logging.info(
+            "Auto-filled concept_key for %d rows (net_price patterns=%d, label slugs=%d).",
+            filled_counts["net_price"] + filled_counts["label_slug"],
+            filled_counts["net_price"],
+            filled_counts["label_slug"],
+        )
+    else:
+        logging.info("No additional concept_key rows were filled.")
 
     # Basic summary by concept_key
-    filled_summary = (
-        df["concept_key"]
-        .astype(str)
-        .str.strip()
-        .value_counts(dropna=True)
-        .sort_index()
-    )
+    filled_summary = df["concept_key"].astype(str).str.strip().value_counts(dropna=True).sort_index()
     logging.info("Resulting concept_key distribution:\n%s", filled_summary)
+
+    if (df["concept_key"].astype(str).str.strip() == "").any():
+        raise RuntimeError("Some SFA rows still lack concept_key assignments after auto-fill.")
 
     # Write output
     output_csv.parent.mkdir(parents=True, exist_ok=True)

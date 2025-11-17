@@ -138,17 +138,33 @@ def suggest_concept_key_strict(row: pd.Series) -> str | None:
 def _tokenize_label(label: str) -> list[str]:
     clean = re.sub(r"[^a-z0-9]+", " ", label.lower())
     tokens = [tok.upper() for tok in clean.split() if tok]
-    return [tok for tok in tokens if tok not in RES_STOPWORDS]
+    filtered: list[str] = []
+    for tok in tokens:
+        if tok in RES_STOPWORDS:
+            continue
+        if tok.isdigit():
+            continue
+        if len(tok) == 4 and tok.isdigit():
+            continue
+        filtered.append(tok)
+    return filtered
 
 
 def slugify_label_to_concept(row: pd.Series, used_keys: set[str]) -> str:
     var = _clean(row.get("source_var", "")).upper()
     survey = _clean(row.get("survey", "")).upper()
     label_raw = _clean(row.get("label", ""))
-    label = label_raw.lower()
+    label = (
+        label_raw.replace("\\n", " ")
+        .replace("\n", " ")
+        .replace("\r", " ")
+        .lower()
+    )
 
     charge_type = ""
-    if "tuition and required fees" in label:
+    if "cost of attendance" in label or "coa" in label:
+        charge_type = "COA"
+    elif "tuition and required fees" in label:
         charge_type = "TUITFEE"
     elif "tuition" in label and "fees" in label:
         charge_type = "TUITFEE"

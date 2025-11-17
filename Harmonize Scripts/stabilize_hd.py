@@ -247,6 +247,20 @@ def _propagate_carnegie(df: pd.DataFrame, col: str) -> None:
     df[col] = df.groupby("unitid")[col].ffill().bfill()
 
 
+def _derive_parent_child_status(df: pd.DataFrame) -> pd.Series:
+    status = pd.Series(pd.NA, index=df.index, dtype="Int64")
+    child_mask = pd.Series(False, index=df.index)
+    if "CAMPUSID" in df.columns:
+        campus_series = df["CAMPUSID"]
+        campus_str = campus_series.astype(str).str.strip()
+        child_mask |= campus_series.notna() & campus_str.ne("") & campus_str.ne("nan")
+    if "PCACT" in df.columns:
+        child_mask |= df["PCACT"].notna()
+    status[child_mask] = 3
+    status.loc[status.isna()] = 1
+    return status
+
+
 def stabilize_hd(input_path: Path, crosswalk_path: Path, output_path: Path) -> pd.DataFrame:
     crosswalk = _read_crosswalk(crosswalk_path)
     expanded = _expand_crosswalk(crosswalk)
@@ -311,6 +325,7 @@ def stabilize_hd(input_path: Path, crosswalk_path: Path, output_path: Path) -> p
 
     wide["unitid"] = pd.to_numeric(wide["unitid"], errors="raise").astype("int64")
     wide["year"] = pd.to_numeric(wide["year"], errors="raise").astype("int64")
+    wide["STABLE_PRNTCHLD_STATUS"] = _derive_parent_child_status(wide)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wide.to_parquet(output_path, index=False)

@@ -285,3 +285,10 @@ python3 "Validation Scripts/finance_validate_panel.py" \
 
 echo "Done."
 echo "Final wide panel: $PANEL_WIDE"
+
+python3 "Validation Scripts/validate_panel_wide.py" \
+  --input "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Final/panel_wide.csv" \
+  --output-clean "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Final/panel_wide_clean.csv" \
+  --violations "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Validation/panel_wide_violations.csv" \
+  --summary "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Validation/panel_wide_validation_summary.txt"
+
