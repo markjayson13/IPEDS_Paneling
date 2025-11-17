@@ -121,7 +121,12 @@ def build_masks(cw: pd.DataFrame) -> dict:
 
     source = cw["source_var"].str.upper()
 
-    masks["E12 headcount (FYRACE01-24)"] = (survey == "12MONTHENROLLMENT") & source.str.startswith("FYRACE")
+    masks["E12 grand total (FYRACE24)"] = (survey == "12MONTHENROLLMENT") & source.eq("FYRACE24")
+    masks["E12 race breakdown (FYRACE01-23)"] = (
+        (survey == "12MONTHENROLLMENT")
+        & source.str.startswith("FYRACE")
+        & source.ne("FYRACE24")
+    )
 
     masks["E12 status/imputation flags"] = (survey == "12MONTHENROLLMENT") & (
         label.str.contains("response status", case=False, na=False)
@@ -138,7 +143,18 @@ def build_masks(cw: pd.DataFrame) -> dict:
         "12-month enrollment and instructional activity", case=False, na=False
     )
 
-    masks["EF core totals"] = (survey == "FALLENROLLMENT") & source.isin(["EFRACE24", "EFTOTLT"])
+    masks["EF core totals (EFRACE24 + EFTOTLT>=2008)"] = (
+        (survey == "FALLENROLLMENT")
+        & (
+            source.eq("EFRACE24")
+            | (source.eq("EFTOTLT") & (cw["year_start"] >= 2008))
+        )
+    )
+    masks["EF duplicate EFTOTLT totals (pre-2008)"] = (
+        (survey == "FALLENROLLMENT")
+        & source.eq("EFTOTLT")
+        & (cw["year_start"] < 2008)
+    )
     masks["EF FTFT residence totals"] = (survey == "FALLENROLLMENT") & source.isin(["EFRES01", "EFRES02"])
 
     masks["EF disability indicators"] = (survey == "FALLENROLLMENT") & (
@@ -206,7 +222,11 @@ def main() -> None:
     masks = build_masks(cw)
 
     errors: list[str] = []
-    hard_families = ["E12 headcount (FYRACE01-24)", "EF core totals", "EF FTFT residence totals"]
+    hard_families = [
+        "E12 grand total (FYRACE24)",
+        "EF core totals (EFRACE24 + EFTOTLT>=2008)",
+        "EF FTFT residence totals",
+    ]
     for name, mask in masks.items():
         errors.extend(check_family(name, mask, cw, args.max_sample, hard=(name in hard_families)))
 

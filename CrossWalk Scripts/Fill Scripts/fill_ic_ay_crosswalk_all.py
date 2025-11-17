@@ -16,7 +16,7 @@ PROJECT_ROOT = HERE.parents[2]
 DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
 CROSSWALK_DIR = DATA_ROOT / "Paneled Datasets" / "Crosswalks"
 FILLED_DIR = CROSSWALK_DIR / "Filled"
-DEFAULT_INPUT = CROSSWALK_DIR / "ic_ay_crosswalk_autofilled.csv"
+DEFAULT_INPUT = FILLED_DIR / "ic_ay_crosswalk_autofilled.csv"
 DEFAULT_TEMPLATE_FALLBACK = CROSSWALK_DIR / "ic_ay_crosswalk_template.csv"
 DEFAULT_OUTPUT_DIR = FILLED_DIR
 DEFAULT_OUTPUT_NAME = "ic_ay_crosswalk_all.csv"
@@ -98,6 +98,12 @@ def _schema_rules() -> List[SchemaRule]:
         SchemaRule(
             concept_key="ICAY_COA_COMBINED_ALL",
             label_pattern=patt(r"combined.*tuition.*fees.*books.*suppl.*room.*board.*other expenses"),
+        ),
+        # 1a. Comprehensive fee (in-district)
+        SchemaRule(
+            concept_key="ICAY_COA_COMP_INDIST_CURR",
+            source_prefix="CMP1",
+            label_pattern=patt(r"comprehensive fee"),
         ),
         # 2. Current-year components (published tuition+fees, books+supplies, RMBD, other)
         SchemaRule(
@@ -253,7 +259,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Fill ALL IC_AY concept_keys using strict rules + generic label slugs."
     )
-    parser.add_argument("--input", type=Path, default=DEFAULT_INPUT, help="Input crosswalk CSV path")
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=DEFAULT_INPUT,
+        help="Input crosswalk CSV (default: ic_ay_crosswalk_autofilled.csv)",
+    )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="Output directory")
     parser.add_argument("--output-name", type=str, default=DEFAULT_OUTPUT_NAME, help="Output filename")
     parser.add_argument("--overwrite", action="store_true", help="Allow overwriting existing output")
@@ -525,12 +536,16 @@ def schema_concept_for_row(row: pd.Series, rules: List[SchemaRule]) -> str | Non
     matches one of the SCHEMA_RULES, return the stable concept_key.
     """
     label = _clean(row.get("label", ""))
+    label_lower = label.lower()
     source_var = _clean(row.get("source_var", "")).upper()
 
     if not label:
         return None
 
     for rule in rules:
+        if rule.concept_key == "ICAY_BOOK_SUPPLY_CURR":
+            if "comprehensive fee" in label_lower or "price of attendance" in label_lower:
+                continue
         if rule.source_prefix is not None and not source_var.startswith(rule.source_prefix):
             continue
         if rule.label_pattern is not None and not rule.label_pattern.search(label):
@@ -630,11 +645,29 @@ def print_summary(df: pd.DataFrame, stats: Dict[str, int]) -> None:
     print("\nSource_var using generic_slug (top 20):")
     print(df.loc[mask_generic, "source_var"].value_counts().head(20))
 
+    schema_filled = set(df.loc[df["concept_key_source"] == "schema_rule", "concept_key"])
+    missing_schema = sorted(SCHEMA_CONCEPT_KEYS - schema_filled)
+    if missing_schema:
+        print("\nSchema concept_keys with NO matching rows in IC_AY crosswalk:")
+        for ck in missing_schema:
+            print(f"  - {ck}")
+    else:
+        print("\nAll schema concept_keys have at least one matching crosswalk row.")
+
 
 def main() -> None:
     args = parse_args()
     input_path = resolve_input(args.input)
     df = load_crosswalk(input_path)
+    concept_nonempty = df["concept_key"].astype(str).str.strip().ne("")
+    n_nonempty = int(concept_nonempty.sum())
+    print(f"Input rows: {len(df):,}. Non-empty concept_key rows: {n_nonempty:,}.")
+    if n_nonempty == 0:
+        print(
+            "WARNING: Input crosswalk has zero existing concept_key values.\n"
+            "This usually means you provided the template instead of ic_ay_crosswalk_autofilled.csv.\n"
+            "Schema and slug rules will still fill keys, but canonical PRICE_*/UG_* mappings will be lost."
+        )
     df_filled, stats = fill_concept_keys(df)
     print_summary(df_filled, stats)
     write_outputs(df_filled, stats, args.output_dir, args.output_name, args.overwrite)

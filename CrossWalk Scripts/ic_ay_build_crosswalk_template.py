@@ -22,7 +22,33 @@ CHARGE_KEYWORDS = (
     "food and housing",
     "other expenses",
     "price of attendance",
+    "total price",
 )
+
+PROGRAM_CONTEXT_TOKENS = [
+    "largest program",
+    "2nd largest program",
+    "second largest program",
+    "3rd largest program",
+    "third largest program",
+    "4th largest program",
+    "fourth largest program",
+    "5th largest program",
+    "fifth largest program",
+    "6th largest program",
+    "sixth largest program",
+    "total length of the program",
+    "total length of program",
+    "entire program",
+    "contact hours",
+    "clock hours",
+    "credit hours",
+]
+
+CIP_CONTEXT_TOKENS = [
+    "cip code",
+    "cip code of",
+]
 
 LABEL_CANDIDATES = ["label", "var_label", "varlab", "varname_label"]
 SURVEY_HINT_COLS = ["survey_group", "survey_hint", "survey_component", "component"]
@@ -108,6 +134,15 @@ def build_crosswalk_template(dict_lake: Path) -> pd.DataFrame:
 
     ic_ay_mask = _ic_ay_mask(df, "survey")
     label_lower = df["label"].str.lower()
+
+    def contains_any(text: str, tokens: list[str]) -> bool:
+        text = text or ""
+        return any(tok in text for tok in tokens)
+
+    program_context_mask = label_lower.apply(lambda s: contains_any(s, PROGRAM_CONTEXT_TOKENS))
+    cip_context_mask = label_lower.apply(lambda s: contains_any(s, CIP_CONTEXT_TOKENS))
+    exclude_mask = program_context_mask | cip_context_mask
+
     charge_mask = pd.Series(False, index=df.index)
     if label_lower.notna().any():
         for keyword in CHARGE_KEYWORDS:
@@ -115,7 +150,7 @@ def build_crosswalk_template(dict_lake: Path) -> pd.DataFrame:
     # Always keep canonical CHG* variables even if the label is missing.
     charge_mask |= df["source_var"].str.match(r"^CHG\d+$", na=False)
 
-    df_ic_ay = df[ic_ay_mask & charge_mask].copy()
+    df_ic_ay = df[ic_ay_mask & ~exclude_mask & charge_mask].copy()
     if df_ic_ay.empty:
         raise ValueError("IC_AY filter produced zero rows. Check dictionary lake contents.")
 
