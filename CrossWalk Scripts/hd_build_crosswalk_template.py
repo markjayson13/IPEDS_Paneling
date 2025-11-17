@@ -53,6 +53,15 @@ def build_crosswalk_template(dict_lake: Path) -> pd.DataFrame:
     if filtered.empty:
         raise ValueError("No HD/IC variables found in dictionary lake. Check filters.")
 
+    filtered["varname"] = filtered["varname"].astype(str).str.strip()
+    blank_mask = filtered["varname"].eq("") | filtered["varname"].str.lower().eq("nan")
+    if blank_mask.any():
+        dropped = int(blank_mask.sum())
+        print(f"Removing {dropped} dictionary rows with blank varname before building HD template.")
+        filtered = filtered.loc[~blank_mask].copy()
+    if filtered.empty:
+        raise ValueError("All HD/IC rows had blank varname after cleaning; cannot build template.")
+
     group_cols = ["survey", "varname"]
     agg_dict = {
         "year": ["min", "max"],
