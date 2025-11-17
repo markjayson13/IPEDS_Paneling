@@ -183,6 +183,21 @@ def slug_from_label(label: Optional[str], source_var: str, used_keys: set[str]) 
     return candidate
 
 
+def build_var_concept_map(df: pd.DataFrame, filled_mask: pd.Series) -> dict[str, str]:
+    """Return existing source_var -> concept_key mappings for bootstrap."""
+    mapping: dict[str, str] = {}
+    if not filled_mask.any():
+        return mapping
+
+    filled = df.loc[filled_mask, ["source_var", "concept_key"]]
+    for raw_var, ck in filled.itertuples(index=False, name=None):
+        source_var = str(raw_var or "").strip().upper()
+        concept = str(ck or "").strip()
+        if source_var and concept:
+            mapping[source_var] = concept
+    return mapping
+
+
 def auto_fill_concepts(
     input_csv: Path,
     output_csv: Path,
@@ -249,14 +264,8 @@ def auto_fill_concepts(
 
     logging.info("Attempting to auto-fill concept_key for %d rows.", len(to_fill))
 
-    var_to_concept: dict[str, str] = {}
-    for raw_var, ck in zip(
-        df.loc[already_filled, "source_var"], df.loc[already_filled, "concept_key"]
-    ):
-        source_var = str(raw_var or "").strip().upper()
-        concept = str(ck or "").strip()
-        if source_var and concept:
-            var_to_concept[source_var] = concept
+    # Map from source_var -> concept_key so each IPEDS var keeps one concept.
+    var_to_concept = build_var_concept_map(df, already_filled)
 
     filled_counts = {"net_price": 0, "varname": 0}
     for idx, row in to_fill.iterrows():
@@ -264,6 +273,8 @@ def auto_fill_concepts(
         source_var = str(raw_var or "").strip().upper() or f"ROW_{idx}"
         concept = infer_concept_key(row.get("label"), source_var)
         if concept:
+            if source_var not in var_to_concept:
+                var_to_concept[source_var] = concept
             df.at[idx, "concept_key"] = concept
             df.at[idx, "concept_key_source"] = "net_price"
             filled_counts["net_price"] += 1

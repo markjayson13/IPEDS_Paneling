@@ -203,6 +203,10 @@ def build_masks(cw: pd.DataFrame) -> dict:
         | label.str.contains("response status - total entering class and retention rates", case=False, na=False)
     )
 
+    masks["EF student-faculty ratio"] = label.str.contains("student-to-faculty ratio", case=False, na=False) | label.str.contains(
+        "student-faculty ratio", case=False, na=False
+    )
+
     return masks
 
 

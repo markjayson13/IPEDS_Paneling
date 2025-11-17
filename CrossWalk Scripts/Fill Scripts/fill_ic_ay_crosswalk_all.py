@@ -16,7 +16,7 @@ PROJECT_ROOT = HERE.parents[2]
 DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
 CROSSWALK_DIR = DATA_ROOT / "Paneled Datasets" / "Crosswalks"
 FILLED_DIR = CROSSWALK_DIR / "Filled"
-DEFAULT_INPUT = FILLED_DIR / "ic_ay_crosswalk_autofilled.csv"
+DEFAULT_INPUT = CROSSWALK_DIR / "ic_ay_crosswalk_template.csv"
 DEFAULT_TEMPLATE_FALLBACK = CROSSWALK_DIR / "ic_ay_crosswalk_template.csv"
 DEFAULT_OUTPUT_DIR = FILLED_DIR
 DEFAULT_OUTPUT_NAME = "ic_ay_crosswalk_all.csv"
@@ -35,13 +35,24 @@ STRICT_CONCEPTS = {
     "FEE3": "UG_FEE_OUT_STATE_FULLTIME_AVG",
 }
 
-CANONICAL_PRICE_CONCEPTS = {
-    "PRICE_TUITFEE_IN_DISTRICT_FTFTUG",
-    "PRICE_TUITFEE_IN_STATE_FTFTUG",
-    "PRICE_TUITFEE_OUT_STATE_FTFTUG",
-    "PRICE_BOOK_SUPPLY_FTFTUG",
-    "PRICE_RMBD_ON_CAMPUS_FTFTUG",
+CANONICAL_MAP = {
+    "CHG1": "PRICE_TUITFEE_IN_DISTRICT_FTFTUG",
+    "CHG2": "PRICE_TUITFEE_IN_STATE_FTFTUG",
+    "CHG3": "PRICE_TUITFEE_OUT_STATE_FTFTUG",
+    "CHG4": "PRICE_BOOK_SUPPLY_FTFTUG",
+    "CHG5": "PRICE_RMBD_ON_CAMPUS_FTFTUG",
+    "RMBRDAMT": "PRICE_RMBD_ON_CAMPUS_FTFTUG",
+    "ROOMAMT": "PRICE_RMBD_ON_CAMPUS_FTFTUG",
+    "BOARDAMT": "PRICE_RMBD_ON_CAMPUS_FTFTUG",
+    "TUITION1": "UG_TUIT_IN_DISTRICT_FULLTIME_AVG",
+    "TUITION2": "UG_TUIT_IN_STATE_FULLTIME_AVG",
+    "TUITION3": "UG_TUIT_OUT_STATE_FULLTIME_AVG",
+    "FEE1": "UG_FEE_IN_DISTRICT_FULLTIME_AVG",
+    "FEE2": "UG_FEE_IN_STATE_FULLTIME_AVG",
+    "FEE3": "UG_FEE_OUT_STATE_FULLTIME_AVG",
 }
+
+CANONICAL_CONCEPTS = set(CANONICAL_MAP.values())
 
 RES_STOPWORDS = {"OF", "THE", "FOR", "AND", "IN", "AT", "BY", "WITH", "ON"}
 
@@ -511,6 +522,29 @@ def slugify_label_to_concept(row: pd.Series, used_keys: set[str]) -> str:
     return key
 
 
+def apply_canonical_map(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
+    """
+    Fill canonical PRICE_*/UG_* concept_keys based on source_var prefixes.
+    Only operates on currently blank concept_key rows.
+    """
+    df = df.copy()
+    filled = 0
+    for idx, row in df.iterrows():
+        current = _clean(row.get("concept_key", ""))
+        if current:
+            continue
+        source_var = _clean(row.get("source_var", "")).upper()
+        if not source_var:
+            continue
+        for prefix, concept in CANONICAL_MAP.items():
+            if source_var.startswith(prefix):
+                df.at[idx, "concept_key"] = concept
+                df.at[idx, "concept_key_source"] = "canonical_map"
+                filled += 1
+                break
+    return df, filled
+
+
 def _assert_no_overlaps_icay(df: pd.DataFrame) -> None:
     groups = df.groupby(["survey", "source_var", "concept_key"], dropna=False)
     for key, grp in groups:
@@ -557,15 +591,24 @@ def schema_concept_for_row(row: pd.Series, rules: List[SchemaRule]) -> str | Non
 
 def fill_concept_keys(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
     df = df.copy()
+    df["concept_key"] = df["concept_key"].astype(str).str.strip()
+    if "concept_key_source" not in df.columns:
+        df["concept_key_source"] = ""
+    df["concept_key_source"] = df["concept_key_source"].astype(str)
+
+    # 0. Canonical PRICE_*/UG_* mapping
+    df, n_canonical = apply_canonical_map(df)
+
     concept = df["concept_key"].astype(str).str.strip()
     existing_mask = concept != ""
-    df.loc[existing_mask, "concept_key_source"] = "existing"
+    empty_source_mask = df["concept_key_source"].astype(str).str.strip() == ""
+    df.loc[existing_mask & empty_source_mask, "concept_key_source"] = "existing"
     used_keys = set(concept[existing_mask])
 
     rules = _schema_rules()
 
     # 1. Schema-first mapping for high-priority concepts
-    schema_mask = ~existing_mask
+    schema_mask = concept.eq("")
     schema_results = df.loc[schema_mask].apply(lambda row: schema_concept_for_row(row, rules), axis=1)
     schema_idx = schema_results.index[schema_results.notna()]
     if len(schema_idx) > 0:
@@ -573,7 +616,7 @@ def fill_concept_keys(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
         df.loc[schema_idx, "concept_key_source"] = "schema_rule"
         used_keys.update(df.loc[schema_idx, "concept_key"].tolist())
 
-    # Recompute masks after schema mapping
+    # Recompute mask after schema mapping
     concept = df["concept_key"].astype(str).str.strip()
     existing_mask = concept != ""
 
@@ -586,9 +629,9 @@ def fill_concept_keys(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
         df.loc[strict_idx, "concept_key_source"] = "strict_rule"
         used_keys.update(df.loc[strict_idx, "concept_key"].tolist())
 
-    # 3. Generic slugs for everything else (except canonical/PRICE_* already set)
+    # 3. Generic slugs for everything else (except canonical/schema keys)
     concept = df["concept_key"].astype(str).str.strip()
-    canonical_mask = df["concept_key"].isin(CANONICAL_PRICE_CONCEPTS) | df["concept_key"].isin(SCHEMA_CONCEPT_KEYS)
+    canonical_mask = df["concept_key"].isin(CANONICAL_CONCEPTS) | df["concept_key"].isin(SCHEMA_CONCEPT_KEYS)
     remaining_mask = (concept == "") & (~canonical_mask)
     generic_idx = df.index[remaining_mask]
     for idx in generic_idx:
@@ -608,6 +651,7 @@ def fill_concept_keys(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
     _assert_no_overlaps_icay(df)
     stats = {
         "n_total": len(df),
+        "n_canonical": n_canonical,
         "n_existing": int((df["concept_key_source"] == "existing").sum()),
         "n_schema": int((df["concept_key_source"] == "schema_rule").sum()),
         "n_strict": int((df["concept_key_source"] == "strict_rule").sum()),
@@ -627,6 +671,7 @@ def write_outputs(df: pd.DataFrame, stats: Dict[str, int], output_dir: Path, out
 
 def print_summary(df: pd.DataFrame, stats: Dict[str, int]) -> None:
     print(f"Total rows: {stats['n_total']}")
+    print(f"Filled by canonical map (PRICE_*/UG_*): {stats.get('n_canonical', 0)}")
     print(f"Existing concept_key kept: {stats['n_existing']}")
     print(f"Filled by schema rules: {stats.get('n_schema', 0)}")
     print(f"Filled by strict rules: {stats['n_strict']}")
@@ -663,11 +708,7 @@ def main() -> None:
     n_nonempty = int(concept_nonempty.sum())
     print(f"Input rows: {len(df):,}. Non-empty concept_key rows: {n_nonempty:,}.")
     if n_nonempty == 0:
-        print(
-            "WARNING: Input crosswalk has zero existing concept_key values.\n"
-            "This usually means you provided the template instead of ic_ay_crosswalk_autofilled.csv.\n"
-            "Schema and slug rules will still fill keys, but canonical PRICE_*/UG_* mappings will be lost."
-        )
+        print("Input concept_key column is empty; canonical/schema fill will populate from the template.")
     df_filled, stats = fill_concept_keys(df)
     print_summary(df_filled, stats)
     write_outputs(df_filled, stats, args.output_dir, args.output_name, args.overwrite)

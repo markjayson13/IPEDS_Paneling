@@ -28,6 +28,7 @@ EF_HEAD_FT_ALL_TOT_ALL = "EF_HEAD_FT_ALL_TOT_ALL"
 EF_HEAD_FT_UG_TOT_ALL = "EF_HEAD_FT_UG_TOT_ALL"
 EF_HEAD_GR_TOT_ALL = "EF_HEAD_GR_TOT_ALL"
 EF_HEAD_FT_GR_TOT_ALL = "EF_HEAD_FT_GR_TOT_ALL"
+EF_STUD_FAC_RATIO = "EF_STUD_FAC_RATIO"
 EF_HEAD_FTFT_UG_RES_INSTATE = "EF_HEAD_FTFT_UG_RES_INSTATE"
 EF_HEAD_FTFT_UG_RES_OUTSTATE = "EF_HEAD_FTFT_UG_RES_OUTSTATE"
 EF_HEAD_FTFT_UG_RES_FOREIGN = "EF_HEAD_FTFT_UG_RES_FOREIGN"
@@ -105,6 +106,7 @@ def main() -> None:
         EF_HEAD_FT_UG_TOT_ALL,
         EF_HEAD_GR_TOT_ALL,
         EF_HEAD_FT_GR_TOT_ALL,
+        EF_STUD_FAC_RATIO,
         EF_HEAD_FTFT_UG_RES_INSTATE,
         EF_HEAD_FTFT_UG_RES_OUTSTATE,
         EF_HEAD_FTFT_UG_RES_FOREIGN,
@@ -360,6 +362,21 @@ def main() -> None:
     fill_counts[EF_HEAD_FTFT_UG_RES_FOREIGN] = int(mask_res_foreign.sum())
     fill_counts[EF_HEAD_FTFT_UG_RES_UNKNOWN] = int(mask_res_unknown.sum())
 
+    # Student-faculty ratio (scalar)
+    blank_mask = fresh_blank_mask()
+    mask_stud_fac_ratio = (
+        (cw["survey"] == "FALLENROLLMENT")
+        & (
+            cw["label_norm"].str.contains("student-to-faculty ratio", case=False, na=False)
+            | cw["label_norm"].str.contains("student-faculty ratio", case=False, na=False)
+        )
+        & blank_mask
+    )
+    if mask_stud_fac_ratio.any():
+        cw.loc[mask_stud_fac_ratio, "concept_key"] = EF_STUD_FAC_RATIO
+        cw.loc[mask_stud_fac_ratio & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_STUD_FAC_RATIO}"
+    fill_counts[EF_STUD_FAC_RATIO] = int(mask_stud_fac_ratio.sum())
+
     ck_series = cw["concept_key"].astype(str).str.strip()
     missing_mask = ck_series.eq("") | ck_series.str.lower().eq("nan")
     num_missing = int(missing_mask.sum())
@@ -393,6 +410,7 @@ def main() -> None:
     print(f"  {EF_HEAD_FTFT_UG_RES_OUTSTATE}: {mask_res_outstate.sum()}")
     print(f"  {EF_HEAD_FTFT_UG_RES_FOREIGN}: {mask_res_foreign.sum()}")
     print(f"  {EF_HEAD_FTFT_UG_RES_UNKNOWN}: {mask_res_unknown.sum()}")
+    print(f"  {EF_STUD_FAC_RATIO}: {mask_stud_fac_ratio.sum()}")
     top = cw.loc[ck_series.ne(""), "concept_key"].value_counts().head(20)
     print("Top concept_keys:")
     print(top.to_string())
