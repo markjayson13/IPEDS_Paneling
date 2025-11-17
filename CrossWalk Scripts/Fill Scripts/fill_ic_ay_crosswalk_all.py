@@ -4,8 +4,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import re
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import logging
 import pandas as pd
@@ -43,6 +44,209 @@ CANONICAL_PRICE_CONCEPTS = {
 }
 
 RES_STOPWORDS = {"OF", "THE", "FOR", "AND", "IN", "AT", "BY", "WITH", "ON"}
+
+
+@dataclass
+class SchemaRule:
+    concept_key: str
+    source_prefix: Optional[str] = None
+    label_pattern: Optional[re.Pattern] = None
+
+
+def _schema_rules() -> List[SchemaRule]:
+    def patt(regex: str) -> re.Pattern:
+        return re.compile(regex, flags=re.IGNORECASE)
+
+    return [
+        # 1. Total price of attendance by residency & housing
+        SchemaRule(
+            concept_key="ICAY_COA_INDIST_ONCAMP",
+            label_pattern=patt(r"total price.*in[- ]district.*on[- ]campus"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_COA_INST_ONCAMP",
+            label_pattern=patt(r"total price.*in[- ]state.*on[- ]campus"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_COA_OUTST_ONCAMP",
+            label_pattern=patt(r"total price.*(out[- ]of[- ]state|nonresident).*on[- ]campus"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_COA_INDIST_OFFNWF",
+            label_pattern=patt(r"total price.*in[- ]district.*off[- ]campus.*not with family"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_COA_INST_OFFNWF",
+            label_pattern=patt(r"total price.*in[- ]state.*off[- ]campus.*not with family"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_COA_OUTST_OFFNWF",
+            label_pattern=patt(r"total price.*(out[- ]of[- ]state|nonresident).*off[- ]campus.*not with family"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_COA_INDIST_OFFFAM",
+            label_pattern=patt(r"total price.*in[- ]district.*off[- ]campus.*with family"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_COA_INST_OFFFAM",
+            label_pattern=patt(r"total price.*in[- ]state.*off[- ]campus.*with family"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_COA_OUTST_OFFFAM",
+            label_pattern=patt(r"total price.*(out[- ]of[- ]state|nonresident).*off[- ]campus.*with family"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_COA_COMBINED_ALL",
+            label_pattern=patt(r"combined.*tuition.*fees.*books.*suppl.*room.*board.*other expenses"),
+        ),
+        # 2. Current-year components (published tuition+fees, books+supplies, RMBD, other)
+        SchemaRule(
+            concept_key="ICAY_TUITFEE_INDIST_CURR",
+            label_pattern=patt(r"published.*in[- ]district.*tuition.*(required fees|tuition and fees)"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_TUITFEE_INST_CURR",
+            label_pattern=patt(r"published.*in[- ]state.*tuition.*(required fees|tuition and fees)"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_TUITFEE_OUTST_CURR",
+            label_pattern=patt(r"published.*(out[- ]of[- ]state|nonresident).*tuition.*(required fees|tuition and fees)"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_BOOK_SUPPLY_CURR",
+            label_pattern=patt(r"books.*supplies"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_RMBD_ONCAMP_CURR",
+            label_pattern=patt(r"on[- ]campus.*room and board"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_OTHER_ONCAMP_CURR",
+            label_pattern=patt(r"on[- ]campus.*other expenses"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_RMBD_OFFNWF_CURR",
+            label_pattern=patt(r"off[- ]campus.*not with family.*room and board"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_OTHER_OFFNWF_CURR",
+            label_pattern=patt(r"off[- ]campus.*not with family.*other expenses"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_OTHER_OFFFAM_CURR",
+            label_pattern=patt(r"off[- ]campus.*with family.*other expenses"),
+        ),
+        # 3. Tuition/fees detail & guaranteed pct, by residency
+        SchemaRule(
+            concept_key="ICAY_TUIT_INDIST_CURR",
+            label_pattern=patt(r"published.*in[- ]district.*tuition(?!.*fees)"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_FEE_INDIST_CURR",
+            label_pattern=patt(r"published.*in[- ]district.*(required fee|fees)"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_TUIT_INDIST_GUAR_PCT",
+            label_pattern=patt(r"in[- ]district.*tuition.*guaranteed.*percent increase"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_FEE_INDIST_GUAR_PCT",
+            label_pattern=patt(r"in[- ]district.*fees.*guaranteed.*percent increase"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_TUIT_INST_CURR",
+            label_pattern=patt(r"published.*in[- ]state.*tuition(?!.*fees)"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_FEE_INST_CURR",
+            label_pattern=patt(r"published.*in[- ]state.*(required fee|fees)"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_TUIT_INST_GUAR_PCT",
+            label_pattern=patt(r"in[- ]state.*tuition.*guaranteed.*percent increase"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_FEE_INST_GUAR_PCT",
+            label_pattern=patt(r"in[- ]state.*fees.*guaranteed.*percent increase"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_TUIT_OUTST_CURR",
+            label_pattern=patt(r"published.*(out[- ]of[- ]state|nonresident).*tuition(?!.*fees)"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_FEE_OUTST_CURR",
+            label_pattern=patt(r"published.*(out[- ]of[- ]state|nonresident).*fees"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_TUIT_OUTST_GUAR_PCT",
+            label_pattern=patt(r"(out[- ]of[- ]state|nonresident).*tuition.*guaranteed.*percent increase"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_FEE_OUTST_GUAR_PCT",
+            label_pattern=patt(r"(out[- ]of[- ]state|nonresident).*fees.*guaranteed.*percent increase"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_TUIT_VARIES_RESIDENCY",
+            label_pattern=patt(r"tuition charge varies.*(in[- ]district|in[- ]state|out[- ]of[- ]state|residency)"),
+        ),
+        # 4. Alternative tuition plans & Promise
+        SchemaRule(
+            concept_key="ICAY_ALTPLAN_ANY",
+            label_pattern=patt(r"any alternative tuition plans"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_ALTPLAN_GUARANTEE",
+            label_pattern=patt(r"tuition guaranteed plan"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_ALTPLAN_PREPAID",
+            label_pattern=patt(r"prepaid tuition plan"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_ALTPLAN_PAYMENT",
+            label_pattern=patt(r"tuition payment plan"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_ALTPLAN_OTHER",
+            label_pattern=patt(r"other alternative tuition plan"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_PROMISE_PROGRAM",
+            label_pattern=patt(r"promise program"),
+        ),
+        # 5. Room & board infrastructure
+        SchemaRule(
+            concept_key="ICAY_ONCAMP_HOUSING_FLAG",
+            label_pattern=patt(r"provide on[- ]campus housing"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_DORM_CAPACITY",
+            label_pattern=patt(r"total dormitory capacity"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_BOARD_MEAL_PLAN_FLAG",
+            label_pattern=patt(r"provides board or meal plan"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_MEALS_PER_WEEK",
+            label_pattern=patt(r"number of meals per week.*board charge"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_ROOM_CHARGE_TYPICAL",
+            label_pattern=patt(r"typical room charge.*academic year"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_BOARD_CHARGE_TYPICAL",
+            label_pattern=patt(r"typical board charge.*academic year"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_RMBD_COMBINED_TYPICAL",
+            label_pattern=patt(r"combined charge for room and board"),
+        ),
+    ]
+
+
+SCHEMA_CONCEPT_KEYS = {rule.concept_key for rule in _schema_rules()}
 
 
 def parse_args() -> argparse.Namespace:
@@ -315,21 +519,62 @@ def _assert_no_overlaps_icay(df: pd.DataFrame) -> None:
             prev_end = max(prev_end or end, end)
 
 
-def fill_concept_keys(df: pd.DataFrame) -> Tuple[pd.DataFrame, dict[str, int]]:
+def schema_concept_for_row(row: pd.Series, rules: List[SchemaRule]) -> str | None:
+    """
+    Apply schema-first mapping: if a row's label (and optionally source_var)
+    matches one of the SCHEMA_RULES, return the stable concept_key.
+    """
+    label = _clean(row.get("label", ""))
+    source_var = _clean(row.get("source_var", "")).upper()
+
+    if not label:
+        return None
+
+    for rule in rules:
+        if rule.source_prefix is not None and not source_var.startswith(rule.source_prefix):
+            continue
+        if rule.label_pattern is not None and not rule.label_pattern.search(label):
+            continue
+        return rule.concept_key
+
+    return None
+
+
+def fill_concept_keys(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
     df = df.copy()
     concept = df["concept_key"].astype(str).str.strip()
     existing_mask = concept != ""
     df.loc[existing_mask, "concept_key_source"] = "existing"
     used_keys = set(concept[existing_mask])
+
+    rules = _schema_rules()
+
+    # 1. Schema-first mapping for high-priority concepts
+    schema_mask = ~existing_mask
+    schema_results = df.loc[schema_mask].apply(lambda row: schema_concept_for_row(row, rules), axis=1)
+    schema_idx = schema_results.index[schema_results.notna()]
+    if len(schema_idx) > 0:
+        df.loc[schema_idx, "concept_key"] = schema_results.loc[schema_idx]
+        df.loc[schema_idx, "concept_key_source"] = "schema_rule"
+        used_keys.update(df.loc[schema_idx, "concept_key"].tolist())
+
+    # Recompute masks after schema mapping
+    concept = df["concept_key"].astype(str).str.strip()
+    existing_mask = concept != ""
+
+    # 2. Strict CHG/TUITION/FEE mapping for remaining empties
     empty_mask = ~existing_mask
     strict_results = df.loc[empty_mask].apply(suggest_concept_key_strict, axis=1)
     strict_idx = strict_results.index[strict_results.notna()]
-    df.loc[strict_idx, "concept_key"] = strict_results.loc[strict_idx]
-    df.loc[strict_idx, "concept_key_source"] = "strict_rule"
-    used_keys.update(df.loc[strict_idx, "concept_key"].tolist())
+    if len(strict_idx) > 0:
+        df.loc[strict_idx, "concept_key"] = strict_results.loc[strict_idx]
+        df.loc[strict_idx, "concept_key_source"] = "strict_rule"
+        used_keys.update(df.loc[strict_idx, "concept_key"].tolist())
 
-    canonical_mask = df["concept_key"].isin(CANONICAL_PRICE_CONCEPTS)
-    remaining_mask = (df["concept_key"].astype(str).str.strip() == "") & (~canonical_mask)
+    # 3. Generic slugs for everything else (except canonical/PRICE_* already set)
+    concept = df["concept_key"].astype(str).str.strip()
+    canonical_mask = df["concept_key"].isin(CANONICAL_PRICE_CONCEPTS) | df["concept_key"].isin(SCHEMA_CONCEPT_KEYS)
+    remaining_mask = (concept == "") & (~canonical_mask)
     generic_idx = df.index[remaining_mask]
     for idx in generic_idx:
         df.at[idx, "concept_key"] = slugify_label_to_concept(df.loc[idx], used_keys)
@@ -339,19 +584,24 @@ def fill_concept_keys(df: pd.DataFrame) -> Tuple[pd.DataFrame, dict[str, int]]:
     missing_mask = ck_series.eq("") | ck_series.str.lower().eq("nan")
     if missing_mask.any():
         print("ERROR: IC_AY autofill left blank concept_key rows. Sample:")
-        print(df.loc[missing_mask, ["survey", "source_var", "year_start", "year_end", "label"]].head(10).to_string(index=False))
+        print(
+            df.loc[missing_mask, ["survey", "source_var", "year_start", "year_end", "label"]]
+            .head(10)
+            .to_string(index=False)
+        )
         raise SystemExit(1)
     _assert_no_overlaps_icay(df)
     stats = {
         "n_total": len(df),
         "n_existing": int((df["concept_key_source"] == "existing").sum()),
+        "n_schema": int((df["concept_key_source"] == "schema_rule").sum()),
         "n_strict": int((df["concept_key_source"] == "strict_rule").sum()),
         "n_generic": int((df["concept_key_source"] == "generic_slug").sum()),
     }
     return df, stats
 
 
-def write_outputs(df: pd.DataFrame, stats: dict[str, int], output_dir: Path, output_name: str, overwrite: bool) -> None:
+def write_outputs(df: pd.DataFrame, stats: Dict[str, int], output_dir: Path, output_name: str, overwrite: bool) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / output_name
     if output_path.exists() and not overwrite:
@@ -360,15 +610,21 @@ def write_outputs(df: pd.DataFrame, stats: dict[str, int], output_dir: Path, out
     logging.info("Saved filled IC_AY crosswalk to %s", output_path)
 
 
-def print_summary(df: pd.DataFrame, stats: dict[str, int]) -> None:
+def print_summary(df: pd.DataFrame, stats: Dict[str, int]) -> None:
     print(f"Total rows: {stats['n_total']}")
     print(f"Existing concept_key kept: {stats['n_existing']}")
+    print(f"Filled by schema rules: {stats.get('n_schema', 0)}")
     print(f"Filled by strict rules: {stats['n_strict']}")
     print(f"Filled by generic slug: {stats['n_generic']}")
     print(f"Distinct concept_keys: {df['concept_key'].nunique()}")
 
     print("\nConcept_key frequencies (top 40):")
     print(df["concept_key"].value_counts().head(40))
+
+    mask_schema = df["concept_key_source"] == "schema_rule"
+    if mask_schema.any():
+        print("\nSchema concept_key frequencies:")
+        print(df.loc[mask_schema, "concept_key"].value_counts().to_string())
 
     mask_generic = df["concept_key_source"] == "generic_slug"
     print("\nSource_var using generic_slug (top 20):")
