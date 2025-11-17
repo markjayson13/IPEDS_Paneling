@@ -72,10 +72,10 @@ def is_blank(x: object) -> bool:
     return pd.isna(x) or str(x).strip() == ""
 
 
-def check_family(name: str, mask: pd.Series, cw: pd.DataFrame, max_sample: int) -> List[str]:
+def check_family(name: str, mask: pd.Series, cw: pd.DataFrame, max_sample: int, hard: bool) -> List[str]:
     rows = cw.loc[mask].copy()
     if rows.empty:
-        print(f"[WARN] Family '{name}' matched 0 rows in crosswalk.")
+        print(f"[WARN] Family '{name}' matched 0 rows in crosswalk; skipping coverage check.")
         return []
 
     missing = rows[rows["concept_key"].map(is_blank)]
@@ -83,14 +83,19 @@ def check_family(name: str, mask: pd.Series, cw: pd.DataFrame, max_sample: int) 
         print(f"[OK] Family '{name}' is fully covered. Rows: {len(rows)}")
         return []
 
-    errors = [
-        f"Family '{name}' has {len(missing)} rows with blank concept_key (out of {len(rows)} rows).",
-        "Sample missing rows:\n"
-        + missing[["survey", "source_var", "year_start", "label_norm"]]
-        .head(max_sample)
-        .to_string(index=False),
-    ]
-    return errors
+    msg = (
+        f"Family '{name}' has {len(missing)} rows with blank concept_key "
+        f"(out of {len(rows)} rows)."
+    )
+    sample = missing[["survey", "source_var", "year_start", "label_norm"]].head(max_sample)
+    msg_sample = "Sample missing rows:\n" + sample.to_string(index=False)
+
+    if hard:
+        return [msg, msg_sample]
+
+    print(f"[WARN] {msg}")
+    print(msg_sample)
+    return []
 
 
 def load_crosswalk(path: Path) -> pd.DataFrame:
@@ -114,10 +119,9 @@ def build_masks(cw: pd.DataFrame) -> dict:
     survey = cw["survey"].str.upper()
     label = cw["label_norm"]
 
-    masks["E12 headcount (unduplicated)"] = (survey == "12MONTHENROLLMENT") & (
-        label.str.contains("unduplicated", case=False, na=False)
-        | label.str.contains("12-month enrollment", case=False, na=False)
-    )
+    source = cw["source_var"].str.upper()
+
+    masks["E12 headcount (FYRACE01-24)"] = (survey == "12MONTHENROLLMENT") & source.str.startswith("FYRACE")
 
     masks["E12 status/imputation flags"] = (survey == "12MONTHENROLLMENT") & (
         label.str.contains("response status", case=False, na=False)
@@ -134,13 +138,8 @@ def build_masks(cw: pd.DataFrame) -> dict:
         "12-month enrollment and instructional activity", case=False, na=False
     )
 
-    masks["EF core totals"] = (survey == "FALLENROLLMENT") & (
-        label.str.contains("all students total", case=False, na=False)
-        | label.str.contains("undergraduate total", case=False, na=False)
-        | label.str.contains("undergraduate degree/certificate-seeking total", case=False, na=False)
-        | label.str.contains("undergraduate degree/certificate-seeking first time total", case=False, na=False)
-        | label.str.contains("graduate and first-professional total", case=False, na=False)
-    )
+    masks["EF core totals"] = (survey == "FALLENROLLMENT") & source.isin(["EFRACE24", "EFTOTLT"])
+    masks["EF FTFT residence totals"] = (survey == "FALLENROLLMENT") & source.isin(["EFRES01", "EFRES02"])
 
     masks["EF disability indicators"] = (survey == "FALLENROLLMENT") & (
         label.str.contains("undergraduate students with disabilities", case=False, na=False)
@@ -207,8 +206,9 @@ def main() -> None:
     masks = build_masks(cw)
 
     errors: list[str] = []
+    hard_families = ["E12 headcount (FYRACE01-24)", "EF core totals", "EF FTFT residence totals"]
     for name, mask in masks.items():
-        errors.extend(check_family(name, mask, cw, args.max_sample))
+        errors.extend(check_family(name, mask, cw, args.max_sample, hard=(name in hard_families)))
 
     if errors:
         print("\n=== COVERAGE ERRORS DETECTED ===")

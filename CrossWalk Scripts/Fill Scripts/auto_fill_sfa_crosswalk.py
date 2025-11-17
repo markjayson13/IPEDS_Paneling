@@ -249,33 +249,42 @@ def auto_fill_concepts(
 
     logging.info("Attempting to auto-fill concept_key for %d rows.", len(to_fill))
 
-    used_keys = set(df.loc[already_filled, "concept_key"].astype(str).str.strip().tolist())
-    used_keys.discard("")
+    var_to_concept: dict[str, str] = {}
+    for raw_var, ck in zip(
+        df.loc[already_filled, "source_var"], df.loc[already_filled, "concept_key"]
+    ):
+        source_var = str(raw_var or "").strip().upper()
+        concept = str(ck or "").strip()
+        if source_var and concept:
+            var_to_concept[source_var] = concept
 
-    filled_counts = {"net_price": 0, "label_slug": 0}
+    filled_counts = {"net_price": 0, "varname": 0}
     for idx, row in to_fill.iterrows():
         raw_var = row.get("source_var", "")
         source_var = str(raw_var or "").strip().upper() or f"ROW_{idx}"
         concept = infer_concept_key(row.get("label"), source_var)
-        source = "net_price"
-        if not concept:
-            concept = slug_from_label(row.get("label"), source_var, used_keys)
-            source = "label_slug"
-        if concept in used_keys and source == "net_price":
-            # Ensure uniqueness for heuristics that return static names
-            concept = slug_from_label(row.get("label"), source_var, used_keys)
-            source = "label_slug"
-        df.at[idx, "concept_key"] = concept
-        df.at[idx, "concept_key_source"] = source
-        used_keys.add(concept)
-        filled_counts[source] += 1
+        if concept:
+            df.at[idx, "concept_key"] = concept
+            df.at[idx, "concept_key_source"] = "net_price"
+            filled_counts["net_price"] += 1
+            continue
 
-    total_autofilled = filled_counts["net_price"] + filled_counts["label_slug"]
+        if source_var in var_to_concept:
+            concept = var_to_concept[source_var]
+        else:
+            concept = f"SFA_VAR_{source_var}"
+            var_to_concept[source_var] = concept
+
+        df.at[idx, "concept_key"] = concept
+        df.at[idx, "concept_key_source"] = "varname"
+        filled_counts["varname"] += 1
+
+    total_autofilled = filled_counts["net_price"] + filled_counts["varname"]
     logging.info(
-        "Auto-filled concept_key for %d rows (net_price=%d, label_slug=%d).",
+        "Auto-filled concept_key for %d rows (net_price=%d, varname=%d).",
         total_autofilled,
         filled_counts["net_price"],
-        filled_counts["label_slug"],
+        filled_counts["varname"],
     )
 
     # Basic summary by concept_key
@@ -299,10 +308,10 @@ def auto_fill_concepts(
     total_rows = len(df)
     existing = int((df["concept_key_source"] == "existing").sum())
     net_price = filled_counts["net_price"]
-    label_slug = filled_counts["label_slug"]
+    varname = filled_counts["varname"]
     print(f"SFA crosswalk rows: {total_rows:,}")
     print(f"Existing concept_key rows: {existing:,}")
-    print(f"Autofilled rows: {total_rows - existing:,} (net_price={net_price}, label_slug={label_slug})")
+    print(f"Autofilled rows: {total_rows - existing:,} (net_price={net_price}, varname={varname})")
     top_keys = df["concept_key"].value_counts().head(10)
     print("Top concept_keys:")
     for key, count in top_keys.items():
