@@ -16,7 +16,7 @@ VAR_COL_CANDIDATES = ["varname", "var_name", "var", "variable"]
 SURVEY_COL_CANDIDATES = ["survey", "SURVEY", "component", "COMPONENT", "survey_label", "component_name"]
 SURVEY_YEAR_CANDIDATES = ["survey_year", "SURVEY_YEAR", "year", "YEAR", "panel_year"]
 SURVEY_HINTS = ("SFA", "STUDENT FINANCIAL AID", "NET PRICE", "NET-PRICE")
-DEFAULT_WIDE_PANEL = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/panel_wide.csv")
+PANEL_WIDE_RAW = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/panel_wide_raw.csv")
 BASE_STEP0_SFA_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0sfa")
 BASE_SFA_LONG_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAlong")
 DEFAULT_DICTIONARY_LAKE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
@@ -131,8 +131,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--input-wide",
         type=Path,
-        default=DEFAULT_WIDE_PANEL,
-        help="Path to the raw wide IPEDS panel (parquet or CSV).",
+        default=PANEL_WIDE_RAW,
+        help="Wide raw IPEDS panel (with IPEDS varnames) used to build Step0 SFA long.",
     )
     parser.add_argument(
         "--output-long",
