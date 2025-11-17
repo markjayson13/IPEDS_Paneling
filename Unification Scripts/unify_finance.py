@@ -16,9 +16,7 @@ OPTIONAL_ID_COLS = ["REPORTING_UNITID"]
 VAL_RE = re.compile(r"^(F[123])([A-Z]{1,2})(\d+[A-Z]?)$", re.IGNORECASE)
 FLAG_RE = re.compile(r"^X(F[123])([A-Z]{1,2})(\d+[A-Z]?)$", re.IGNORECASE)
 
-DEFAULT_INPUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections/panel_wide_raw_2004_2024_merged.csv"
-)
+DEFAULT_INPUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/panel_wide_raw.csv")
 DEFAULT_LONG = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0Finlong/finance_step0_long.parquet"
 )

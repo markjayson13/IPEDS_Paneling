@@ -1,5 +1,8 @@
 : <<'LEGACY'
 # Code 
+python3 "Unification Scripts/combine_panel_wide_raw.py"
+python3 "Unification Scripts/unify_sfa.py"
+
 
 # Download IPEDS data for years 2004 to 2024
 python3 "Download Scripts/download_ipeds.py" \
@@ -128,7 +131,7 @@ FILLED_CROSSWALKS="$CROSSWALK_DIR/Filled"
 DICT_LAKE="$PARQUETS/Dictionary/dictionary_lake.parquet"
 PANEL_LONG="$PARQUETS/panel_long.parquet"
 PANEL_WIDE="$PANELED_DIR/Final/panel_wide.csv"
-PANEL_WIDE_RAW="$CROSSSECT_DIR/panel_wide_raw_2004_2024_merged.csv"
+PANEL_WIDE_RAW="/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/panel_wide_raw.csv"
 ENROLL_STEP0="$PARQUETS/Unify/Enrolllong/enrollment_step0_long.parquet"
 ENROLL_WIDE="$PARQUETS/Unify/Enrollwide/enrollment_concepts_wide.parquet"
 ENROLL_CROSSWALK="$FILLED_CROSSWALKS/enrollment_crosswalk_autofilled.csv"
