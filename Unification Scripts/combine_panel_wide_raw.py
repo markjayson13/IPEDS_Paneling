@@ -32,6 +32,18 @@ def read_and_standardize(file: Path, year_from_name: int | None) -> pd.DataFrame
     logging.info("Reading %s", file)
     df = pd.read_csv(file)
     df.columns = df.columns.astype(str).str.strip().str.upper()
+    if df.columns.duplicated().any():
+        logging.warning("Detected duplicate columns in %s; assigning unique suffixes.", file.name)
+        counts: dict[str, int] = {}
+        new_cols: list[str] = []
+        for col in df.columns:
+            cnt = counts.get(col, 0)
+            if cnt == 0:
+                new_cols.append(col)
+            else:
+                new_cols.append(f"{col}__DUP{cnt}")
+            counts[col] = cnt + 1
+        df.columns = new_cols
 
     year_col = None
     for candidate in YEAR_COL_CANDIDATES:
