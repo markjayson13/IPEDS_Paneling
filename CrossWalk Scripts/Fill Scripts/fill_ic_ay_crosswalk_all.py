@@ -72,39 +72,39 @@ def _schema_rules() -> List[SchemaRule]:
         # 1. Total price of attendance by residency & housing
         SchemaRule(
             concept_key="ICAY_COA_INDIST_ONCAMP",
-            label_pattern=patt(r"total price.*in[- ]district.*on[- ]campus"),
+            label_pattern=patt(r"(total price|price of attendance|cost of attendance).*in[- ]district.*on[- ]campus"),
         ),
         SchemaRule(
             concept_key="ICAY_COA_INST_ONCAMP",
-            label_pattern=patt(r"total price.*in[- ]state.*on[- ]campus"),
+            label_pattern=patt(r"(total price|price of attendance|cost of attendance).*in[- ]state.*on[- ]campus"),
         ),
         SchemaRule(
             concept_key="ICAY_COA_OUTST_ONCAMP",
-            label_pattern=patt(r"total price.*(out[- ]of[- ]state|nonresident).*on[- ]campus"),
+            label_pattern=patt(r"(total price|price of attendance|cost of attendance).*(out[- ]of[- ]state|nonresident).*on[- ]campus"),
         ),
         SchemaRule(
             concept_key="ICAY_COA_INDIST_OFFNWF",
-            label_pattern=patt(r"total price.*in[- ]district.*off[- ]campus.*not with family"),
+            label_pattern=patt(r"(total price|price of attendance|cost of attendance).*in[- ]district.*off[- ]campus.*not with family"),
         ),
         SchemaRule(
             concept_key="ICAY_COA_INST_OFFNWF",
-            label_pattern=patt(r"total price.*in[- ]state.*off[- ]campus.*not with family"),
+            label_pattern=patt(r"(total price|price of attendance|cost of attendance).*in[- ]state.*off[- ]campus.*not with family"),
         ),
         SchemaRule(
             concept_key="ICAY_COA_OUTST_OFFNWF",
-            label_pattern=patt(r"total price.*(out[- ]of[- ]state|nonresident).*off[- ]campus.*not with family"),
+            label_pattern=patt(r"(total price|price of attendance|cost of attendance).*(out[- ]of[- ]state|nonresident).*off[- ]campus.*not with family"),
         ),
         SchemaRule(
             concept_key="ICAY_COA_INDIST_OFFFAM",
-            label_pattern=patt(r"total price.*in[- ]district.*off[- ]campus.*with family"),
+            label_pattern=patt(r"(total price|price of attendance|cost of attendance).*in[- ]district.*off[- ]campus.*with family"),
         ),
         SchemaRule(
             concept_key="ICAY_COA_INST_OFFFAM",
-            label_pattern=patt(r"total price.*in[- ]state.*off[- ]campus.*with family"),
+            label_pattern=patt(r"(total price|price of attendance|cost of attendance).*in[- ]state.*off[- ]campus.*with family"),
         ),
         SchemaRule(
             concept_key="ICAY_COA_OUTST_OFFFAM",
-            label_pattern=patt(r"total price.*(out[- ]of[- ]state|nonresident).*off[- ]campus.*with family"),
+            label_pattern=patt(r"(total price|price of attendance|cost of attendance).*(out[- ]of[- ]state|nonresident).*off[- ]campus.*with family"),
         ),
         SchemaRule(
             concept_key="ICAY_COA_COMBINED_ALL",
@@ -114,6 +114,16 @@ def _schema_rules() -> List[SchemaRule]:
         SchemaRule(
             concept_key="ICAY_COA_COMP_INDIST_CURR",
             source_prefix="CMP1",
+            label_pattern=patt(r"comprehensive fee"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_COA_COMP_INST_CURR",
+            source_prefix="CMP2",
+            label_pattern=patt(r"comprehensive fee"),
+        ),
+        SchemaRule(
+            concept_key="ICAY_COA_COMP_OUTST_CURR",
+            source_prefix="CMP3",
             label_pattern=patt(r"comprehensive fee"),
         ),
         # 2. Current-year components (published tuition+fees, books+supplies, RMBD, other)
@@ -576,9 +586,29 @@ def schema_concept_for_row(row: pd.Series, rules: List[SchemaRule]) -> str | Non
     if not label:
         return None
 
+    has_price_attendance = ("price of attendance" in label_lower) or ("cost of attendance" in label_lower)
+    has_comprehensive_fee = "comprehensive fee" in label_lower
+    has_guaranteed_pct = ("guaranteed percent increase" in label_lower) or ("guaranteed percent" in label_lower)
+
     for rule in rules:
+        if has_comprehensive_fee:
+            if not rule.concept_key.startswith("ICAY_COA_COMP_"):
+                continue
+        if has_price_attendance and not has_comprehensive_fee:
+            if not rule.concept_key.startswith("ICAY_COA_"):
+                continue
+        if has_guaranteed_pct:
+            if rule.concept_key in {
+                "ICAY_TUIT_INDIST_CURR",
+                "ICAY_TUIT_INST_CURR",
+                "ICAY_TUIT_OUTST_CURR",
+                "ICAY_FEE_INDIST_CURR",
+                "ICAY_FEE_INST_CURR",
+                "ICAY_FEE_OUTST_CURR",
+            }:
+                continue
         if rule.concept_key == "ICAY_BOOK_SUPPLY_CURR":
-            if "comprehensive fee" in label_lower or "price of attendance" in label_lower:
+            if has_comprehensive_fee or has_price_attendance:
                 continue
         if rule.source_prefix is not None and not source_var.startswith(rule.source_prefix):
             continue
