@@ -18,8 +18,6 @@ python3 "CrossWalk Scripts/sfa_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/finance_build_crosswalk_template.py"
     #Auto fill crosswalks
     python3 "CrossWalk Scripts/Fill Scripts/auto_fill_hd_crosswalk.py"
-    python3 "CrossWalk Scripts/Fill Scripts/fill_ic_ay_crosswalk.py" --overwrite
-    python3 "CrossWalk Scripts/Fill Scripts/reset_ic_ay_crosswalk_all.py" --force
     python3 "CrossWalk Scripts/Fill Scripts/auto_fill_sfa_crosswalk.py"
     python3 "CrossWalk Scripts/Fill Scripts/autofill_enrollment_crosswalk_core.py"
     python3 "CrossWalk Scripts/Fill Scripts/fill_finance_crosswalk.py"
@@ -80,8 +78,6 @@ python3 "Validation Scripts/hd_validate_master_panel.py"
 
 
 python3 "CrossWalk Scripts/ic_ay_build_crosswalk_template.py"
-python3 "CrossWalk Scripts/Fill Scripts/fill_ic_ay_crosswalk.py" --overwrite
-python3 "CrossWalk Scripts/Fill Scripts/reset_ic_ay_crosswalk_all.py" --force
 python3 "Harmonize Scripts/stabilize_ic_ay.py" --overwrite
 python3 "Validation Scripts/validate_ic_ay.py"
 
@@ -136,6 +132,7 @@ PANEL_WIDE_RAW="$CROSSSECT_DIR/panel_wide_raw_2004_2024_merged.csv"
 ENROLL_STEP0="$PARQUETS/Unify/Enrolllong/enrollment_step0_long.parquet"
 ENROLL_WIDE="$PARQUETS/Unify/Enrollwide/enrollment_concepts_wide.parquet"
 ENROLL_CROSSWALK="$FILLED_CROSSWALKS/enrollment_crosswalk_autofilled.csv"
+ICAY_CROSSWALK="$FILLED_CROSSWALKS/ic_ay_crosswalk_all.csv"
 ADMISSIONS_STEP0="$PARQUETS/Unify/Step0adm/adm_step0_long.parquet"
 SFA_STEP0="$PARQUETS/Unify/Step0sfa/sfa_step0_long.parquet"
 FINANCE_STEP0="$PARQUETS/Unify/Step0Finlong/finance_step0_long.parquet"
@@ -224,16 +221,14 @@ python3 "CrossWalk Scripts/adm_build_crosswalk_template.py"
 
 echo "4) Auto fill crosswalks"
 python3 "CrossWalk Scripts/Fill Scripts/auto_fill_hd_crosswalk.py"
-python3 "CrossWalk Scripts/Fill Scripts/fill_ic_ay_crosswalk.py"
 python3 "CrossWalk Scripts/Fill Scripts/fill_ic_ay_crosswalk_all.py" --overwrite
-python3 "CrossWalk Scripts/Fill Scripts/reset_ic_ay_crosswalk_all.py" --force
 python3 "CrossWalk Scripts/Fill Scripts/auto_fill_sfa_crosswalk.py"
 python3 "CrossWalk Scripts/Fill Scripts/autofill_enrollment_crosswalk_core.py"
 python3 "CrossWalk Scripts/Fill Scripts/fill_finance_crosswalk.py"
 
 echo "5) Harmonize or stabilize by survey"
 python3 "Harmonize Scripts/stabilize_hd.py"
-python3 "Harmonize Scripts/stabilize_ic_ay.py" --overwrite
+python3 "Harmonize Scripts/stabilize_ic_ay.py" --crosswalk "$ICAY_CROSSWALK" --overwrite
 python3 "Harmonize Scripts/harmonize_admissions.py"
 python3 "Harmonize Scripts/harmonize_enrollment_concepts.py" \
   --step0 "$ENROLL_STEP0" \
@@ -291,4 +286,3 @@ python3 "Validation Scripts/validate_panel_wide.py" \
   --output-clean "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Final/panel_wide_clean.csv" \
   --violations "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Validation/panel_wide_violations.csv" \
   --summary "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Validation/panel_wide_validation_summary.txt"
-

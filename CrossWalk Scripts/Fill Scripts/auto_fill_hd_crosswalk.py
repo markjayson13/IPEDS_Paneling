@@ -128,6 +128,11 @@ def _load_template(path: Path) -> pd.DataFrame:
     # Cast years to numeric (Int64)
     df["year_start"] = pd.to_numeric(df["year_start"], errors="raise").astype("Int64")
     df["year_end"] = pd.to_numeric(df["year_end"], errors="raise").astype("Int64")
+    bad_range = df["year_start"] > df["year_end"]
+    if bad_range.any():
+        print("ERROR: Found year_start > year_end in HD template rows. Fix template before continuing.")
+        print(df.loc[bad_range, ["survey", "varname", "year_start", "year_end"]].head(10).to_string(index=False))
+        raise SystemExit(1)
 
     # Normalize text fields
     df["survey"] = df["survey"].astype(str).str.upper()
@@ -143,6 +148,18 @@ def _load_template(path: Path) -> pd.DataFrame:
     mask_junk = df["varname"].eq("(Provisional release)")
     if mask_junk.any():
         df = df.loc[~mask_junk].copy()
+
+    key_cols = ["survey", "varname", "year_start", "year_end"]
+    dup_mask = df.duplicated(key_cols, keep=False)
+    if dup_mask.any():
+        print(f"ERROR: Found {dup_mask.sum()} duplicate key rows in HD template. Resolve duplicates and rerun.")
+        print(df.loc[dup_mask, key_cols + ["concept_key"]].head(10).to_string(index=False))
+        raise SystemExit(1)
+
+    min_year = int(df["year_start"].min())
+    max_year = int(df["year_end"].max())
+    surveys = ", ".join(sorted(df["survey"].dropna().unique()))
+    print(f"HD template rows: {len(df):,}. Year span: {min_year}-{max_year}. Surveys: {surveys}")
 
     return df
 
@@ -232,27 +249,34 @@ def _auto_fill_concepts(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     out = pd.DataFrame(rows)
+    if out.empty:
+        raise SystemExit("No rows produced by auto-fill; check template input.")
 
-    # Basic sanity checks
-    if out["concept_key"].isna().any() or (out["concept_key"].astype(str).str.strip() == "").any():
-        bad = out.loc[out["concept_key"].astype(str).str.strip().isin(["", "nan", "None"])].head()
-        raise ValueError(
-            "Auto-filled crosswalk still has empty concept_key rows; this should not happen.\n"
-            f"Example rows:\n{bad.to_string(index=False)}"
-        )
-
-    # No need to enforce uniqueness here; stabilize_hd.py will check that after expansion.
-    # Just ensure dtypes are reasonable
     out["year_start"] = pd.to_numeric(out["year_start"], errors="raise").astype("Int64")
     out["year_end"] = pd.to_numeric(out["year_end"], errors="raise").astype("Int64")
 
-    # Order columns for compatibility with stabilize_hd.py
+    ck_series = out["concept_key"].astype(str).str.strip()
+    missing_mask = ck_series.eq("") | ck_series.str.lower().eq("nan")
+    if missing_mask.any():
+        print("ERROR: auto_fill_hd_crosswalk finished but some rows lack concept_key.")
+        print(out.loc[missing_mask].head(10).to_string(index=False))
+        raise SystemExit(1)
+
+    for group_key, group in out.groupby(["survey", "source_var", "concept_key"], dropna=False):
+        grp = group.sort_values("year_start")
+        prev_end = None
+        for _, row in grp.iterrows():
+            start = int(row["year_start"])
+            end = int(row["year_end"])
+            if prev_end is not None and start <= prev_end:
+                print("ERROR: Overlapping year ranges found for", group_key)
+                print(grp[["source_var", "concept_key", "year_start", "year_end"]].head(10).to_string(index=False))
+                raise SystemExit(1)
+            prev_end = max(prev_end or end, end)
+
     col_order = ["concept_key", "survey", "source_var", "year_start", "year_end", "notes"]
     out = out[col_order]
-
-    # Sort for readability
     out = out.sort_values(["survey", "source_var", "year_start", "concept_key"], ignore_index=True)
-
     return out
 
 
@@ -267,7 +291,16 @@ def main() -> None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     crosswalk.to_csv(args.out, index=False)
     print(f"Wrote auto-filled HD crosswalk to {args.out}")
-    print(f"Rows: {len(crosswalk):,}")
+    total_rows = len(crosswalk)
+    stable_mask = crosswalk["concept_key"].astype(str).str.upper().str.startswith("STABLE_")
+    print(f"Total rows: {total_rows:,}")
+    print(f"STABLE_* concept rows: {stable_mask.sum():,}")
+    print(f"Non-STABLE concept rows: {total_rows - stable_mask.sum():,}")
+    top_keys = crosswalk["concept_key"].value_counts().head(10)
+    print("Top concept_keys:")
+    for key, count in top_keys.items():
+        print(f"  {key}: {count}")
+
 
 
 if __name__ == "__main__":

@@ -197,10 +197,38 @@ def auto_fill_concepts(
         raise KeyError("Expected column 'source_var' in crosswalk template.")
     if "label" not in df.columns:
         raise KeyError("Expected column 'label' in crosswalk template.")
+    required = {"concept_key", "source_var", "label"}
+    missing = required - set(df.columns)
+    if missing:
+        raise SystemExit(f"SFA template missing columns: {sorted(missing)}")
 
     df["concept_key"] = df["concept_key"].astype("object")
 
     df["source_var"] = df["source_var"].astype(str).str.strip().str.upper()
+    if "survey" in df.columns:
+        df["survey"] = df["survey"].astype(str).str.strip().str.upper()
+    if "year_start" in df.columns:
+        df["year_start"] = pd.to_numeric(df["year_start"], errors="coerce").astype("Int64")
+    if "year_end" in df.columns:
+        df["year_end"] = pd.to_numeric(df["year_end"], errors="coerce").astype("Int64")
+    if {"year_start", "year_end"} <= set(df.columns):
+        bad_range = df["year_start"] > df["year_end"]
+        if bad_range.any():
+            print("ERROR: SFA template has year_start > year_end. Fix template.")
+            print(df.loc[bad_range, ["source_var", "year_start", "year_end"]].head(10).to_string(index=False))
+            raise SystemExit(1)
+
+    key_cols = ["source_var"]
+    if "survey" in df.columns:
+        key_cols.insert(0, "survey")
+    if "year_start" in df.columns:
+        key_cols.append("year_start")
+    dup_mask = df.duplicated(key_cols, keep=False)
+    if dup_mask.any():
+        print(f"ERROR: Found {dup_mask.sum()} duplicate key rows in SFA template.")
+        print(df.loc[dup_mask, key_cols + ["concept_key"]].head(10).to_string(index=False))
+        raise SystemExit(1)
+    print(f"SFA template rows: {len(df):,}")
 
     # Identify rows that are already filled (do not override)
     raw_ck = df["concept_key"]
@@ -242,19 +270,24 @@ def auto_fill_concepts(
         used_keys.add(concept)
         filled_counts[source] += 1
 
-    if filled_counts["net_price"] or filled_counts["label_slug"]:
-        logging.info(
-            "Auto-filled concept_key for %d rows (net_price patterns=%d, label slugs=%d).",
-            filled_counts["net_price"] + filled_counts["label_slug"],
-            filled_counts["net_price"],
-            filled_counts["label_slug"],
-        )
-    else:
-        logging.info("No additional concept_key rows were filled.")
+    total_autofilled = filled_counts["net_price"] + filled_counts["label_slug"]
+    logging.info(
+        "Auto-filled concept_key for %d rows (net_price=%d, label_slug=%d).",
+        total_autofilled,
+        filled_counts["net_price"],
+        filled_counts["label_slug"],
+    )
 
     # Basic summary by concept_key
     filled_summary = df["concept_key"].astype(str).str.strip().value_counts(dropna=True).sort_index()
     logging.info("Resulting concept_key distribution:\n%s", filled_summary)
+
+    ck_series = df["concept_key"].astype(str).str.strip()
+    missing_mask = ck_series.eq("") | ck_series.str.lower().eq("nan")
+    if missing_mask.any():
+        print("ERROR: SFA autofill left blank concept_key rows. Showing sample:")
+        print(df.loc[missing_mask, ["source_var", "label"]].head(10).to_string(index=False))
+        raise SystemExit(1)
 
     if (df["concept_key"].astype(str).str.strip() == "").any():
         raise RuntimeError("Some SFA rows still lack concept_key assignments after auto-fill.")
@@ -263,6 +296,17 @@ def auto_fill_concepts(
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_csv, index=False)
     logging.info("Saved filled SFA crosswalk to %s", output_csv)
+    total_rows = len(df)
+    existing = int((df["concept_key_source"] == "existing").sum())
+    net_price = filled_counts["net_price"]
+    label_slug = filled_counts["label_slug"]
+    print(f"SFA crosswalk rows: {total_rows:,}")
+    print(f"Existing concept_key rows: {existing:,}")
+    print(f"Autofilled rows: {total_rows - existing:,} (net_price={net_price}, label_slug={label_slug})")
+    top_keys = df["concept_key"].value_counts().head(10)
+    print("Top concept_keys:")
+    for key, count in top_keys.items():
+        print(f"  {key}: {count}")
 
 
 def parse_args() -> argparse.Namespace:

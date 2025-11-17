@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Iterable, Tuple
 
+import logging
 import pandas as pd
 
 HERE = Path(__file__).resolve()
@@ -18,7 +19,6 @@ DEFAULT_INPUT = CROSSWALK_DIR / "ic_ay_crosswalk_autofilled.csv"
 DEFAULT_TEMPLATE_FALLBACK = CROSSWALK_DIR / "ic_ay_crosswalk_template.csv"
 DEFAULT_OUTPUT_DIR = FILLED_DIR
 DEFAULT_OUTPUT_NAME = "ic_ay_crosswalk_all.csv"
-SUMMARY_NAME = "ic_ay_crosswalk_all_summary.csv"
 
 STRICT_CONCEPTS = {
     "CHG1": "PRICE_TUITFEE_IN_DISTRICT_FTFTUG",
@@ -92,12 +92,34 @@ def load_crosswalk(path: Path) -> pd.DataFrame:
                 break
     if "label" not in df.columns:
         df["label"] = ""
-    required = ["concept_key", "survey", "source_var", "label", "table", "year_start", "year_end", "notes"]
-    for col in required:
-        if col not in df.columns:
-            df[col] = ""
+    required = {"concept_key", "survey", "source_var", "label", "year_start", "year_end"}
+    missing = required - set(df.columns)
+    if missing:
+        raise SystemExit(f"IC_AY crosswalk missing required columns: {sorted(missing)}")
+    for optional in ("table", "notes"):
+        if optional not in df.columns:
+            df[optional] = ""
     df["concept_key_original"] = df["concept_key"].astype(str)
     df["concept_key_source"] = ""
+    df["survey"] = df["survey"].astype(str).str.strip().str.upper()
+    df["source_var"] = df["source_var"].astype(str).str.strip()
+    df["year_start"] = pd.to_numeric(df["year_start"], errors="raise").astype("Int64")
+    df["year_end"] = pd.to_numeric(df["year_end"], errors="raise").astype("Int64")
+    bad_range = df["year_start"] > df["year_end"]
+    if bad_range.any():
+        print("ERROR: IC_AY crosswalk has rows with year_start > year_end.")
+        print(df.loc[bad_range, ["survey", "source_var", "year_start", "year_end"]].head(10).to_string(index=False))
+        raise SystemExit(1)
+    key_cols = ["survey", "source_var", "year_start", "year_end"]
+    dup_mask = df.duplicated(key_cols, keep=False)
+    if dup_mask.any():
+        print(f"ERROR: Found {dup_mask.sum()} duplicate key rows in IC_AY crosswalk.")
+        print(df.loc[dup_mask, key_cols + ["concept_key"]].head(10).to_string(index=False))
+        raise SystemExit(1)
+    min_year = int(df["year_start"].min())
+    max_year = int(df["year_end"].max())
+    surveys = ", ".join(sorted(df["survey"].dropna().unique()))
+    print(f"IC_AY template rows: {len(df):,}. Year span: {min_year}-{max_year}. Surveys: {surveys}")
     return df
 
 
@@ -274,6 +296,25 @@ def slugify_label_to_concept(row: pd.Series, used_keys: set[str]) -> str:
     return key
 
 
+def _assert_no_overlaps_icay(df: pd.DataFrame) -> None:
+    groups = df.groupby(["survey", "source_var", "concept_key"], dropna=False)
+    for key, grp in groups:
+        grp_sorted = grp.sort_values("year_start")
+        prev_end = None
+        for _, row in grp_sorted.iterrows():
+            start = int(row["year_start"])
+            end = int(row["year_end"])
+            if prev_end is not None and start <= prev_end:
+                print("ERROR: IC_AY overlap detected for", key)
+                print(
+                    grp_sorted[["survey", "source_var", "concept_key", "year_start", "year_end"]]
+                    .head(10)
+                    .to_string(index=False)
+                )
+                raise SystemExit(1)
+            prev_end = max(prev_end or end, end)
+
+
 def fill_concept_keys(df: pd.DataFrame) -> Tuple[pd.DataFrame, dict[str, int]]:
     df = df.copy()
     concept = df["concept_key"].astype(str).str.strip()
@@ -294,7 +335,13 @@ def fill_concept_keys(df: pd.DataFrame) -> Tuple[pd.DataFrame, dict[str, int]]:
         df.at[idx, "concept_key"] = slugify_label_to_concept(df.loc[idx], used_keys)
         df.at[idx, "concept_key_source"] = "generic_slug"
 
-    assert (df["concept_key"].astype(str).str.strip() == "").sum() == 0
+    ck_series = df["concept_key"].astype(str).str.strip()
+    missing_mask = ck_series.eq("") | ck_series.str.lower().eq("nan")
+    if missing_mask.any():
+        print("ERROR: IC_AY autofill left blank concept_key rows. Sample:")
+        print(df.loc[missing_mask, ["survey", "source_var", "year_start", "year_end", "label"]].head(10).to_string(index=False))
+        raise SystemExit(1)
+    _assert_no_overlaps_icay(df)
     stats = {
         "n_total": len(df),
         "n_existing": int((df["concept_key_source"] == "existing").sum()),
@@ -310,11 +357,7 @@ def write_outputs(df: pd.DataFrame, stats: dict[str, int], output_dir: Path, out
     if output_path.exists() and not overwrite:
         raise SystemExit(f"Refusing to overwrite {output_path}. Use --overwrite to override.")
     df.to_csv(output_path, index=False)
-
-    summary_df = pd.DataFrame(
-        [{"metric": key, "value": value} for key, value in stats.items()]
-    )
-    summary_df.to_csv(output_dir / SUMMARY_NAME, index=False)
+    logging.info("Saved filled IC_AY crosswalk to %s", output_path)
 
 
 def print_summary(df: pd.DataFrame, stats: dict[str, int]) -> None:
@@ -322,6 +365,7 @@ def print_summary(df: pd.DataFrame, stats: dict[str, int]) -> None:
     print(f"Existing concept_key kept: {stats['n_existing']}")
     print(f"Filled by strict rules: {stats['n_strict']}")
     print(f"Filled by generic slug: {stats['n_generic']}")
+    print(f"Distinct concept_keys: {df['concept_key'].nunique()}")
 
     print("\nConcept_key frequencies (top 40):")
     print(df["concept_key"].value_counts().head(40))

@@ -60,6 +60,26 @@ IGNORED_CONCEPTS = {
 }
 
 
+def _assert_no_overlaps(df: pd.DataFrame, group_cols: tuple[str, ...]) -> None:
+    for key, grp in df.groupby(list(group_cols), dropna=False):
+        grp_sorted = grp.sort_values("year_start")
+        prev_end = None
+        for _, row in grp_sorted.iterrows():
+            start = int(row["year_start"])
+            end = int(row["year_end"])
+            if prev_end is not None and start <= prev_end:
+                print("ERROR: Overlapping year ranges detected for", key)
+                print(
+                    grp_sorted[
+                        ["form_family", "base_key", "concept_key", "year_start", "year_end"]
+                    ]
+                    .head(10)
+                    .to_string(index=False)
+                )
+                raise SystemExit(1)
+            prev_end = max(prev_end or end, end)
+
+
 def _contains_any(text: str, *terms: str) -> bool:
     return any(term in text for term in terms)
 
@@ -340,7 +360,7 @@ def _apply_manual_overrides(cw: pd.DataFrame) -> pd.DataFrame:
 
 def _export_suspect_core(cw: pd.DataFrame) -> None:
     if "source_label_norm" not in cw.columns:
-        print("\nsource_label_norm column missing; cannot produce suspect core CSV.")
+        print("\nsource_label_norm column missing; cannot inspect suspect core rows.")
         return
 
     core_pattern = (
@@ -354,8 +374,8 @@ def _export_suspect_core(cw: pd.DataFrame) -> None:
     label_str = cw["source_label_norm"].fillna("").astype(str)
     suspect_core = cw[mask_blank & label_str.str.contains(core_pattern, case=False, regex=True)]
 
-    suspect_path = CROSSWALK_OUT.with_name("finance_crosswalk_suspect_core.csv")
     if not suspect_core.empty:
+        print(f"\nWARNING: {len(suspect_core)} suspect core rows still have blank concept_key.")
         cols = [
             "form_family",
             "base_key",
@@ -366,8 +386,7 @@ def _export_suspect_core(cw: pd.DataFrame) -> None:
             "source_label_norm",
         ]
         existing_cols = [c for c in cols if c in suspect_core.columns]
-        suspect_core[existing_cols].to_csv(suspect_path, index=False)
-        print(f"\nWrote {len(suspect_core)} suspect core rows with blank concept_key to {suspect_path}")
+        print(suspect_core[existing_cols].head(10).to_string(index=False))
     else:
         print("\nNo suspect core rows with blank concept_key.")
 
@@ -518,6 +537,10 @@ def inspect_endowment_base_keys(
 def main() -> None:
     cw = pd.read_csv(CROSSWALK_IN)
     cw.columns = [c.strip() for c in cw.columns]
+    required = {"form_family", "base_key", "year_start", "year_end"}
+    missing = required - set(cw.columns)
+    if missing:
+        raise SystemExit(f"Finance crosswalk template missing columns: {sorted(missing)}")
 
     if "concept_key" not in cw.columns:
         cw["concept_key"] = ""
@@ -529,7 +552,22 @@ def main() -> None:
     _strip_str_cols(cw, ("form_family", "base_key"))
     for col in ("year_start", "year_end"):
         if col in cw.columns:
-            cw[col] = pd.to_numeric(cw[col], errors="coerce").astype("Int64")
+            cw[col] = pd.to_numeric(cw[col], errors="raise").astype("Int64")
+    bad_range = cw["year_start"] > cw["year_end"]
+    if bad_range.any():
+        print("ERROR: Finance crosswalk has rows with year_start > year_end.")
+        print(cw.loc[bad_range, ["form_family", "base_key", "year_start", "year_end"]].head(10).to_string(index=False))
+        raise SystemExit(1)
+    key_cols = ["form_family", "base_key", "year_start", "year_end"]
+    dup_mask = cw.duplicated(key_cols, keep=False)
+    if dup_mask.any():
+        print(f"ERROR: Found {dup_mask.sum()} duplicate key rows in finance crosswalk template.")
+        print(cw.loc[dup_mask, key_cols + ["concept_key"]].head(10).to_string(index=False))
+        raise SystemExit(1)
+    min_year = int(cw["year_start"].min())
+    max_year = int(cw["year_end"].max())
+    forms = ", ".join(sorted(cw["form_family"].dropna().unique()))
+    print(f"Finance template rows: {len(cw):,}. Year span: {min_year}-{max_year}. Form families: {forms}")
 
     if "weight" not in cw.columns:
         cw["weight"] = 1.0
@@ -602,10 +640,25 @@ def main() -> None:
     else:
         print("\nWARNING: no BS_ENDOWMENT_FMV mappings found in crosswalk.")
 
+    mapped_nonblank = cw[cw["concept_key"].astype(str).str.strip().ne("")]
+    if not mapped_nonblank.empty:
+        _assert_no_overlaps(mapped_nonblank, ("form_family", "base_key", "concept_key"))
+
+    ck_series = cw["concept_key"].astype(str).str.strip()
+    missing_mask = ck_series.eq("") | ck_series.str.lower().eq("nan")
+    if missing_mask.any():
+        print("ERROR: Finance crosswalk still has rows without concept_key. Sample:")
+        print(cw.loc[missing_mask, ["form_family", "base_key", "year_start", "year_end", "source_label_norm"]].head(10).to_string(index=False))
+        raise SystemExit(1)
+
     _export_suspect_core(cw)
 
     cw.to_csv(CROSSWALK_OUT, index=False)
     print(f"Wrote filled crosswalk to {CROSSWALK_OUT}")
+    print(f"Total rows: {len(cw):,}. Concept-keyed rows: {ck_series.ne('').sum():,}")
+    top = mapped_nonblank["concept_key"].value_counts().head(20)
+    print("Top concept_keys:")
+    print(top.to_string())
 
 
 if __name__ == "__main__":
