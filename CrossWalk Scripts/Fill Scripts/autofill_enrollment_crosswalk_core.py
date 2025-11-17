@@ -17,10 +17,15 @@ DEFAULT_OUTPUT = Path(
 )
 
 E12_HEAD_ALL_TOT_ALL = "E12_HEAD_ALL_TOT_ALL"
+E12_HEAD_UG_TOT_ALL = "E12_HEAD_UG_TOT_ALL"
 EF_HEAD_ALL_TOT_ALL = "EF_HEAD_ALL_TOT_ALL"
+EF_HEAD_UG_TOT_ALL = "EF_HEAD_UG_TOT_ALL"
+EF_HEAD_UG_DEGSEEK_TOT = "EF_HEAD_UG_DEGSEEK_TOT"
+EF_HEAD_UG_DEGSEEK_FTFT_TOT = "EF_HEAD_UG_DEGSEEK_FTFT_TOT"
 EF_HEAD_FTFT_UG_DEGSEEK_TOT = "EF_HEAD_FTFT_UG_DEGSEEK_TOT"
 EF_HEAD_FT_ALL_TOT_ALL = "EF_HEAD_FT_ALL_TOT_ALL"
 EF_HEAD_FT_UG_TOT_ALL = "EF_HEAD_FT_UG_TOT_ALL"
+EF_HEAD_GR_TOT_ALL = "EF_HEAD_GR_TOT_ALL"
 EF_HEAD_FT_GR_TOT_ALL = "EF_HEAD_FT_GR_TOT_ALL"
 EF_HEAD_FTFT_UG_RES_INSTATE = "EF_HEAD_FTFT_UG_RES_INSTATE"
 EF_HEAD_FTFT_UG_RES_OUTSTATE = "EF_HEAD_FTFT_UG_RES_OUTSTATE"
@@ -84,7 +89,24 @@ def main() -> None:
         return pd.isna(x) or str(x).strip() == ""
 
     blank_mask = cw["concept_key"].map(is_blank)
-    fill_counts: dict[str, int] = {}
+    concepts = [
+        E12_HEAD_ALL_TOT_ALL,
+        E12_HEAD_UG_TOT_ALL,
+        EF_HEAD_ALL_TOT_ALL,
+        EF_HEAD_UG_TOT_ALL,
+        EF_HEAD_UG_DEGSEEK_TOT,
+        EF_HEAD_UG_DEGSEEK_FTFT_TOT,
+        EF_HEAD_FTFT_UG_DEGSEEK_TOT,
+        EF_HEAD_FT_ALL_TOT_ALL,
+        EF_HEAD_FT_UG_TOT_ALL,
+        EF_HEAD_GR_TOT_ALL,
+        EF_HEAD_FT_GR_TOT_ALL,
+        EF_HEAD_FTFT_UG_RES_INSTATE,
+        EF_HEAD_FTFT_UG_RES_OUTSTATE,
+        EF_HEAD_FTFT_UG_RES_FOREIGN,
+        EF_HEAD_FTFT_UG_RES_UNKNOWN,
+    ]
+    fill_counts: dict[str, int] = {key: 0 for key in concepts}
 
     def _note_is_blank(series: pd.Series) -> pd.Series:
         return series.map(is_blank)
@@ -98,6 +120,19 @@ def main() -> None:
     cw.loc[mask_e12_total, "concept_key"] = E12_HEAD_ALL_TOT_ALL
     cw.loc[mask_e12_total & _note_is_blank(cw["note"]), "note"] = f"auto:{E12_HEAD_ALL_TOT_ALL}"
     fill_counts[E12_HEAD_ALL_TOT_ALL] = int(mask_e12_total.sum())
+    blank_mask = cw["concept_key"].map(is_blank)
+
+    # E12 undergraduate total
+    mask_e12_ug_label = (
+        (cw["survey"] == "12MONTHENROLLMENT")
+        & cw["label_norm"].str.contains("undergraduate", case=False, na=False)
+        & cw["label_norm"].str.contains("total", case=False, na=False)
+        & blank_mask
+    )
+    if mask_e12_ug_label.any():
+        cw.loc[mask_e12_ug_label, "concept_key"] = E12_HEAD_UG_TOT_ALL
+        cw.loc[mask_e12_ug_label & _note_is_blank(cw["note"]), "note"] = f"auto:{E12_HEAD_UG_TOT_ALL}"
+    fill_counts[E12_HEAD_UG_TOT_ALL] = int(mask_e12_ug_label.sum())
     blank_mask = cw["concept_key"].map(is_blank)
 
     # Rule B: Fall totals
@@ -119,6 +154,49 @@ def main() -> None:
     fill_counts[EF_HEAD_ALL_TOT_ALL] = int(mask_ef_total.sum())
     blank_mask = cw["concept_key"].map(is_blank)
 
+    # EF undergraduate total
+    mask_ef_ug_label = (
+        (cw["survey"] == "FALLENROLLMENT")
+        & cw["label_norm"].str.contains("undergraduate total", case=False, na=False)
+        & blank_mask
+    )
+    mask_ef_ug = mask_ef_ug_label
+    if mask_ef_ug.any():
+        cw.loc[mask_ef_ug, "concept_key"] = EF_HEAD_UG_TOT_ALL
+        cw.loc[mask_ef_ug & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_HEAD_UG_TOT_ALL}"
+    fill_counts[EF_HEAD_UG_TOT_ALL] = int(mask_ef_ug.sum())
+    blank_mask = cw["concept_key"].map(is_blank)
+
+    # EF undergraduate deg/cert-seeking total
+    mask_ef_ug_degseek_label = (
+        (cw["survey"] == "FALLENROLLMENT")
+        & cw["label_norm"].str.contains("undergraduate", case=False, na=False)
+        & cw["label_norm"].str.contains("degree/certificate-seeking", case=False, na=False)
+        & cw["label_norm"].str.contains("total", case=False, na=False)
+        & blank_mask
+    )
+    if mask_ef_ug_degseek_label.any():
+        cw.loc[mask_ef_ug_degseek_label, "concept_key"] = EF_HEAD_UG_DEGSEEK_TOT
+        cw.loc[mask_ef_ug_degseek_label & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_HEAD_UG_DEGSEEK_TOT}"
+    fill_counts[EF_HEAD_UG_DEGSEEK_TOT] = int(mask_ef_ug_degseek_label.sum())
+    blank_mask = cw["concept_key"].map(is_blank)
+
+    # EF undergraduate deg/cert-seeking FTFT total
+    mask_ef_ug_degseek_ftft_label = (
+        (cw["survey"] == "FALLENROLLMENT")
+        & cw["label_norm"].str.contains("full", case=False, na=False)
+        & cw["label_norm"].str.contains("undergraduate", case=False, na=False)
+        & cw["label_norm"].str.contains("degree/certificate-seeking", case=False, na=False)
+        & cw["label_norm"].str.contains("first", case=False, na=False)
+        & cw["label_norm"].str.contains("total", case=False, na=False)
+        & blank_mask
+    )
+    if mask_ef_ug_degseek_ftft_label.any():
+        cw.loc[mask_ef_ug_degseek_ftft_label, "concept_key"] = EF_HEAD_UG_DEGSEEK_FTFT_TOT
+        cw.loc[mask_ef_ug_degseek_ftft_label & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_HEAD_UG_DEGSEEK_FTFT_TOT}"
+    fill_counts[EF_HEAD_UG_DEGSEEK_FTFT_TOT] = int(mask_ef_ug_degseek_ftft_label.sum())
+    blank_mask = cw["concept_key"].map(is_blank)
+
     # Rule C: Fall FTFT deg/cert seekers
     mask_ef_ftft_degseek = (
         (cw["survey"] == "FALLENROLLMENT")
@@ -128,6 +206,17 @@ def main() -> None:
     cw.loc[mask_ef_ftft_degseek, "concept_key"] = EF_HEAD_FTFT_UG_DEGSEEK_TOT
     cw.loc[mask_ef_ftft_degseek & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_HEAD_FTFT_UG_DEGSEEK_TOT}"
     fill_counts[EF_HEAD_FTFT_UG_DEGSEEK_TOT] = int(mask_ef_ftft_degseek.sum())
+    blank_mask = cw["concept_key"].map(is_blank)
+
+    mask_ef_gr_label = (
+        (cw["survey"] == "FALLENROLLMENT")
+        & cw["label_norm"].str.contains("graduate total", case=False, na=False)
+        & blank_mask
+    )
+    if mask_ef_gr_label.any():
+        cw.loc[mask_ef_gr_label, "concept_key"] = EF_HEAD_GR_TOT_ALL
+        cw.loc[mask_ef_gr_label & _note_is_blank(cw["note"]), "note"] = f"auto:{EF_HEAD_GR_TOT_ALL}"
+    fill_counts[EF_HEAD_GR_TOT_ALL] = int(mask_ef_gr_label.sum())
     blank_mask = cw["concept_key"].map(is_blank)
 
     # Rule D: Full-time undergraduates
