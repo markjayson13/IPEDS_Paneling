@@ -162,7 +162,7 @@ def _schema_rules() -> List[SchemaRule]:
         ),
         SchemaRule(
             concept_key="ICAY_FEE_INDIST_CURR",
-            label_pattern=patt(r"published.*in[- ]district.*(required fee|fees)"),
+            label_pattern=patt(r"published.*in[- ]district(?!.*tuition).*?(required fee|fees)"),
         ),
         SchemaRule(
             concept_key="ICAY_TUIT_INDIST_GUAR_PCT",
@@ -178,7 +178,7 @@ def _schema_rules() -> List[SchemaRule]:
         ),
         SchemaRule(
             concept_key="ICAY_FEE_INST_CURR",
-            label_pattern=patt(r"published.*in[- ]state.*(required fee|fees)"),
+            label_pattern=patt(r"published.*in[- ]state(?!.*tuition).*?(required fee|fees)"),
         ),
         SchemaRule(
             concept_key="ICAY_TUIT_INST_GUAR_PCT",
@@ -194,7 +194,7 @@ def _schema_rules() -> List[SchemaRule]:
         ),
         SchemaRule(
             concept_key="ICAY_FEE_OUTST_CURR",
-            label_pattern=patt(r"published.*(out[- ]of[- ]state|nonresident).*fees"),
+            label_pattern=patt(r"published.*(out[- ]of[- ]state|nonresident)(?!.*tuition).*?(required fee|fees)"),
         ),
         SchemaRule(
             concept_key="ICAY_TUIT_OUTST_GUAR_PCT",
@@ -352,6 +352,11 @@ def _clean(value: str) -> str:
     return (value or "").strip()
 
 
+def _is_percent_label(label: str) -> bool:
+    lower = (label or "").lower()
+    return "percent" in lower or "percentage" in lower or "%" in lower
+
+
 def _normalize_var(var: str) -> str:
     for key in STRICT_CONCEPTS:
         if var.startswith(key):
@@ -363,6 +368,8 @@ def suggest_concept_key_strict(row: pd.Series) -> str | None:
     var = _normalize_var(_clean(row.get("source_var", "")).upper())
     survey = _clean(row.get("survey", "")).upper()
     label = _clean(row.get("label", "")).lower()
+    if _is_percent_label(label):
+        return None
     if not var or not survey or "IC" not in survey or "AY" not in survey:
         return None
     if var == "CHG5":
@@ -527,10 +534,13 @@ def apply_canonical_map(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
     Only operates on currently blank concept_key rows.
     """
     df = df.copy()
+    df["label"] = df["label"].astype(str)
     filled = 0
     for idx, row in df.iterrows():
         current = _clean(row.get("concept_key", ""))
         if current:
+            continue
+        if _is_percent_label(row.get("label", "")):
             continue
         source_var = _clean(row.get("source_var", "")).upper()
         if not source_var:
@@ -575,30 +585,71 @@ def schema_concept_for_row(row: pd.Series, rules: List[SchemaRule]) -> str | Non
     if not label:
         return None
 
-    has_price_attendance = ("price of attendance" in label_lower) or ("cost of attendance" in label_lower)
+    has_price_attendance = (
+        "price of attendance" in label_lower
+        or "cost of attendance" in label_lower
+        or "total price" in label_lower
+    )
+    has_full_coa_list = (
+        (
+            "tuition and fees" in label_lower
+            or ("tuition" in label_lower and "fees" in label_lower)
+        )
+        and (
+            "books and supplies" in label_lower
+            or ("books" in label_lower and "supplies" in label_lower)
+        )
+        and (
+            "room and board" in label_lower
+            or "food and housing" in label_lower
+            or "housing and food" in label_lower
+        )
+        and "other expenses" in label_lower
+    )
     has_comprehensive_fee = "comprehensive fee" in label_lower
-    has_guaranteed_pct = ("guaranteed percent increase" in label_lower) or ("guaranteed percent" in label_lower)
+    has_percent_increase = "percent increase" in label_lower or "% increase" in label_lower
+    has_percent = "percent" in label_lower or "%" in label_lower
+    has_guaranteed_pct = ("guaranteed" in label_lower and has_percent) or has_percent_increase
+    is_pct_row = has_percent or has_percent_increase or has_guaranteed_pct
 
     if has_comprehensive_fee and has_guaranteed_pct:
-        # Percent increases for comprehensive fees should not hit schema concepts; fall back to slugging.
         return None
 
+    if (has_price_attendance or has_full_coa_list) and not is_pct_row:
+        resid = None
+        if "in-district" in label_lower:
+            resid = "INDIST"
+        elif "in-state" in label_lower:
+            resid = "INST"
+        elif "out-of-state" in label_lower or "nonresident" in label_lower:
+            resid = "OUTST"
+
+        living = None
+        if "on-campus" in label_lower or "on campus" in label_lower:
+            living = "ONCAMP"
+        elif ("off-campus" in label_lower and "not with family" in label_lower) or "off-campus (not with family)" in label_lower:
+            living = "OFFNWF"
+        elif ("off-campus" in label_lower and "with family" in label_lower) or "off-campus (with family)" in label_lower:
+            living = "OFFFAM"
+
+        if resid is not None and living is not None:
+            return f"ICAY_COA_{resid}_{living}"
+
     for rule in rules:
-        if has_comprehensive_fee:
+        if is_pct_row:
+            if (
+                rule.concept_key.startswith("PRICE_")
+                or rule.concept_key.startswith("ICAY_COA_")
+                or rule.concept_key.endswith("_CURR")
+            ):
+                continue
+            if not rule.concept_key.endswith("_GUAR_PCT"):
+                continue
+        if has_price_attendance or has_full_coa_list:
+            if (not rule.concept_key.startswith("ICAY_COA_")) or rule.concept_key.startswith("ICAY_COA_COMP_"):
+                continue
+        elif has_comprehensive_fee:
             if not rule.concept_key.startswith("ICAY_COA_COMP_"):
-                continue
-        if has_price_attendance and not has_comprehensive_fee:
-            if not rule.concept_key.startswith("ICAY_COA_"):
-                continue
-        if has_guaranteed_pct:
-            if rule.concept_key in {
-                "ICAY_TUIT_INDIST_CURR",
-                "ICAY_TUIT_INST_CURR",
-                "ICAY_TUIT_OUTST_CURR",
-                "ICAY_FEE_INDIST_CURR",
-                "ICAY_FEE_INST_CURR",
-                "ICAY_FEE_OUTST_CURR",
-            }:
                 continue
         if rule.concept_key == "ICAY_BOOK_SUPPLY_CURR":
             if has_comprehensive_fee or has_price_attendance:
