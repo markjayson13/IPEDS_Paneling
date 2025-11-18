@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 : <<'LEGACY'
 # Code 
 python3 "Unification Scripts/combine_panel_wide_raw.py"
@@ -119,7 +121,19 @@ python3 "Harmonize Scripts/harmonize_finance_concepts.py" \
   --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0Finlong/finance_step0_long.parquet"
 LEGACY_STEP0
 
-  
+set -euo pipefail
+IFS=$'\n\t'
+
+require_file() {
+  local path="$1"
+  local label="$2"
+  if [ ! -f "$path" ]; then
+    echo "[ERROR] Missing ${label}: $path"
+    echo "Please generate $label before rerunning this step."
+    exit 1
+  fi
+}
+
 
 
 # === User paths ===
@@ -211,6 +225,12 @@ python3 "CrossWalk Scripts/Fill Scripts/auto_fill_sfa_crosswalk.py"
 python3 "CrossWalk Scripts/Fill Scripts/autofill_enrollment_crosswalk_core.py"
 python3 "CrossWalk Scripts/Fill Scripts/fill_finance_crosswalk.py"
 
+require_file "$HD_CROSSWALK" "HD crosswalk"
+require_file "$ICAY_CROSSWALK" "ICAY crosswalk"
+require_file "$ENROLL_CROSSWALK" "Enrollment crosswalk"
+require_file "$SFA_CROSSWALK" "SFA crosswalk"
+require_file "$FINANCE_CROSSWALK" "Finance crosswalk"
+
 echo "5) Harmonize or stabilize by survey"
 python3 "Harmonize Scripts/stabilize_hd.py"
 python3 "Harmonize Scripts/stabilize_ic_ay.py" --crosswalk "$ICAY_CROSSWALK" --overwrite
@@ -230,6 +250,10 @@ python3 "Harmonize Scripts/harmonize_finance_concepts.py" \
 echo "6) Coverage validators"
 python3 "Validation Scripts/validate_enrollment_crosswalk_coverage.py"
 python3 "Validation Scripts/validate_ic_ay_coverage.py"
+python3 "Validation Scripts/validate_ic_ay_year_scopes.py" \
+  --crosswalk "$ICAY_CROSSWALK" \
+  --out-dir "$PARQUETS/Validation"
+python3 "Validation Scripts/check_sfa_coverage.py"
 
 echo "7) Merge harmonized components into final panel"
 python3 "Panelize Scripts/panelize_components.py" \
@@ -243,7 +267,7 @@ python3 "Panelize Scripts/panelize_components.py" \
   --output "$PANEL_WIDE"
 
 echo "8) Prune HD scaffolding for analysis panel"
-python3 panel_prune_hd_analysis.py \
+python3 panel_prune_analysis.py \
   --input "$PANEL_WIDE" \
   --output "$PANEL_WIDE_CLEANROBUST"
 
