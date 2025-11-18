@@ -200,7 +200,8 @@ python3 "Unification Scripts/unify_sfa.py" \
   --dictionary-lake "$DICT_LAKE"
 python3 "Unification Scripts/unify_finance.py" \
   --input "$PANEL_WIDE_RAW" \
-  --output-long "$FINANCE_STEP0"
+  --output-long "$FINANCE_STEP0" \
+  --chunk-size 50000
 if [ -f "$EFRES_LONG" ] && [ -f "$HD_STATE_PANEL" ]; then
   python3 "Unification Scripts/build_efres_residency_buckets.py" \
     --efres "$EFRES_LONG" \
@@ -272,3 +273,4 @@ python3 panel_prune_analysis.py \
   --output "$PANEL_WIDE_CLEANROBUST"
 
 echo "Done."
+

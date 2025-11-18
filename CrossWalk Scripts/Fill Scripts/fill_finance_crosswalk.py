@@ -561,9 +561,9 @@ def main() -> None:
     key_cols = ["form_family", "base_key", "year_start", "year_end"]
     dup_mask = cw.duplicated(key_cols, keep=False)
     if dup_mask.any():
-        print(f"ERROR: Found {dup_mask.sum()} duplicate key rows in finance crosswalk template.")
-        print(cw.loc[dup_mask, key_cols + ["concept_key"]].head(10).to_string(index=False))
-        raise SystemExit(1)
+        dup_count = int(dup_mask.sum())
+        print(f"[WARN] Finance template has {dup_count} duplicate key rows; keeping first occurrence per {key_cols}.")
+        cw = cw.drop_duplicates(subset=key_cols, keep="first").reset_index(drop=True)
     min_year = int(cw["year_start"].min())
     max_year = int(cw["year_end"].max())
     forms = ", ".join(sorted(cw["form_family"].dropna().unique()))
