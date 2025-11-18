@@ -62,6 +62,48 @@ KEEP_HD_COLS = [
     "HD__LANDGRNT",
     "HD__HOSPITAL",
     "HD__MEDICAL",
+    # OPEID / eligibility fields
+    "HD__OPEID",
+    "HD__OPEFLAG",
+]
+
+INSTITUTION_NAME_CANDIDATES = [
+    "HD__STABLE_INSTITUTION_NAME",
+    "HD__INSTNM",
+    "INSTNM",
+]
+
+UNITID_FLAG_CANDIDATES = [
+    "REPORTING_UNITID",
+    "STABLE_PRNTCHLD_STATUS",
+    "HD__STABLE_PRNTCHLD_STATUS",
+    "HD__MERGESTAT",
+    "HD__MERGFLAG",
+    "HD__ACTIVE",
+    "HD__PSEFLAG",
+    "HD__PSET4FLG",
+    "HD__POSTSEC",
+]
+
+OPEID_CANDIDATES = [
+    "HD__OPEID",
+    "OPEID",
+]
+
+OPEID_FLAG_CANDIDATES = [
+    "HD__OPEFLAG",
+    "HD__T4ELIG",
+]
+
+COMPONENT_PREFIX_ORDER = [
+    "HD__",
+    "ICAY__",
+    "SFA__",
+    "ADM__",
+    "ENROLL__",
+    "EF__",
+    "E12__",
+    "FIN__",
 ]
 
 
@@ -103,7 +145,34 @@ def main() -> None:
         elif "__" in c and not c.startswith("HD__"):
             keep_cols.add(c)
 
-    ordered_keep = [c for c in cols if c in keep_cols]
+    def add_if_present(target: list[str], column: str) -> None:
+        if column in keep_cols and column not in target:
+            target.append(column)
+
+    priority: list[str] = []
+    add_if_present(priority, "UNITID")
+    add_if_present(priority, "YEAR")
+    for name_col in INSTITUTION_NAME_CANDIDATES:
+        add_if_present(priority, name_col)
+    for unit_flag in UNITID_FLAG_CANDIDATES:
+        add_if_present(priority, unit_flag)
+    for ope_col in OPEID_CANDIDATES:
+        add_if_present(priority, ope_col)
+    for ope_flag in OPEID_FLAG_CANDIDATES:
+        add_if_present(priority, ope_flag)
+
+    ordered_keep: list[str] = []
+    ordered_keep.extend(priority)
+
+    for prefix in COMPONENT_PREFIX_ORDER:
+        for c in cols:
+            if c in keep_cols and c not in ordered_keep and c.startswith(prefix):
+                ordered_keep.append(c)
+
+    for c in cols:
+        if c in keep_cols and c not in ordered_keep:
+            ordered_keep.append(c)
+
     pruned = df[ordered_keep].copy()
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -111,6 +180,7 @@ def main() -> None:
 
     print(f"[INFO] Wrote pruned analysis panel to {args.output}")
     print(f"[INFO] Kept {len(ordered_keep)} columns out of {len(cols)} total.")
+    print(f"[INFO] First 12 columns in analysis panel: {ordered_keep[:12]}")
 
     def prefix_stats(prefix: str) -> str:
         total = sum(c.startswith(prefix) for c in cols)
