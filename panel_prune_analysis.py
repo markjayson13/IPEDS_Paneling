@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+import argparse
+from pathlib import Path
+
+import pandas as pd
+
+PANEL_WIDE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Final/panel_wide.csv")
+PANEL_WIDE_CLEANROBUST = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Final/panel_wide_cleanrobust.csv"
+)
+
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Prune HD variables (and later other components) for analysis panel.")
+    p.add_argument(
+        "--input",
+        type=Path,
+        default=PANEL_WIDE,
+        help="Path to full wide panel CSV (panel_wide.csv).",
+    )
+    p.add_argument(
+        "--output",
+        type=Path,
+        default=PANEL_WIDE_CLEANROBUST,
+        help="Path to write pruned analysis panel CSV (panel_wide_cleanrobust.csv).",
+    )
+    return p.parse_args()
+
+
+# HD variables to retain in the analysis panel
+KEEP_HD_COLS = [
+    # Stable identity/grouping
+    "HD__STABLE_INSTITUTION_NAME",
+    "HD__STABLE_CONTROL",
+    "HD__STABLE_SECTOR",
+    "HD__STABLE_STFIPS",
+    "HD__STABLE_HBCU",
+    "HD__STABLE_TRIBAL",
+    "HD__STABLE_PRNTCHLD_STATUS",
+    # Carnegie/classification
+    "HD__CARNEGIE_2005",
+    "HD__C15BASIC",
+    "HD__C18BASIC",
+    "HD__C21BASIC",
+    "HD__INSTCAT",
+    "HD__INSTSIZE",
+    # Degree-granting / postsecondary status
+    "HD__DEGGRANT",
+    "HD__POSTSEC",
+    "HD__PSEFLAG",
+    "HD__PSET4FLG",
+    # Locale & geography
+    "HD__LOCALE",
+    "HD__FIPS",
+    "HD__CBSA",
+    "HD__CBSATYPE",
+    "HD__CSA",
+    "HD__COUNTYCD",
+    "HD__COUNTYNM",
+    "HD__NECTA",
+    # Structural institutional flags
+    "HD__LANDGRNT",
+    "HD__HOSPITAL",
+    "HD__MEDICAL",
+]
+
+
+def main() -> None:
+    args = parse_args()
+
+    if not args.input.exists():
+        raise SystemExit(f"Input file not found: {args.input}")
+
+    print(f"[INFO] Loading full panel from {args.input}")
+    df = pd.read_csv(args.input)
+    cols = list(df.columns)
+
+    # Always retain key identifiers so downstream grouping logic keeps working
+    base_keep = []
+    for key in ["UNITID", "YEAR"]:
+        if key in cols:
+            base_keep.append(key)
+    for key in ["REPORTING_UNITID", "STABLE_PRNTCHLD_STATUS"]:
+        if key in cols:
+            base_keep.append(key)
+
+    keep_cols = set(base_keep)
+
+    # Keep non-prefixed columns (anything without "__")
+    for c in cols:
+        if "__" not in c:
+            keep_cols.add(c)
+
+    # HD pruning: only keep curated HD columns
+    for c in cols:
+        if c.startswith("HD__") and c in KEEP_HD_COLS:
+            keep_cols.add(c)
+
+    # Keep all other prefixed components untouched for now
+    for c in cols:
+        if c.startswith(("EF__", "SFA__", "FIN__", "ADM__", "ICAY__")):
+            keep_cols.add(c)
+        elif "__" in c and not c.startswith("HD__"):
+            keep_cols.add(c)
+
+    ordered_keep = [c for c in cols if c in keep_cols]
+    pruned = df[ordered_keep].copy()
+
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    pruned.to_csv(args.output, index=False)
+
+    print(f"[INFO] Wrote pruned analysis panel to {args.output}")
+    print(f"[INFO] Kept {len(ordered_keep)} columns out of {len(cols)} total.")
+
+    def prefix_stats(prefix: str) -> str:
+        total = sum(c.startswith(prefix) for c in cols)
+        kept = sum(c.startswith(prefix) for c in ordered_keep)
+        return f"{kept}/{total}"
+
+    print("[INFO] Per-prefix kept/total:")
+    for prefix in ["HD__", "EF__", "SFA__", "FIN__", "ADM__", "ICAY__"]:
+        print(f"  {prefix}: {prefix_stats(prefix)}")
+
+
+if __name__ == "__main__":
+    main()

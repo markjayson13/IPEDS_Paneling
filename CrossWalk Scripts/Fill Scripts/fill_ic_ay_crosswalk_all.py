@@ -22,10 +22,6 @@ DEFAULT_OUTPUT_DIR = FILLED_DIR
 DEFAULT_OUTPUT_NAME = "ic_ay_crosswalk_all.csv"
 
 STRICT_CONCEPTS = {
-    "CHG1": "PRICE_TUITFEE_IN_DISTRICT_FTFTUG",
-    "CHG2": "PRICE_TUITFEE_IN_STATE_FTFTUG",
-    "CHG3": "PRICE_TUITFEE_OUT_STATE_FTFTUG",
-    "CHG4": "PRICE_BOOK_SUPPLY_FTFTUG",
     "CHG5": "PRICE_RMBD_ON_CAMPUS_FTFTUG",
     "TUITION1": "UG_TUIT_IN_DISTRICT_FULLTIME_AVG",
     "TUITION2": "UG_TUIT_IN_STATE_FULLTIME_AVG",
@@ -36,10 +32,6 @@ STRICT_CONCEPTS = {
 }
 
 CANONICAL_MAP = {
-    "CHG1": "PRICE_TUITFEE_IN_DISTRICT_FTFTUG",
-    "CHG2": "PRICE_TUITFEE_IN_STATE_FTFTUG",
-    "CHG3": "PRICE_TUITFEE_OUT_STATE_FTFTUG",
-    "CHG4": "PRICE_BOOK_SUPPLY_FTFTUG",
     "CHG5": "PRICE_RMBD_ON_CAMPUS_FTFTUG",
     "RMBRDAMT": "PRICE_RMBD_ON_CAMPUS_FTFTUG",
     "ROOMAMT": "PRICE_RMBD_ON_CAMPUS_FTFTUG",
@@ -284,7 +276,7 @@ def parse_args() -> argparse.Namespace:
         "--input",
         type=Path,
         default=DEFAULT_INPUT,
-        help="Input crosswalk CSV (default: ic_ay_crosswalk_autofilled.csv)",
+        help="Input crosswalk CSV (default: ic_ay_crosswalk_template.csv)",
     )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="Output directory")
     parser.add_argument("--output-name", type=str, default=DEFAULT_OUTPUT_NAME, help="Output filename")
@@ -299,10 +291,7 @@ def resolve_input(path: Path | None) -> Path:
     candidates.extend(
         [
             DEFAULT_INPUT,
-            FILLED_DIR / "ic_ay_crosswalk_autofilled.csv",
-            CROSSWALK_DIR / "ic_ay_crosswalk_autofilled.csv",
             DEFAULT_TEMPLATE_FALLBACK,
-            PROJECT_ROOT / "Paneled Datasets" / "Crosswalks" / "ic_ay_crosswalk_autofilled.csv",
             PROJECT_ROOT / "Paneled Datasets" / "Crosswalks" / "ic_ay_crosswalk_template.csv",
         ]
     )
@@ -376,7 +365,7 @@ def suggest_concept_key_strict(row: pd.Series) -> str | None:
     label = _clean(row.get("label", "")).lower()
     if not var or not survey or "IC" not in survey or "AY" not in survey:
         return None
-    if var in {"CHG1", "CHG2", "CHG3", "CHG4", "CHG5"}:
+    if var == "CHG5":
         return STRICT_CONCEPTS[var]
     if var == "TUITION1" and "tuition" in label and "in-district" in label and "full-time" in label:
         return STRICT_CONCEPTS[var]
@@ -589,6 +578,10 @@ def schema_concept_for_row(row: pd.Series, rules: List[SchemaRule]) -> str | Non
     has_price_attendance = ("price of attendance" in label_lower) or ("cost of attendance" in label_lower)
     has_comprehensive_fee = "comprehensive fee" in label_lower
     has_guaranteed_pct = ("guaranteed percent increase" in label_lower) or ("guaranteed percent" in label_lower)
+
+    if has_comprehensive_fee and has_guaranteed_pct:
+        # Percent increases for comprehensive fees should not hit schema concepts; fall back to slugging.
+        return None
 
     for rule in rules:
         if has_comprehensive_fee:

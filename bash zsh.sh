@@ -37,9 +37,11 @@ python3 "Unification Scripts/build_efres_residency_buckets.py"
 python3 "Harmonize Scripts/harmonize_admissions.py"
 python3 "Harmonize Scripts/harmonize_enrollment_concepts.py"
 python3 "Harmonize Scripts/stabilize_ic_ay.py" --overwrite
-python3 "Harmonize Scripts/harmonize_sfa_concepts.py"
+python3 "Harmonize Scripts/harmonize_sfa_concepts.py" \
+  --input-long "$SFA_STEP0" \
+  --crosswalk "$SFA_CROSSWALK"
 python3 "Harmonize Scripts/harmonize_finance_concepts.py"
-python3 "Harmonize Scripts/stabilize_hd.py"
+python3 "Harmonize Scripts/stabilize_hd.py" --crosswalk "$HD_CROSSWALK"
 
 #Global Harmonization & Panel Build
 python3 harmonize_new.py \
@@ -136,7 +138,10 @@ PANEL_WIDE_CLEANROBUST="$PANELED_DIR/Final/panel_wide_cleanrobust.csv"
 PANEL_WIDE_RAW="/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/panel_wide_raw.csv"
 ENROLL_STEP0="$PARQUETS/Unify/Enrolllong/enrollment_step0_long.parquet"
 ENROLL_WIDE="$PARQUETS/Unify/Enrollwide/enrollment_concepts_wide.parquet"
+HD_CROSSWALK="$FILLED_CROSSWALKS/hd_crosswalk.csv"
 ENROLL_CROSSWALK="$FILLED_CROSSWALKS/enrollment_crosswalk_autofilled.csv"
+SFA_CROSSWALK="$FILLED_CROSSWALKS/sfa_crosswalk_filled.csv"
+FINANCE_CROSSWALK="$FILLED_CROSSWALKS/finance_crosswalk_filled.csv"
 ICAY_CROSSWALK="$FILLED_CROSSWALKS/ic_ay_crosswalk_all.csv"
 ADMISSIONS_STEP0="$PARQUETS/Unify/Step0adm/adm_step0_long.parquet"
 SFA_STEP0="$PARQUETS/Unify/Step0sfa/sfa_step0_long.parquet"
@@ -199,7 +204,7 @@ python3 "CrossWalk Scripts/sfa_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/finance_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/adm_build_crosswalk_template.py"
 
-echo "4) Auto fill crosswalks"
+echo "4) Generate filled/final crosswalks"
 python3 "CrossWalk Scripts/Fill Scripts/auto_fill_hd_crosswalk.py"
 python3 "CrossWalk Scripts/Fill Scripts/fill_ic_ay_crosswalk_all.py" --overwrite
 python3 "CrossWalk Scripts/Fill Scripts/auto_fill_sfa_crosswalk.py"
@@ -217,7 +222,7 @@ python3 "Harmonize Scripts/harmonize_enrollment_concepts.py" \
 python3 "Harmonize Scripts/harmonize_sfa_concepts.py"
 python3 "Harmonize Scripts/harmonize_finance_concepts.py" \
   --step0 "$FINANCE_STEP0" \
-  --crosswalk "$FILLED_CROSSWALKS/finance_crosswalk_filled.csv" \
+  --crosswalk "$FINANCE_CROSSWALK" \
   --output-long "$FINANCE_CONCEPT_LONG" \
   --output-wide "$FINANCE_CONCEPT_WIDE" \
   --coverage "$CROSSWALK_DIR/finance_concepts_coverage.csv"
@@ -243,4 +248,3 @@ python3 panel_prune_hd_analysis.py \
   --output "$PANEL_WIDE_CLEANROBUST"
 
 echo "Done."
-
