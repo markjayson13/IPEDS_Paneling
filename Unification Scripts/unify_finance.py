@@ -7,7 +7,7 @@ import argparse
 import logging
 import re
 from pathlib import Path
-from typing import Sequence
+from typing import Iterator, Sequence
 
 import pandas as pd
 
@@ -39,6 +39,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_WIDE,
         help="Optional debug wide output with columns per form/base_key",
+    )
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=0,
+        help="Optional chunk size for reading CSV input; set to 0 to load entire file at once.",
     )
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args()
@@ -172,6 +178,28 @@ def write_wide(long: pd.DataFrame, path: Path) -> None:
     pivot.to_csv(path, index=False)
 
 
+def _iter_wide_frames(src: Path, chunk_size: int) -> Iterator[pd.DataFrame]:
+    """Yield wide finance chunks from CSV/Parquet input."""
+    suffix = src.suffix.lower()
+    if suffix == ".parquet":
+        df = pd.read_parquet(src)
+        df.columns = pd.Index(str(c).strip().upper() for c in df.columns)
+        yield df
+        return
+
+    read_kwargs = {"dtype": str, "low_memory": False}
+    if chunk_size and chunk_size > 0:
+        logging.info("Reading CSV in chunks of %s rows", chunk_size)
+        for chunk in pd.read_csv(src, chunksize=chunk_size, **read_kwargs):
+            chunk.columns = pd.Index(str(c).strip().upper() for c in chunk.columns)
+            yield chunk
+    else:
+        logging.info("Chunked read disabled; loading entire CSV into memory.")
+        df = pd.read_csv(src, **read_kwargs)
+        df.columns = pd.Index(str(c).strip().upper() for c in df.columns)
+        yield df
+
+
 def main() -> None:
     args = parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
@@ -181,13 +209,13 @@ def main() -> None:
         raise SystemExit(f"Input file not found: {src}")
 
     logging.info("Reading %s", src)
-    if src.suffix.lower() == ".parquet":
-        wide = pd.read_parquet(src)
-    else:
-        wide = pd.read_csv(src, dtype=str)
-    wide.columns = pd.Index(str(c).strip().upper() for c in wide.columns)
-
-    long = melt_finance(wide)
+    long_parts: list[pd.DataFrame] = []
+    for idx, chunk in enumerate(_iter_wide_frames(src, args.chunk_size), start=1):
+        logging.info("Processing chunk %d (%d rows)", idx, len(chunk))
+        long_parts.append(melt_finance(chunk))
+    if not long_parts:
+        raise SystemExit("No rows were read from input file.")
+    long = pd.concat(long_parts, ignore_index=True)
     if "YEAR" in long.columns:
         long["YEAR"] = pd.to_numeric(long["YEAR"], errors="coerce").astype("Int64")
     logging.info("Extracted %s finance rows", len(long))
