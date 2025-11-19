@@ -23,14 +23,14 @@ def _normalize_form_family(fam: str | None) -> str:
     Normalize finance form_family codes (F1, F1A, F1A_F, F1COMP, etc.) to a common root.
     """
     if not isinstance(fam, str):
-        return with_restriction(""
+        return ""
     fam_norm = fam.strip().upper()
     if fam_norm.startswith("F1"):
-        return with_restriction("F1"
+        return "F1"
     if fam_norm.startswith("F2"):
-        return with_restriction("F2"
+        return "F2"
     if fam_norm.startswith("F3"):
-        return with_restriction("F3"
+        return "F3"
     return fam_norm
 
 
@@ -43,6 +43,70 @@ STEP0_SAMPLE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled D
 
 # Only treat the component-core F1/F2/F3 sections as required rows (F3 has no H component).
 CORE_SECTION_PATTERN = re.compile(r"^(?:F1[BCDEH]|F2[BCDEH]|F3[BCDE])", re.IGNORECASE)
+
+CORE_TOTAL_SOURCE_VARS = {
+    "F1B02",
+    "F1B03",
+    "F1B04",
+    "F1B10",
+    "F1B11",
+    "F1B12",
+    "F1B16",
+    "F1B17",
+    "F1B27",
+    "F1C011",
+    "F1C021",
+    "F1C031",
+    "F1C051",
+    "F1C061",
+    "F1C071",
+    "F1C081",
+    "F1C101",
+    "F1C111",
+    "F1C121",
+    "F1C131",
+    "F1C141",
+    "F1C191",
+    "F2D02",
+    "F2D03",
+    "F2D04",
+    "F2D05",
+    "F2D06",
+    "F2D07",
+    "F2D08",
+    "F2D09",
+    "F2D11",
+    "F2D13",
+    "F2D14",
+    "F2D15",
+    "F2D16",
+    "F2E011",
+    "F2E021",
+    "F2E031",
+    "F2E041",
+    "F2E051",
+    "F2E061",
+    "F2E071",
+    "F2E081",
+    "F2E091",
+    "F2E101",
+    "F2E121",
+    "F2B02",
+    "F3D01",
+    "F3D02",
+    "F3D03",
+    "F3D04",
+    "F3D05",
+    "F3D07",
+    "F3D08",
+    "F3D09",
+    "F3D10",
+    "F3D16",
+    "F3E011",
+    "F3E051",
+    "F3E061",
+    "F3E071",
+}
 
 SOURCE_VAR_CONCEPT_OVERRIDES = {
     # --- Revenues (GASB F1B) ---
@@ -649,12 +713,13 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         )
         base_s = " ".join(base_s.split())
 
-    def with_restriction(concept: str | None) -> str | None:
-        if concept and restricted_flag:
+    def finalize(concept: str | None) -> str | None:
+        if concept is not None and restricted_flag:
             return f"{concept}_{restricted_flag}"
         return concept
 
     text = base_s
+    concept: str | None = None
 
     # ENDOWMENTS / INVESTMENTS
     if (
@@ -664,18 +729,18 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         or ("investments" in text and "assets" in text)
         or ("investments" in text and "fair value" in text)
     ):
-        return with_restriction("BS_ASSETS_INVESTMENTS_TOTAL")
-    if "spending distribution for current use" in text and "endowment" in text:
-        return with_restriction("FIN_SPENDDIS")
+        concept = "BS_ASSETS_INVESTMENTS_TOTAL"
+    elif "spending distribution for current use" in text and "endowment" in text:
+        concept = "FIN_SPENDDIS"
 
     # INCOME STATEMENT TOTALS
-    if (
+    if concept is None and (
         "total revenues and other additions" in text
         or "total operating revenues" in text
         or (text.startswith("total revenues") and "other" not in text)
     ):
-        return with_restriction("IS_REVENUES_TOTAL")
-    if "total expenses" in text or "total operating expenses" in text:
+        concept = "IS_REVENUES_TOTAL"
+    if concept is None and ("total expenses" in text or "total operating expenses" in text):
         detail_disqualifiers = (
             "salaries",
             "wages",
@@ -688,219 +753,276 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
             "by function",
         )
         if not any(term in text for term in detail_disqualifiers):
-            return with_restriction("IS_EXPENSES_TOTAL")
+            concept = "IS_EXPENSES_TOTAL"
 
     # REVENUES: TUITION, DISCOUNTS, AUXILIARY, ETC.
-    tuition_phrases = (
-        "tuition and fees",
-        "tuition & fees",
-        "tuition fees",
-        "net tuition",
-    )
-    tuition_mentions = any(p in text for p in tuition_phrases) or ("tuition" in text and "fees" in text)
-    net_markers = (
-        "after deducting discounts",
-        "net of discounts",
-        "net of scholarship allowances",
-        "net of scholarships",
-        "(net)",
-        "net of discounts and allowances",
-    )
-    if tuition_mentions and (
-        any(marker in text for marker in net_markers)
-        or "net tuition" in text
-        or "net of allowance" in text
-    ):
-        if is_rev_like_section and not is_expense_section:
-            return with_restriction("REV_TUITION_NET")
-    if (
-        "tuition and fees, net" in text
-        or "tuition and fees net" in text
-        or "net tuition and fees" in text
-    ):
-        return with_restriction("REV_TUITION_NET")
+    if concept is None:
+        tuition_phrases = (
+            "tuition and fees",
+            "tuition & fees",
+            "tuition fees",
+            "net tuition",
+        )
+        tuition_mentions = any(p in text for p in tuition_phrases) or (
+            "tuition" in text and "fees" in text
+        )
+        net_markers = (
+            "after deducting discounts",
+            "net of discounts",
+            "net of scholarship allowances",
+            "net of scholarships",
+            "(net)",
+            "net of discounts and allowances",
+        )
+        if tuition_mentions and (
+            any(marker in text for marker in net_markers)
+            or "net tuition" in text
+            or "net of allowance" in text
+        ):
+            if is_rev_like_section and not is_expense_section:
+                concept = "REV_TUITION_NET"
+        if concept is None and (
+            "tuition and fees, net" in text
+            or "tuition and fees net" in text
+            or "net tuition and fees" in text
+        ):
+            concept = "REV_TUITION_NET"
+
     # Scholarships / discounts by source: Pell, federal, state, local, endowment, institutional.
-    if is_scholarship_section:
+    if concept is None and is_scholarship_section:
         if (
-            "pell grants represents the gross amount of pell grants" in s
-            or "pell grants includes the amount administered" in s
-            or "total discounts and allowances from pell grants" in s
+            "pell grants represents the gross amount of pell grants" in text
+            or "pell grants includes the amount administered" in text
+            or "total discounts and allowances from pell grants" in text
         ):
-            return with_restriction("FIN_PELLGROSS_1_0"
-        if "discounts and allowances from pell grants applied to tuition and fees" in s:
-            return with_restriction("FIN_PELLTUIT_1_0"
-        if "discounts and allowances from pell grants applied to auxiliary enterprises" in s:
-            return with_restriction("FIN_PELLAUX_1_0"
-        if (
-            "other federal awards are expenditures for scholarships and fellowships" in s
-            and "discounts and allowances" not in s
-        ) or "other federal grants includes the amount awarded" in s:
-            return with_restriction("FIN_OTHFEDSCH_1_0"
-        if "total discounts and allowances from other federal grants" in s:
-            return with_restriction("FIN_OTHFEDSCH_1_0"
-        if "discounts and allowances from other federal grants applied to tuition and fees" in s:
-            return with_restriction("FIN_OTHFEDTUIT_1_0"
-        if "discounts and allowances from other federal grants applied to auxiliary enterprises" in s:
-            return with_restriction("FIN_OTHFEDAUX_1_0"
-        if (
-            "grants by state government includes expenditures for scholarships and fellowships" in s
-            and "discounts and allowances" not in s
-        ) or "state grants includes the amount awarded" in s:
-            return with_restriction("FIN_STGRSCH_1_0"
-        if "total discounts and allowances from state government grants" in s:
-            return with_restriction("FIN_STGRSCH_1_0"
-        if "discounts and allowances from state government grants applied to tuition and fees" in s:
-            return with_restriction("FIN_STGRTUIT_1_0"
-        if "discounts and allowances from state government grants applied to auxiliary enterprises" in s:
-            return with_restriction("FIN_STGRAUX_1_0"
-        if (
-            "grants by local government includes expenditures for scholarships and fellowships" in s
-            and "discounts and allowances" not in s
-        ) or "local grants includes the amount awarded" in s:
-            return with_restriction("FIN_LCGRSCH_1_0"
-        if "total discounts and allowances from local government grants" in s:
-            return with_restriction("FIN_LCGRSCH_1_0"
-        if "discounts and allowances from local government grants applied to tuition and fees" in s:
-            return with_restriction("FIN_LCGRTUIT_1_0"
-        if "discounts and allowances from local government grants applied to auxiliary enterprises" in s:
-            return with_restriction("FIN_LCGRAUX_1_0"
-        if (
-            "endowments are funds whose principal is nonexpendable" in s
-            and "discounts and allowances" in s
+            concept = "FIN_PELLGROSS_1_0"
+        elif "discounts and allowances from pell grants applied to tuition and fees" in text:
+            concept = "FIN_PELLTUIT_1_0"
+        elif "discounts and allowances from pell grants applied to auxiliary enterprises" in text:
+            concept = "FIN_PELLAUX_1_0"
+        elif (
+            (
+                "other federal awards are expenditures for scholarships and fellowships" in text
+                and "discounts and allowances" not in text
+            )
+            or "other federal grants includes the amount awarded" in text
         ):
-            return with_restriction("FIN_ENDOW1_1_0"
-        if "discounts and allowances from endowments and gifts applied to tuition and fees" in s:
-            return with_restriction("FIN_ENDOWTUIT_1_0"
-        if "discounts and allowances from endowments and gifts applied to auxiliary enterprises" in s:
-            return with_restriction("FIN_ENDOWAUX_1_0"
-        if "institutional grants from restricted sources are expenditures for scholarships and fellowships" in s:
-            return with_restriction("FIN_INGRRESSCH_1_0"
-        if "discounts and allowances from other institutional sources applied to tuition and fees" in s:
-            return with_restriction("FIN_INGRTUIT_1_0"
-        if "discounts and allowances from other institutional sources applied to auxiliary enterprises" in s:
-            return with_restriction("FIN_INGRAUX_1_0"
-    if is_scholarship_section and (
-        "scholarship allowances" in s
-        or "discounts and allowances" in s
-        or "tuition discounts" in s
-        or ("discounts" in s and "tuition" in s)
+            concept = "FIN_OTHFEDSCH_1_0"
+        elif "total discounts and allowances from other federal grants" in text:
+            concept = "FIN_OTHFEDSCH_1_0"
+        elif "discounts and allowances from other federal grants applied to tuition and fees" in text:
+            concept = "FIN_OTHFEDTUIT_1_0"
+        elif "discounts and allowances from other federal grants applied to auxiliary enterprises" in text:
+            concept = "FIN_OTHFEDAUX_1_0"
+        elif (
+            (
+                "grants by state government includes expenditures for scholarships and fellowships" in text
+                and "discounts and allowances" not in text
+            )
+            or "state grants includes the amount awarded" in text
+        ):
+            concept = "FIN_STGRSCH_1_0"
+        elif "total discounts and allowances from state government grants" in text:
+            concept = "FIN_STGRSCH_1_0"
+        elif "discounts and allowances from state government grants applied to tuition and fees" in text:
+            concept = "FIN_STGRTUIT_1_0"
+        elif "discounts and allowances from state government grants applied to auxiliary enterprises" in text:
+            concept = "FIN_STGRAUX_1_0"
+        elif (
+            (
+                "grants by local government includes expenditures for scholarships and fellowships" in text
+                and "discounts and allowances" not in text
+            )
+            or "local grants includes the amount awarded" in text
+        ):
+            concept = "FIN_LCGRSCH_1_0"
+        elif "total discounts and allowances from local government grants" in text:
+            concept = "FIN_LCGRSCH_1_0"
+        elif "discounts and allowances from local government grants applied to tuition and fees" in text:
+            concept = "FIN_LCGRTUIT_1_0"
+        elif "discounts and allowances from local government grants applied to auxiliary enterprises" in text:
+            concept = "FIN_LCGRAUX_1_0"
+        elif (
+            "endowments are funds whose principal is nonexpendable" in text
+            and "discounts and allowances" in text
+        ):
+            concept = "FIN_ENDOW1_1_0"
+        elif "discounts and allowances from endowments and gifts applied to tuition and fees" in text:
+            concept = "FIN_ENDOWTUIT_1_0"
+        elif "discounts and allowances from endowments and gifts applied to auxiliary enterprises" in text:
+            concept = "FIN_ENDOWAUX_1_0"
+        elif "institutional grants from restricted sources are expenditures for scholarships and fellowships" in text:
+            concept = "FIN_INGRRESSCH_1_0"
+        elif "discounts and allowances from other institutional sources applied to tuition and fees" in text:
+            concept = "FIN_INGRTUIT_1_0"
+        elif "discounts and allowances from other institutional sources applied to auxiliary enterprises" in text:
+            concept = "FIN_INGRAUX_1_0"
+
+    if concept is None and is_scholarship_section and (
+        "scholarship allowances" in text
+        or "discounts and allowances" in text
+        or "tuition discounts" in text
+        or ("discounts" in text and "tuition" in text)
     ):
-        return with_restriction("FIN_DISCOUNTS_TUITION"
+        concept = "FIN_DISCOUNTS_TUITION"
+
     if (
-        "auxiliary enterprises" in s
-        and ("revenue" in s or "revenues" in s or "net revenue" in s)
+        concept is None
+        and "auxiliary enterprises" in text
+        and ("revenue" in text or "revenues" in text or "net revenue" in text)
         and is_rev_like_section
     ):
-        return with_restriction("REV_AUXILIARY"
-    if is_rev_like_section and "appropriations" in s and (
-        "federal" in s or "state" in s or "local" in s or "government" in s
+        concept = "REV_AUXILIARY"
+
+    if (
+        concept is None
+        and is_rev_like_section
+        and "appropriations" in text
+        and ("federal" in text or "state" in text or "local" in text or "government" in text)
     ):
-        if "federal" in s:
-            return with_restriction("REV_FED_APPROPS"
-        if "state" in s:
-            return with_restriction("REV_STATE_APPROPS"
-        if "local" in s:
-            return with_restriction("REV_LOCAL_APPROPS"
-        return with_restriction("REV_GOV_APPROPS_TOTAL"
-    if is_rev_like_section and ("grants and contracts" in s or ("grants" in s and "contracts" in s)):
-        has_fed = "federal" in s
-        has_state = "state" in s
-        has_local = "local" in s
-        has_private = "private" in s
+        if "federal" in text:
+            concept = "REV_FED_APPROPS"
+        elif "state" in text:
+            concept = "REV_STATE_APPROPS"
+        elif "local" in text:
+            concept = "REV_LOCAL_APPROPS"
+        else:
+            concept = "REV_GOV_APPROPS_TOTAL"
+
+    if concept is None and is_rev_like_section and (
+        "grants and contracts" in text or ("grants" in text and "contracts" in text)
+    ):
+        has_fed = "federal" in text
+        has_state = "state" in text
+        has_local = "local" in text
+        has_private = "private" in text
 
         if has_fed and not (has_state or has_local or has_private):
-            return with_restriction("REV_GRANTS_FED"
+            concept = "REV_GRANTS_FED"
+        elif has_state and not (has_fed or has_local or has_private):
+            concept = "REV_GRANTS_STATE"
+        elif "total" in text:
+            concept = "REV_GRANTS_CONTRACTS_TOTAL"
 
-        if has_state and not (has_fed or has_local or has_private):
-            return with_restriction("REV_GRANTS_STATE"
-
-        if "total" in s:
-            return with_restriction("REV_GRANTS_CONTRACTS_TOTAL"
-
-        return None
     if (
-        is_rev_like_section
+        concept is None
+        and is_rev_like_section
         and (
-            "private gifts" in s
-            or "private grants" in s
-            or ("private gifts, grants, and contracts" in s)
-            or ("contributions from private sources" in s)
-            or ("gifts and grants from private donors" in s)
-            or ("contributions from affiliated organizations" in s)
+            "private gifts" in text
+            or "private grants" in text
+            or ("private gifts, grants, and contracts" in text)
+            or ("contributions from private sources" in text)
+            or ("gifts and grants from private donors" in text)
+            or ("contributions from affiliated organizations" in text)
         )
     ):
-        return with_restriction("REV_PRIVATE_GIFTS_GRANTS"
-    if (
-        "investment income" in s
-        or "investment return" in s
-        or ("income from investments" in s)
-        or "investment gain" in s
-        or "return on investments" in s
-        or "investment income (net of expenses)" in s
+        concept = "REV_PRIVATE_GIFTS_GRANTS"
+
+    if concept is None and is_rev_like_section and (
+        "investment income" in text
+        or "investment return" in text
+        or ("income from investments" in text)
+        or "investment gain" in text
+        or "return on investments" in text
+        or "investment income (net of expenses)" in text
     ):
-        if is_rev_like_section:
-            return with_restriction("REV_INVESTMENT_RETURN"
-    if is_rev_like_section and "hospital" in s and ("revenue" in s or "revenues" in s):
-        return with_restriction("REV_HOSPITAL"
-    if is_rev_like_section and "independent operations" in s and ("revenue" in s or "revenues" in s):
-        return with_restriction("REV_INDEPENDENT_OPS"
+        concept = "REV_INVESTMENT_RETURN"
+
     if (
-        is_rev_like_section
-        and "other" in s
-        and "operating" in s
-        and ("revenue" in s or "revenues" in s)
+        concept is None
+        and is_rev_like_section
+        and "hospital" in text
+        and ("revenue" in text or "revenues" in text)
     ):
-        return with_restriction("REV_OTHER_OPERATING"
+        concept = "REV_HOSPITAL"
+
     if (
-        is_rev_like_section
-        and "other" in s
-        and "nonoperating" in s
-        and ("revenue" in s or "revenues" in s)
+        concept is None
+        and is_rev_like_section
+        and "independent operations" in text
+        and ("revenue" in text or "revenues" in text)
     ):
-        return with_restriction("REV_OTHER_NONOPERATING"
-    if is_rev_like_section and "capital appropriations" in s:
-        return with_restriction("REV_CAPITAL_APPROPS"
-    if is_rev_like_section and ("capital grants" in s or "capital gifts" in s):
-        return with_restriction("REV_CAPITAL_GRANTS_GIFTS"
-    if is_rev_like_section and "permanent endow" in s:
-        return with_restriction("REV_ADD_PERM_ENDOW"
+        concept = "REV_INDEPENDENT_OPS"
+
+    if (
+        concept is None
+        and is_rev_like_section
+        and "other" in text
+        and "operating" in text
+        and ("revenue" in text or "revenues" in text)
+    ):
+        concept = "REV_OTHER_OPERATING"
+
+    if (
+        concept is None
+        and is_rev_like_section
+        and "other" in text
+        and "nonoperating" in text
+        and ("revenue" in text or "revenues" in text)
+    ):
+        concept = "REV_OTHER_NONOPERATING"
+
+    if concept is None and is_rev_like_section and "capital appropriations" in text:
+        concept = "REV_CAPITAL_APPROPS"
+
+    if concept is None and is_rev_like_section and ("capital grants" in text or "capital gifts" in text):
+        concept = "REV_CAPITAL_GRANTS_GIFTS"
+
+    if concept is None and is_rev_like_section and "permanent endow" in text:
+        concept = "REV_ADD_PERM_ENDOW"
 
     # EXPENSES BY FUNCTION
-    if _match_function_total(s, "instruction"):
-        return with_restriction("EXP_INSTRUCTION"
-    if _match_function_total(s, "research"):
-        return with_restriction("EXP_RESEARCH"
-    if _match_function_total(s, "public service"):
-        return with_restriction("EXP_PUBLIC_SERVICE"
-    if _match_function_total(s, "academic support"):
-        return with_restriction("EXP_ACADEMIC_SUPPORT"
-    if _match_function_total(s, "student services"):
-        return with_restriction("EXP_STUDENT_SERVICES"
-    if _match_function_total(s, "institutional support"):
-        return with_restriction("EXP_INSTITUTIONAL_SUPPORT"
-    if "operations and maintenance of plant" in s or "operation and maintenance of plant" in s:
-        return with_restriction("EXP_OPERATIONS_PLANT"
-    if (
-        "scholarships and fellowships" in s
-        and "discounts" not in s
-        and "allowances" not in s
+    if concept is None and _match_function_total(text, "instruction"):
+        concept = "EXP_INSTRUCTION"
+    if concept is None and _match_function_total(text, "research"):
+        concept = "EXP_RESEARCH"
+    if concept is None and _match_function_total(text, "public service"):
+        concept = "EXP_PUBLIC_SERVICE"
+    if concept is None and _match_function_total(text, "academic support"):
+        concept = "EXP_ACADEMIC_SUPPORT"
+    if concept is None and _match_function_total(text, "student services"):
+        concept = "EXP_STUDENT_SERVICES"
+    if concept is None and _match_function_total(text, "institutional support"):
+        concept = "EXP_INSTITUTIONAL_SUPPORT"
+    if concept is None and (
+        "operations and maintenance of plant" in text or "operation and maintenance of plant" in text
     ):
-        return with_restriction("EXP_SCHOLARSHIPS_NET"
-    if (
-        ("student aid" in s or "grants to students" in s or "grants and scholarships to students" in s)
-        and "discount" not in s
-        and "allowance" not in s
-    ):
-        return with_restriction("EXP_SCHOLARSHIPS_NET"
+        concept = "EXP_OPERATIONS_PLANT"
 
-    return None
+    detail_terms = ("salaries", "wages", "benefits", "depreciation", "all other", "interest")
+
+    if (
+        concept is None
+        and "scholarships and fellowships" in text
+        and "discounts" not in text
+        and "allowances" not in text
+        and "expenses" in text
+        and "current year total" in text
+        and not any(term in text for term in detail_terms)
+    ):
+        concept = "EXP_SCHOLARSHIPS_NET"
+
+    if (
+        concept is None
+        and (
+            "student aid" in text
+            or "grants to students" in text
+            or "grants and scholarships to students" in text
+        )
+        and "discount" not in text
+        and "allowance" not in text
+        and not any(term in text for term in detail_terms)
+    ):
+        concept = "EXP_SCHOLARSHIPS_NET"
+
+    return finalize(concept)
 
 
 def _first_nonempty(series: pd.Series) -> str:
     for val in series:
         if isinstance(val, str) and val.strip():
             return val
-    return with_restriction(""
+    return ""
 
 
 def _collapse_block(block: pd.DataFrame, year_start: int, year_end: int) -> dict:
@@ -1440,7 +1562,7 @@ def main() -> None:
         _assert_no_overlaps(mapped_nonblank, ("form_family", "base_key", "concept_key"))
 
     ck_series = cw["concept_key"].astype(str).str.strip()
-    core_mask = cw["source_var"].astype(str).str.match(CORE_SECTION_PATTERN.pattern, na=False)
+    core_mask = cw["source_var"].astype(str).isin(CORE_TOTAL_SOURCE_VARS)
     amount_mask = (
         cw["is_amount"]
         if "is_amount" in cw.columns
