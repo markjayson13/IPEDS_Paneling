@@ -953,7 +953,16 @@ def _export_suspect_core(cw: pd.DataFrame) -> None:
 
     mask_blank = cw["concept_key"].astype(str).str.strip().eq("")
     label_str = cw["source_label_norm"].fillna("").astype(str)
-    suspect_core = cw[mask_blank & label_str.str.contains(core_pattern, case=False, regex=True)]
+    amount_mask = (
+        cw["is_amount"]
+        if "is_amount" in cw.columns
+        else pd.Series(True, index=cw.index)
+    )
+    suspect_core = cw[
+        mask_blank
+        & amount_mask
+        & label_str.str.contains(core_pattern, case=False, regex=True)
+    ]
 
     if not suspect_core.empty:
         print(f"\nWARNING: {len(suspect_core)} suspect core rows still have blank concept_key.")
@@ -1172,6 +1181,29 @@ def main() -> None:
                 generic = (fam, "", part)
                 if generic in var_type_map and var_type_map[generic]:
                     return True
+
+            sec = (row.get("section") or "").strip().upper()
+            label = (row.get("source_label_norm") or row.get("source_label") or "").lower()
+            detail_terms = ("salaries", "wages", "benefits", "depreciation", "interest", "all other")
+
+            if fam.startswith("F1") and sec == "D":
+                if "total revenues and other additions" in label:
+                    return True
+                if "total expenses and other deductions" in label:
+                    return True
+
+            if fam.startswith("F2") and sec == "B":
+                if "total revenues and investment return" in label:
+                    return True
+                if "total expenses" in label and not any(term in label for term in detail_terms):
+                    return True
+
+            if fam.startswith("F3") and sec == "B":
+                if "total revenues and investment return" in label:
+                    return True
+                if "total expenses" in label and not any(term in label for term in detail_terms):
+                    return True
+
             return False
 
         cw["is_amount"] = cw.apply(_row_is_amount, axis=1)
