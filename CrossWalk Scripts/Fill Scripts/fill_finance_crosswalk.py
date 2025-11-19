@@ -381,9 +381,26 @@ def _contains_any(text: str, *terms: str) -> bool:
     return any(term in text for term in terms)
 
 
+FUNCTION_TERMS = [
+    "instruction",
+    "research",
+    "public service",
+    "academic support",
+    "student services",
+    "institutional support",
+    "auxiliary enterprises",
+    "hospital services",
+    "independent operations",
+]
+
+
 def _match_function_total(text: str, term: str) -> bool:
     """Return True when `text` clearly represents the total for the requested function."""
     if term not in text:
+        return False
+
+    other_funcs = [t for t in FUNCTION_TERMS if t != term and t in text]
+    if other_funcs:
         return False
 
     if _contains_any(text, "expenses", "expense", "expenditures"):
@@ -603,6 +620,9 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
     source = (source_var or "").strip().upper()
     if source in SOURCE_VAR_CONCEPT_OVERRIDES:
         return SOURCE_VAR_CONCEPT_OVERRIDES[source]
+    section_hint = source[2] if len(source) >= 3 else ""
+    is_expense_section = section_hint == "E"
+    is_rev_like_section = section_hint in {"B", "D"}
 
     if not isinstance(label, str):
         return None
@@ -668,7 +688,8 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         or "net tuition" in s
         or "net of allowance" in s
     ):
-        return "REV_TUITION_NET"
+        if is_rev_like_section and not is_expense_section:
+            return "REV_TUITION_NET"
     if (
         "tuition and fees, net" in s
         or "tuition and fees net" in s
@@ -741,9 +762,15 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         or ("discounts" in s and "tuition" in s)
     ):
         return "FIN_DISCOUNTS_TUITION"
-    if "auxiliary enterprises" in s and ("revenue" in s or "revenues" in s or "net" in s):
+    if (
+        "auxiliary enterprises" in s
+        and ("revenue" in s or "revenues" in s or "net revenue" in s)
+        and not is_expense_section
+    ):
         return "REV_AUXILIARY"
-    if "appropriations" in s and ("federal" in s or "state" in s or "local" in s or "government" in s):
+    if not is_expense_section and "appropriations" in s and (
+        "federal" in s or "state" in s or "local" in s or "government" in s
+    ):
         if "federal" in s:
             return "REV_FED_APPROPS"
         if "state" in s:
@@ -751,20 +778,32 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         if "local" in s:
             return "REV_LOCAL_APPROPS"
         return "REV_GOV_APPROPS_TOTAL"
-    if "grants and contracts" in s or ("grants" in s and "contracts" in s):
-        if "federal" in s:
+    if not is_expense_section and ("grants and contracts" in s or ("grants" in s and "contracts" in s)):
+        has_fed = "federal" in s
+        has_state = "state" in s
+        has_local = "local" in s
+        has_private = "private" in s
+
+        if has_fed and not (has_state or has_local or has_private):
             return "REV_GRANTS_FED"
-        if "state" in s:
+
+        if has_state and not (has_fed or has_local or has_private):
             return "REV_GRANTS_STATE"
-        if "local" in s or "private" in s:
-            return "REV_GRANTS_LOCAL_PRIV"
-        return "REV_GRANTS_CONTRACTS_TOTAL"
+
+        if "total" in s:
+            return "REV_GRANTS_CONTRACTS_TOTAL"
+
+        return None
     if (
-        "private gifts" in s
-        or "private grants" in s
-        or ("private gifts, grants, and contracts" in s)
-        or ("contributions from private sources" in s)
-        or ("contributions" in s and "government" not in s and "state" not in s)
+        not is_expense_section
+        and (
+            "private gifts" in s
+            or "private grants" in s
+            or ("private gifts, grants, and contracts" in s)
+            or ("contributions from private sources" in s)
+            or ("gifts and grants from private donors" in s)
+            or ("contributions from affiliated organizations" in s)
+        )
     ):
         return "REV_PRIVATE_GIFTS_GRANTS"
     if (
@@ -775,20 +814,31 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         or "return on investments" in s
         or "investment income (net of expenses)" in s
     ):
-        return "REV_INVESTMENT_RETURN"
-    if "hospital" in s and ("revenue" in s or "revenues" in s):
+        if not is_expense_section:
+            return "REV_INVESTMENT_RETURN"
+    if not is_expense_section and "hospital" in s and ("revenue" in s or "revenues" in s):
         return "REV_HOSPITAL"
-    if "independent operations" in s and ("revenue" in s or "revenues" in s):
+    if not is_expense_section and "independent operations" in s and ("revenue" in s or "revenues" in s):
         return "REV_INDEPENDENT_OPS"
-    if "other" in s and "operating" in s and ("revenue" in s or "revenues" in s):
+    if (
+        not is_expense_section
+        and "other" in s
+        and "operating" in s
+        and ("revenue" in s or "revenues" in s)
+    ):
         return "REV_OTHER_OPERATING"
-    if "other" in s and "nonoperating" in s and ("revenue" in s or "revenues" in s):
+    if (
+        not is_expense_section
+        and "other" in s
+        and "nonoperating" in s
+        and ("revenue" in s or "revenues" in s)
+    ):
         return "REV_OTHER_NONOPERATING"
-    if "capital appropriations" in s:
+    if not is_expense_section and "capital appropriations" in s:
         return "REV_CAPITAL_APPROPS"
-    if "capital grants" in s or "capital gifts" in s:
+    if not is_expense_section and ("capital grants" in s or "capital gifts" in s):
         return "REV_CAPITAL_GRANTS_GIFTS"
-    if "permanent endow" in s:
+    if not is_expense_section and "permanent endow" in s:
         return "REV_ADD_PERM_ENDOW"
 
     # EXPENSES BY FUNCTION
