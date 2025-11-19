@@ -25,24 +25,65 @@ OVERRIDES_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled
 DICTIONARY_LAKE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
 STEP0_SAMPLE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Step0/finance_step0_long_2004.parquet")
 
-CORE_SECTION_PATTERN = re.compile(r"^F[123][BCEH]", re.IGNORECASE)
+CORE_SECTION_PATTERN = re.compile(r"^F[123][BCDEH]", re.IGNORECASE)
 
 SOURCE_VAR_CONCEPT_OVERRIDES = {
     # --- Revenues (GASB F1B) ---
     "F1B01": "REV_TUITION_NET",
-    "F1B02": "REV_GRANTS_CONTRACTS_TOTAL",
-    "F1B03": "REV_GRANTS_CONTRACTS_TOTAL",
-    "F1B04": "REV_GRANTS_CONTRACTS_TOTAL",
-    "F1B05": "REV_AUXILIARY_NET",
-    "F1B10": "REV_GOV_APPROPS_TOTAL",
-    "F1B11": "REV_GOV_APPROPS_TOTAL",
-    "F1B12": "REV_GOV_APPROPS_TOTAL",
-    "F1B13": "REV_GRANTS_CONTRACTS_TOTAL",
-    "F1B14": "REV_GRANTS_CONTRACTS_TOTAL",
-    "F1B15": "REV_GRANTS_CONTRACTS_TOTAL",
-    "F1B16": "REV_PRIVATE_GIFTS",
+    "F1B02": "REV_GRANTS_FED",
+    "F1B03": "REV_GRANTS_STATE",
+    "F1B04": "REV_GRANTS_LOCAL_PRIV",
+    "F1B05": "REV_AUXILIARY",
+    "F1B06": "REV_HOSPITAL",
+    "F1B07": "REV_INDEPENDENT_OPS",
+    "F1B08": "REV_OTHER_OPERATING",
+    "F1B10": "REV_FED_APPROPS",
+    "F1B11": "REV_STATE_APPROPS",
+    "F1B12": "REV_LOCAL_APPROPS",
+    "F1B13": "REV_GRANTS_FED",
+    "F1B14": "REV_GRANTS_STATE",
+    "F1B15": "REV_GRANTS_LOCAL_PRIV",
+    "F1B16": "REV_PRIVATE_GIFTS_GRANTS",
     "F1B17": "REV_INVESTMENT_RETURN",
-    "F1B27": "IS_REVENUES_TOTAL",
+    "F1B18": "REV_OTHER_NONOPERATING",
+    "F1B20": "REV_CAPITAL_APPROPS",
+    "F1B21": "REV_CAPITAL_GRANTS_GIFTS",
+    "F1B22": "REV_ADD_PERM_ENDOW",
+    "F1B23": "REV_OTHER_ADDITIONS",
+    "F1B27": "REV_TOTAL_REVENUES",
+    # --- Revenues (FASB F2D / F2B) ---
+    "F2D01": "REV_TUITION_NET",
+    "F2D02": "REV_FED_APPROPS",
+    "F2D03": "REV_STATE_APPROPS",
+    "F2D04": "REV_LOCAL_APPROPS",
+    "F2D05": "REV_GRANTS_FED",
+    "F2D06": "REV_GRANTS_STATE",
+    "F2D07": "REV_GRANTS_LOCAL_PRIV",
+    "F2D08": "REV_PRIVATE_GIFTS_GRANTS",
+    "F2D09": "REV_INVESTMENT_RETURN",
+    "F2D11": "REV_AUXILIARY",
+    "F2D13": "REV_HOSPITAL",
+    "F2D14": "REV_INDEPENDENT_OPS",
+    "F2D15": "REV_OTHER_OPERATING",
+    "F2D16": "REV_TOTAL_REVENUES",
+    "F2B01": "REV_TOTAL_REVENUES",
+    # --- Revenues (For-profit F3D / F3B) ---
+    "F3D01": "REV_TUITION_NET",
+    "F3D02": "REV_GRANTS_FED",
+    "F3D02A": "REV_FED_APPROPS",
+    "F3D02B": "REV_GRANTS_FED",
+    "F3D03": "REV_GRANTS_STATE",
+    "F3D03A": "REV_STATE_APPROPS",
+    "F3D03B": "REV_GRANTS_STATE",
+    "F3D03C": "REV_LOCAL_APPROPS",
+    "F3D04": "REV_PRIVATE_GIFTS_GRANTS",
+    "F3D05": "REV_INVESTMENT_RETURN",
+    "F3D07": "REV_AUXILIARY",
+    "F3D08": "REV_HOSPITAL",
+    "F3D09": "REV_INDEPENDENT_OPS",
+    "F3D10": "REV_OTHER_OPERATING",
+    "F3D16": "REV_TOTAL_REVENUES",
+    "F3B01": "REV_TOTAL_REVENUES",
     # --- Expenses (GASB F1C) ---
     "F1C011": "EXP_INSTRUCTION",
     "F1C021": "EXP_RESEARCH",
@@ -53,26 +94,73 @@ SOURCE_VAR_CONCEPT_OVERRIDES = {
     "F1C081": "EXP_OPERATIONS_PLANT",
     "F1C101": "EXP_SCHOLARSHIPS_NET",
     "F1C191": "IS_EXPENSES_TOTAL",
+    # --- Expenses (FASB F2E / F2B) ---
+    "F2E011": "EXP_INSTRUCTION",
+    "F2E021": "EXP_RESEARCH",
+    "F2E031": "EXP_PUBLIC_SERVICE",
+    "F2E041": "EXP_ACADEMIC_SUPPORT",
+    "F2E051": "EXP_STUDENT_SERVICES",
+    "F2E061": "EXP_INSTITUTIONAL_SUPPORT",
+    "F2E081": "EXP_SCHOLARSHIPS_NET",
+    "F2E111": "EXP_OPERATIONS_PLANT",
+    "F2B02": "IS_EXPENSES_TOTAL",
+    # --- Expenses (For-profit F3E) ---
+    "F3E011": "EXP_INSTRUCTION",
+    "F3E02A1": "EXP_RESEARCH",
+    "F3E02B1": "EXP_PUBLIC_SERVICE",
+    "F3E03A1": "EXP_ACADEMIC_SUPPORT",
+    "F3E03B1": "EXP_STUDENT_SERVICES",
+    "F3E03C1": "EXP_INSTITUTIONAL_SUPPORT",
+    # TODO: identify explicit F3E code for operation & maintenance of plant totals.
+    "F3E051": "EXP_SCHOLARSHIPS_NET",
+    "F3E071": "IS_EXPENSES_TOTAL",
     # --- Scholarships / Discounts (GASB F1E) ---
-    "F1E01": "EXP_SCHOLARSHIPS_NET",
-    "F1E02": "EXP_SCHOLARSHIPS_NET",
-    "F1E03": "EXP_SCHOLARSHIPS_NET",
-    "F1E04": "EXP_SCHOLARSHIPS_NET",
-    "F1E05": "EXP_SCHOLARSHIPS_NET",
-    "F1E06": "EXP_SCHOLARSHIPS_NET",
-    "F1E07": "EXP_SCHOLARSHIPS_NET",
-    "F1E08": "DISCOUNT_TUITION",
-    "F1E09": "DISCOUNT_TUITION",
-    "F1E10": "DISCOUNT_TUITION",
-    "F1E11": "EXP_SCHOLARSHIPS_NET",
-    "F1E17": "DISCOUNT_TUITION",
+    "F1E01": "FIN_SCHOLARSHIPS_PELL",
+    "F1E02": "FIN_SCHOLARSHIPS_OTHER_FED",
+    "F1E03": "FIN_SCHOLARSHIPS_STATE",
+    "F1E04": "FIN_SCHOLARSHIPS_LOCAL",
+    "F1E05": "FIN_SCHOLARSHIPS_INSTITUTIONAL_RESTRICTED",
+    "F1E06": "FIN_SCHOLARSHIPS_INSTITUTIONAL_UNRESTRICTED",
+    "F1E07": "FIN_SCHOLARSHIPS_TOTAL_GROSS",
+    "F1E08": "FIN_DISCOUNTS_TUITION",
+    "F1E09": "FIN_DISCOUNTS_AUXILIARY",
+    "F1E10": "FIN_DISCOUNTS_TOTAL",
+    "F1E11": "FIN_SCHOLARSHIPS_NET",
+    "F1E17": "FIN_DISCOUNTS_TOTAL",
     # --- Endowment (GASB F1H) ---
     "F1H01": "BS_ENDOWMENT_FMV",
     "F1H02": "BS_ENDOWMENT_FMV",
     "F1H03": "BS_ENDOWMENT_FMV",
-    # Institutional grants funded/unfunded (F2 codes) - keep previous coverage
-    "F2C05": "EXP_SCHOLARSHIPS_NET",
-    "F2C06": "EXP_SCHOLARSHIPS_NET",
+    # --- Scholarships / Discounts (FASB F2C) ---
+    "F2C01": "FIN_SCHOLARSHIPS_PELL",
+    "F2C02": "FIN_SCHOLARSHIPS_OTHER_FED",
+    "F2C03": "FIN_SCHOLARSHIPS_STATE",
+    "F2C04": "FIN_SCHOLARSHIPS_LOCAL",
+    "F2C05": "FIN_SCHOLARSHIPS_INSTITUTIONAL_RESTRICTED",
+    "F2C06": "FIN_SCHOLARSHIPS_INSTITUTIONAL_UNRESTRICTED",
+    "F2C07": "FIN_SCHOLARSHIPS_TOTAL_GROSS",
+    "F2C08": "FIN_DISCOUNTS_TUITION",
+    "F2C09": "FIN_DISCOUNTS_AUXILIARY",
+    "F2C10": "FIN_DISCOUNTS_TOTAL",
+    "F2C11": "FIN_SCHOLARSHIPS_NET",
+    # --- Scholarships / Discounts (For-profit F3C) ---
+    "F3C01": "FIN_SCHOLARSHIPS_PELL",
+    "F3C02": "FIN_SCHOLARSHIPS_OTHER_FED",
+    "F3C03": "FIN_SCHOLARSHIPS_STATE",
+    "F3C03A": "FIN_SCHOLARSHIPS_STATE",
+    "F3C03B": "FIN_SCHOLARSHIPS_LOCAL",
+    "F3C04": "FIN_SCHOLARSHIPS_INSTITUTIONAL_UNRESTRICTED",
+    "F3C05": "FIN_SCHOLARSHIPS_INSTITUTIONAL_RESTRICTED",
+    "F3C06": "FIN_DISCOUNTS_TUITION",
+    "F3C07": "FIN_DISCOUNTS_AUXILIARY",
+    "F3C08": "FIN_DISCOUNTS_TOTAL",
+    # --- Endowment (FASB / For-profit) ---
+    "F2H01": "BS_ENDOWMENT_FMV",
+    "F2H02": "BS_ENDOWMENT_FMV",
+    "F2H03": "BS_ENDOWMENT_FMV",
+    "F3H01": "BS_ENDOWMENT_FMV",
+    "F3H02": "BS_ENDOWMENT_FMV",
+    "F3H03": "BS_ENDOWMENT_FMV",
 }
 
 CONCEPTS = {
@@ -82,10 +170,27 @@ CONCEPTS = {
     "BS_ENDOWMENT_FMV",
     "REV_TUITION_NET",
     "REV_GOV_APPROPS_TOTAL",
+    "REV_FED_APPROPS",
+    "REV_STATE_APPROPS",
+    "REV_LOCAL_APPROPS",
     "REV_GRANTS_CONTRACTS_TOTAL",
+    "REV_GRANTS_FED",
+    "REV_GRANTS_STATE",
+    "REV_GRANTS_LOCAL_PRIV",
     "REV_PRIVATE_GIFTS",
+    "REV_PRIVATE_GIFTS_GRANTS",
     "REV_INVESTMENT_RETURN",
     "REV_AUXILIARY_NET",
+    "REV_AUXILIARY",
+    "REV_HOSPITAL",
+    "REV_INDEPENDENT_OPS",
+    "REV_OTHER_OPERATING",
+    "REV_OTHER_NONOPERATING",
+    "REV_CAPITAL_APPROPS",
+    "REV_CAPITAL_GRANTS_GIFTS",
+    "REV_ADD_PERM_ENDOW",
+    "REV_OTHER_ADDITIONS",
+    "REV_TOTAL_REVENUES",
     "EXP_INSTRUCTION",
     "EXP_RESEARCH",
     "EXP_PUBLIC_SERVICE",
@@ -95,6 +200,17 @@ CONCEPTS = {
     "EXP_OPERATIONS_PLANT",
     "EXP_SCHOLARSHIPS_NET",
     "DISCOUNT_TUITION",
+    "FIN_SCHOLARSHIPS_PELL",
+    "FIN_SCHOLARSHIPS_OTHER_FED",
+    "FIN_SCHOLARSHIPS_STATE",
+    "FIN_SCHOLARSHIPS_LOCAL",
+    "FIN_SCHOLARSHIPS_INSTITUTIONAL_RESTRICTED",
+    "FIN_SCHOLARSHIPS_INSTITUTIONAL_UNRESTRICTED",
+    "FIN_SCHOLARSHIPS_TOTAL_GROSS",
+    "FIN_DISCOUNTS_TUITION",
+    "FIN_DISCOUNTS_AUXILIARY",
+    "FIN_DISCOUNTS_TOTAL",
+    "FIN_SCHOLARSHIPS_NET",
 }
 
 IGNORED_CONCEPTS = {
@@ -237,10 +353,22 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
     ):
         return "DISCOUNT_TUITION"
     if "auxiliary enterprises" in s and ("revenue" in s or "revenues" in s or "net" in s):
-        return "REV_AUXILIARY_NET"
+        return "REV_AUXILIARY"
     if "appropriations" in s and ("federal" in s or "state" in s or "local" in s or "government" in s):
+        if "federal" in s:
+            return "REV_FED_APPROPS"
+        if "state" in s:
+            return "REV_STATE_APPROPS"
+        if "local" in s:
+            return "REV_LOCAL_APPROPS"
         return "REV_GOV_APPROPS_TOTAL"
     if "grants and contracts" in s or ("grants" in s and "contracts" in s):
+        if "federal" in s:
+            return "REV_GRANTS_FED"
+        if "state" in s:
+            return "REV_GRANTS_STATE"
+        if "local" in s or "private" in s:
+            return "REV_GRANTS_LOCAL_PRIV"
         return "REV_GRANTS_CONTRACTS_TOTAL"
     if (
         "private gifts" in s
@@ -249,7 +377,7 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         or ("contributions from private sources" in s)
         or ("contributions" in s and "government" not in s and "state" not in s)
     ):
-        return "REV_PRIVATE_GIFTS"
+        return "REV_PRIVATE_GIFTS_GRANTS"
     if (
         "investment income" in s
         or "investment return" in s
@@ -259,6 +387,20 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         or "investment income (net of expenses)" in s
     ):
         return "REV_INVESTMENT_RETURN"
+    if "hospital" in s and ("revenue" in s or "revenues" in s):
+        return "REV_HOSPITAL"
+    if "independent operations" in s and ("revenue" in s or "revenues" in s):
+        return "REV_INDEPENDENT_OPS"
+    if "other" in s and "operating" in s and ("revenue" in s or "revenues" in s):
+        return "REV_OTHER_OPERATING"
+    if "other" in s and "nonoperating" in s and ("revenue" in s or "revenues" in s):
+        return "REV_OTHER_NONOPERATING"
+    if "capital appropriations" in s:
+        return "REV_CAPITAL_APPROPS"
+    if "capital grants" in s or "capital gifts" in s:
+        return "REV_CAPITAL_GRANTS_GIFTS"
+    if "permanent endow" in s:
+        return "REV_ADD_PERM_ENDOW"
 
     # EXPENSES BY FUNCTION
     if _match_function_total(s, "instruction"):
@@ -609,7 +751,7 @@ def main() -> None:
     for col in ("year_start", "year_end"):
         if col in cw.columns:
             cw[col] = pd.to_numeric(cw[col], errors="raise").astype("Int64")
-    core_sections = {"B", "C", "E", "H"}
+    core_sections = {"B", "C", "D", "E", "H"}
     if "section" in cw.columns:
         cw = cw[cw["section"].isin(core_sections)].reset_index(drop=True)
     bad_range = cw["year_start"] > cw["year_end"]
@@ -705,7 +847,7 @@ def main() -> None:
         _assert_no_overlaps(mapped_nonblank, ("form_family", "base_key", "concept_key"))
 
     ck_series = cw["concept_key"].astype(str).str.strip()
-    core_mask = cw["source_var"].astype(str).str.match(r"^F[123][BCEH]", na=False)
+    core_mask = cw["source_var"].astype(str).str.match(r"^F[123][BCDEH]", na=False)
     missing_mask = core_mask & (ck_series.eq("") | ck_series.str.lower().eq("nan"))
     if missing_mask.any():
         print("ERROR: Finance crosswalk still has core B/C/E/H rows without concept_key. Sample:")
