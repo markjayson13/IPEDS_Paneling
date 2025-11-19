@@ -18,6 +18,22 @@ import re
 import pandas as pd
 
 
+def _normalize_form_family(fam: str | None) -> str:
+    """
+    Normalize finance form_family codes (F1, F1A, F1A_F, F1COMP, etc.) to a common root.
+    """
+    if not isinstance(fam, str):
+        return ""
+    fam_norm = fam.strip().upper()
+    if fam_norm.startswith("F1"):
+        return "F1"
+    if fam_norm.startswith("F2"):
+        return "F2"
+    if fam_norm.startswith("F3"):
+        return "F3"
+    return fam_norm
+
+
 # Assumes you run this from the repo root where finance_crosswalk_template.csv lives.
 CROSSWALK_IN = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_template.csv")
 CROSSWALK_OUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/finance_crosswalk_filled.csv")
@@ -444,7 +460,7 @@ def _build_var_type_map(dict_path: Path | str | None = None) -> dict[tuple[str, 
     def _norm(val: str | None) -> str:
         return val.strip() if isinstance(val, str) else ""
 
-    df["form_family"] = df["form_family"].apply(lambda v: _norm(v).upper())
+    df["form_family"] = df["form_family"].apply(lambda v: _normalize_form_family(_norm(v)))
     df["source_var"] = df["source_var"].apply(lambda v: _norm(v).upper())
     if "survey" in df.columns:
         df["survey"] = df["survey"].apply(lambda v: _norm(v).upper())
@@ -1166,7 +1182,7 @@ def main() -> None:
     var_type_map = _build_var_type_map(DICTIONARY_LAKE)
     if var_type_map:
         def _row_is_amount(row: pd.Series) -> bool:
-            fam = (row.get("form_family") or "").strip().upper()
+            fam = _normalize_form_family(row.get("form_family"))
             survey = (row.get("survey") or "").strip().upper()
             raw = row.get("source_var")
             if not fam or not isinstance(raw, str) or not raw.strip():
