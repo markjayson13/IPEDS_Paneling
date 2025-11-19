@@ -161,7 +161,7 @@ SOURCE_VAR_CONCEPT_OVERRIDES = {
     "F1H01": "FIN_ENDOW_ASSETS_BEGIN",
     "F1H02": "FIN_ENDOW_ASSETS_END",
     "F1H03": "FIN_ENDOW_NET_CHANGE",
-    # --- Scholarships / Discounts (FASB F2C) ---
+# --- Scholarships / Discounts (FASB F2C) ---
     "F2C01": "FIN_SCHOLARSHIPS_PELL",
     "F2C02": "FIN_SCHOLARSHIPS_OTHER_FED",
     "F2C03": "FIN_SCHOLARSHIPS_STATE",
@@ -173,8 +173,25 @@ SOURCE_VAR_CONCEPT_OVERRIDES = {
     "F2C09": "FIN_DISCOUNTS_AUXILIARY",
     "F2C10": "FIN_DISCOUNTS_TOTAL",
     "F2C11": "FIN_SCHOLARSHIPS_NET",
-    "F2C17": "FIN_DISCOUNTS_OTHER_INST_TOTAL",
-    # --- Scholarships / Discounts (For-profit F3C) ---
+    "F2C12": "FIN_PELLGROSS_1_0",
+    "F2C121": "FIN_PELLTUIT_1_0",
+    "F2C122": "FIN_PELLAUX_1_0",
+    "F2C13": "FIN_OTHFEDSCH_1_0",
+    "F2C131": "FIN_OTHFEDTUIT_1_0",
+    "F2C132": "FIN_OTHFEDAUX_1_0",
+    "F2C14": "FIN_STGRSCH_1_0",
+    "F2C141": "FIN_STGRTUIT_1_0",
+    "F2C142": "FIN_STGRAUX_1_0",
+    "F2C15": "FIN_LCGRSCH_1_0",
+    "F2C151": "FIN_LCGRTUIT_1_0",
+    "F2C152": "FIN_LCGRAUX_1_0",
+    "F2C16": "FIN_ENDOW1_1_0",
+    "F2C161": "FIN_ENDOWTUIT_1_0",
+    "F2C162": "FIN_ENDOWAUX_1_0",
+    "F2C17": "FIN_INGRRESSCH_1_0",
+    "F2C171": "FIN_INGRTUIT_1_0",
+    "F2C172": "FIN_INGRAUX_1_0",
+# --- Scholarships / Discounts (For-profit F3C) ---
     "F3C01": "FIN_SCHOLARSHIPS_PELL",
     "F3C02": "FIN_SCHOLARSHIPS_OTHER_FED",
     "F3C03": "FIN_SCHOLARSHIPS_STATE",
@@ -185,7 +202,24 @@ SOURCE_VAR_CONCEPT_OVERRIDES = {
     "F3C06": "FIN_DISCOUNTS_TUITION",
     "F3C07": "FIN_DISCOUNTS_AUXILIARY",
     "F3C08": "FIN_DISCOUNTS_TOTAL",
-    "F3C17": "FIN_DISCOUNTS_OTHER_INST_TOTAL",
+    "F3C12": "FIN_PELLGROSS_1_0",
+    "F3C121": "FIN_PELLTUIT_1_0",
+    "F3C122": "FIN_PELLAUX_1_0",
+    "F3C13": "FIN_OTHFEDSCH_1_0",
+    "F3C131": "FIN_OTHFEDTUIT_1_0",
+    "F3C132": "FIN_OTHFEDAUX_1_0",
+    "F3C14": "FIN_STGRSCH_1_0",
+    "F3C141": "FIN_STGRTUIT_1_0",
+    "F3C142": "FIN_STGRAUX_1_0",
+    "F3C15": "FIN_LCGRSCH_1_0",
+    "F3C151": "FIN_LCGRTUIT_1_0",
+    "F3C152": "FIN_LCGRAUX_1_0",
+    "F3C16": "FIN_ENDOW1_1_0",
+    "F3C161": "FIN_ENDOWTUIT_1_0",
+    "F3C162": "FIN_ENDOWAUX_1_0",
+    "F3C17": "FIN_INGRRESSCH_1_0",
+    "F3C171": "FIN_INGRTUIT_1_0",
+    "F3C172": "FIN_INGRAUX_1_0",
     # --- Endowment spending distribution for current use ---
     "F1H03C": "FIN_SPENDDIS",
     "F2H03C": "FIN_SPENDDIS",
@@ -372,7 +406,16 @@ def _build_var_type_map(dict_path: Path | str | None = None) -> dict[tuple[str, 
         print(f"WARNING: dictionary lake not found at {dict_path}; cannot infer amount types.")
         return {}
 
-    cols = [
+    try:
+        df = pd.read_parquet(dict_path)
+    except Exception as exc:  # pragma: no cover - diagnostics
+        print(f"WARNING: failed to load dictionary lake {dict_path}: {exc}")
+        return {}
+
+    if df.empty:
+        return {}
+
+    cols_needed = [
         "form_family",
         "source_var",
         "survey",
@@ -383,17 +426,11 @@ def _build_var_type_map(dict_path: Path | str | None = None) -> dict[tuple[str, 
         "label_norm",
         "source_label",
     ]
-    try:
-        df = pd.read_parquet(dict_path, columns=cols)
-    except Exception:
-        try:
-            df = pd.read_parquet(dict_path)
-        except Exception as exc:  # pragma: no cover - diagnostics
-            print(f"WARNING: failed to load dictionary lake {dict_path}: {exc}")
-            return {}
-
-    if df.empty:
+    available = [c for c in cols_needed if c in df.columns]
+    if not available:
+        print("WARNING: dictionary lake missing required columns to infer amount types.")
         return {}
+    df = df[available].copy()
 
     needed = {"form_family", "source_var"}
     df = df.dropna(subset=[col for col in needed if col in df.columns])
@@ -584,7 +621,11 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
     ):
         return "REV_TUITION_NET"
     # Scholarships / discounts by source: Pell, federal, state, local, endowment, institutional.
-    if "pell grants represents the gross amount of pell grants" in s:
+    if (
+        "pell grants represents the gross amount of pell grants" in s
+        or "pell grants includes the amount administered" in s
+        or "total discounts and allowances from pell grants" in s
+    ):
         return "FIN_PELLGROSS_1_0"
     if "discounts and allowances from pell grants applied to tuition and fees" in s:
         return "FIN_PELLTUIT_1_0"
@@ -593,7 +634,9 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
     if (
         "other federal awards are expenditures for scholarships and fellowships" in s
         and "discounts and allowances" not in s
-    ):
+    ) or "other federal grants includes the amount awarded" in s:
+        return "FIN_OTHFEDSCH_1_0"
+    if "total discounts and allowances from other federal grants" in s:
         return "FIN_OTHFEDSCH_1_0"
     if "discounts and allowances from other federal grants applied to tuition and fees" in s:
         return "FIN_OTHFEDTUIT_1_0"
@@ -602,7 +645,9 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
     if (
         "grants by state government includes expenditures for scholarships and fellowships" in s
         and "discounts and allowances" not in s
-    ):
+    ) or "state grants includes the amount awarded" in s:
+        return "FIN_STGRSCH_1_0"
+    if "total discounts and allowances from state government grants" in s:
         return "FIN_STGRSCH_1_0"
     if "discounts and allowances from state government grants applied to tuition and fees" in s:
         return "FIN_STGRTUIT_1_0"
@@ -611,7 +656,9 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
     if (
         "grants by local government includes expenditures for scholarships and fellowships" in s
         and "discounts and allowances" not in s
-    ):
+    ) or "local grants includes the amount awarded" in s:
+        return "FIN_LCGRSCH_1_0"
+    if "total discounts and allowances from local government grants" in s:
         return "FIN_LCGRSCH_1_0"
     if "discounts and allowances from local government grants applied to tuition and fees" in s:
         return "FIN_LCGRTUIT_1_0"
