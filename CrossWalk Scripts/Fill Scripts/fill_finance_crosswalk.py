@@ -684,6 +684,9 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
     source = (source_var or "").strip().upper()
     if source in SOURCE_VAR_CONCEPT_OVERRIDES:
         return SOURCE_VAR_CONCEPT_OVERRIDES[source]
+    skip_source_vars = {"F1D02", "F1D03", "F2B04", "F3E064"}
+    if source in skip_source_vars:
+        return None
     fam_norm = _normalize_form_family(form_family)
     section_hint = source[2] if len(source) >= 3 else ""
     is_expense_section = section_hint == "E"
@@ -701,7 +704,7 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         restricted_flag = "UNRESTRICTED"
     elif "temporarily restricted" in s:
         restricted_flag = "TEMP_RESTRICTED"
-    elif "permanently restricted" in s:
+    elif "permanently restricted" in s or "pemanently restricted" in s:
         restricted_flag = "PERM_RESTRICTED"
 
     base_s = s
@@ -710,6 +713,7 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
             base_s.replace("unrestricted", "")
             .replace("temporarily restricted", "")
             .replace("permanently restricted", "")
+            .replace("pemanently restricted", "")
         )
         base_s = " ".join(base_s.split())
 
