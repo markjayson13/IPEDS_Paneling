@@ -47,6 +47,25 @@ def main() -> None:
         "source_label_norm",
     ]].copy()
 
+    # Only keep rows tied to the five finance components / sections we harmonize downstream.
+    def _is_relevant_component(fam: str | None, section: str | None) -> bool:
+        """Return True when the row belongs to one of the five core finance components."""
+        fam_norm = (fam or "").upper()
+        section_norm = (section or "").upper()
+        if not fam_norm or not section_norm:
+            return False
+        if fam_norm.startswith("F1"):
+            return section_norm in {"B", "C", "D", "E", "H"}
+        if fam_norm.startswith("F2"):
+            return section_norm in {"B", "C", "D", "E", "H"}
+        if fam_norm.startswith("F3"):
+            return section_norm in {"B", "C", "D", "E"}
+        return False
+
+    subset = subset[
+        subset.apply(lambda r: _is_relevant_component(r.get("form_family"), r.get("section")), axis=1)
+    ].copy()
+
     def first_label(series: pd.Series) -> str:
         for val in series:
             if isinstance(val, str) and val.strip():

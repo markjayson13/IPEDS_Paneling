@@ -25,7 +25,8 @@ OVERRIDES_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled
 DICTIONARY_LAKE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
 STEP0_SAMPLE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Step0/finance_step0_long_2004.parquet")
 
-CORE_SECTION_PATTERN = re.compile(r"^F[123][BCDEH]", re.IGNORECASE)
+# Only treat the component-core F1/F2/F3 sections as required rows (F3 has no H component).
+CORE_SECTION_PATTERN = re.compile(r"^(?:F1[BCDEH]|F2[BCDEH]|F3[BCDE])", re.IGNORECASE)
 
 SOURCE_VAR_CONCEPT_OVERRIDES = {
     # --- Revenues (GASB F1B) ---
@@ -244,6 +245,23 @@ IGNORED_CONCEPTS = {
     "BS_ASSETS_CAPITAL_NET",
     "IS_NET_INCOME",
 }
+
+
+def _is_relevant_component(form_family: str | None, section: str | None) -> bool:
+    """
+    Return True when (form_family, section) belongs to the five finance components we care about.
+    """
+    fam = (form_family or "").upper()
+    sec = (section or "").upper()
+    if not fam or not sec:
+        return False
+    if fam.startswith("F1"):
+        return sec in {"B", "C", "D", "E", "H"}
+    if fam.startswith("F2"):
+        return sec in {"B", "C", "D", "E", "H"}
+    if fam.startswith("F3"):
+        return sec in {"B", "C", "D", "E"}
+    return False
 
 
 def _assert_no_overlaps(df: pd.DataFrame, group_cols: tuple[str, ...]) -> None:
@@ -780,8 +798,14 @@ def main() -> None:
         if col in cw.columns:
             cw[col] = pd.to_numeric(cw[col], errors="raise").astype("Int64")
     core_sections = {"B", "C", "D", "E", "H"}
-    if "section" in cw.columns:
-        cw = cw[cw["section"].isin(core_sections)].reset_index(drop=True)
+    if {"section", "form_family"}.issubset(cw.columns):
+        # Restrict to the five finance components (revenues, expenses, changes, aid, endowment).
+        cw = cw[cw["section"].isin(core_sections)].copy()
+
+        def _is_relevant_component_row(row: pd.Series) -> bool:
+            return _is_relevant_component(row.get("form_family"), row.get("section"))
+
+        cw = cw[cw.apply(_is_relevant_component_row, axis=1)].reset_index(drop=True)
     bad_range = cw["year_start"] > cw["year_end"]
     if bad_range.any():
         print("ERROR: Finance crosswalk has rows with year_start > year_end.")
