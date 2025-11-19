@@ -249,11 +249,12 @@ SOURCE_VAR_CONCEPT_OVERRIDES = {
     "F3H03": "FIN_ENDOW_NET_CHANGE",
 }
 
+OVERRIDE_SOURCE_SET = {key.upper() for key in SOURCE_VAR_CONCEPT_OVERRIDES}
+
 CONCEPTS = {
     "IS_REVENUES_TOTAL",
     "IS_EXPENSES_TOTAL",
     "BS_ASSETS_INVESTMENTS_TOTAL",
-    "BS_ENDOWMENT_FMV",
     "FIN_ENDOW_ASSETS_BEGIN",
     "FIN_ENDOW_ASSETS_END",
     "FIN_ENDOW_NET_CHANGE",
@@ -403,15 +404,14 @@ def _match_function_total(text: str, term: str) -> bool:
     if other_funcs:
         return False
 
-    if _contains_any(text, "expenses", "expense", "expenditures"):
-        return True
+    detail_terms = ("salaries", "wages", "benefits", "fringe", "depreciation", "interest", "all other")
+    total_markers = ("total", "current year", "sum of", "overall")
 
-    if "total" in text:
-        detail_terms = ("salaries", "wages", "benefits", "fringe")
+    if any(marker in text for marker in total_markers):
         if any(detail in text for detail in detail_terms):
             return False
 
-        pattern = rf"(?:{term}\W{{0,12}}total|total\W{{0,12}}{term})"
+        pattern = rf"(?:{term}\W{{0,12}}total|total\W{{0,12}}{term}|{term}\W{{0,12}}current year)"
         if re.search(pattern, text):
             return True
 
@@ -620,9 +620,13 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
     source = (source_var or "").strip().upper()
     if source in SOURCE_VAR_CONCEPT_OVERRIDES:
         return SOURCE_VAR_CONCEPT_OVERRIDES[source]
+    fam_norm = _normalize_form_family(form_family)
     section_hint = source[2] if len(source) >= 3 else ""
     is_expense_section = section_hint == "E"
     is_rev_like_section = section_hint in {"B", "D"}
+    is_scholarship_section = (
+        section_hint == "E" or (section_hint == "C" and fam_norm in {"F2", "F3"})
+    )
 
     if not isinstance(label, str):
         return None
@@ -637,11 +641,6 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         or ("investments" in s and "fair value" in s)
     ):
         return "BS_ASSETS_INVESTMENTS_TOTAL"
-    if (
-        s.startswith("value of endowment assets at the end")
-        or ("endowment" in s and ("assets" in s or "funds" in s) and ("end of" in s or "at the end" in s))
-    ):
-        return "BS_ENDOWMENT_FMV"
     if "spending distribution for current use" in s and "endowment" in s:
         return "FIN_SPENDDIS"
 
@@ -697,65 +696,66 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
     ):
         return "REV_TUITION_NET"
     # Scholarships / discounts by source: Pell, federal, state, local, endowment, institutional.
-    if (
-        "pell grants represents the gross amount of pell grants" in s
-        or "pell grants includes the amount administered" in s
-        or "total discounts and allowances from pell grants" in s
-    ):
-        return "FIN_PELLGROSS_1_0"
-    if "discounts and allowances from pell grants applied to tuition and fees" in s:
-        return "FIN_PELLTUIT_1_0"
-    if "discounts and allowances from pell grants applied to auxiliary enterprises" in s:
-        return "FIN_PELLAUX_1_0"
-    if (
-        "other federal awards are expenditures for scholarships and fellowships" in s
-        and "discounts and allowances" not in s
-    ) or "other federal grants includes the amount awarded" in s:
-        return "FIN_OTHFEDSCH_1_0"
-    if "total discounts and allowances from other federal grants" in s:
-        return "FIN_OTHFEDSCH_1_0"
-    if "discounts and allowances from other federal grants applied to tuition and fees" in s:
-        return "FIN_OTHFEDTUIT_1_0"
-    if "discounts and allowances from other federal grants applied to auxiliary enterprises" in s:
-        return "FIN_OTHFEDAUX_1_0"
-    if (
-        "grants by state government includes expenditures for scholarships and fellowships" in s
-        and "discounts and allowances" not in s
-    ) or "state grants includes the amount awarded" in s:
-        return "FIN_STGRSCH_1_0"
-    if "total discounts and allowances from state government grants" in s:
-        return "FIN_STGRSCH_1_0"
-    if "discounts and allowances from state government grants applied to tuition and fees" in s:
-        return "FIN_STGRTUIT_1_0"
-    if "discounts and allowances from state government grants applied to auxiliary enterprises" in s:
-        return "FIN_STGRAUX_1_0"
-    if (
-        "grants by local government includes expenditures for scholarships and fellowships" in s
-        and "discounts and allowances" not in s
-    ) or "local grants includes the amount awarded" in s:
-        return "FIN_LCGRSCH_1_0"
-    if "total discounts and allowances from local government grants" in s:
-        return "FIN_LCGRSCH_1_0"
-    if "discounts and allowances from local government grants applied to tuition and fees" in s:
-        return "FIN_LCGRTUIT_1_0"
-    if "discounts and allowances from local government grants applied to auxiliary enterprises" in s:
-        return "FIN_LCGRAUX_1_0"
-    if (
-        "endowments are funds whose principal is nonexpendable" in s
-        and "discounts and allowances" in s
-    ):
-        return "FIN_ENDOW1_1_0"
-    if "discounts and allowances from endowments and gifts applied to tuition and fees" in s:
-        return "FIN_ENDOWTUIT_1_0"
-    if "discounts and allowances from endowments and gifts applied to auxiliary enterprises" in s:
-        return "FIN_ENDOWAUX_1_0"
-    if "institutional grants from restricted sources are expenditures for scholarships and fellowships" in s:
-        return "FIN_INGRRESSCH_1_0"
-    if "discounts and allowances from other institutional sources applied to tuition and fees" in s:
-        return "FIN_INGRTUIT_1_0"
-    if "discounts and allowances from other institutional sources applied to auxiliary enterprises" in s:
-        return "FIN_INGRAUX_1_0"
-    if (
+    if is_scholarship_section:
+        if (
+            "pell grants represents the gross amount of pell grants" in s
+            or "pell grants includes the amount administered" in s
+            or "total discounts and allowances from pell grants" in s
+        ):
+            return "FIN_PELLGROSS_1_0"
+        if "discounts and allowances from pell grants applied to tuition and fees" in s:
+            return "FIN_PELLTUIT_1_0"
+        if "discounts and allowances from pell grants applied to auxiliary enterprises" in s:
+            return "FIN_PELLAUX_1_0"
+        if (
+            "other federal awards are expenditures for scholarships and fellowships" in s
+            and "discounts and allowances" not in s
+        ) or "other federal grants includes the amount awarded" in s:
+            return "FIN_OTHFEDSCH_1_0"
+        if "total discounts and allowances from other federal grants" in s:
+            return "FIN_OTHFEDSCH_1_0"
+        if "discounts and allowances from other federal grants applied to tuition and fees" in s:
+            return "FIN_OTHFEDTUIT_1_0"
+        if "discounts and allowances from other federal grants applied to auxiliary enterprises" in s:
+            return "FIN_OTHFEDAUX_1_0"
+        if (
+            "grants by state government includes expenditures for scholarships and fellowships" in s
+            and "discounts and allowances" not in s
+        ) or "state grants includes the amount awarded" in s:
+            return "FIN_STGRSCH_1_0"
+        if "total discounts and allowances from state government grants" in s:
+            return "FIN_STGRSCH_1_0"
+        if "discounts and allowances from state government grants applied to tuition and fees" in s:
+            return "FIN_STGRTUIT_1_0"
+        if "discounts and allowances from state government grants applied to auxiliary enterprises" in s:
+            return "FIN_STGRAUX_1_0"
+        if (
+            "grants by local government includes expenditures for scholarships and fellowships" in s
+            and "discounts and allowances" not in s
+        ) or "local grants includes the amount awarded" in s:
+            return "FIN_LCGRSCH_1_0"
+        if "total discounts and allowances from local government grants" in s:
+            return "FIN_LCGRSCH_1_0"
+        if "discounts and allowances from local government grants applied to tuition and fees" in s:
+            return "FIN_LCGRTUIT_1_0"
+        if "discounts and allowances from local government grants applied to auxiliary enterprises" in s:
+            return "FIN_LCGRAUX_1_0"
+        if (
+            "endowments are funds whose principal is nonexpendable" in s
+            and "discounts and allowances" in s
+        ):
+            return "FIN_ENDOW1_1_0"
+        if "discounts and allowances from endowments and gifts applied to tuition and fees" in s:
+            return "FIN_ENDOWTUIT_1_0"
+        if "discounts and allowances from endowments and gifts applied to auxiliary enterprises" in s:
+            return "FIN_ENDOWAUX_1_0"
+        if "institutional grants from restricted sources are expenditures for scholarships and fellowships" in s:
+            return "FIN_INGRRESSCH_1_0"
+        if "discounts and allowances from other institutional sources applied to tuition and fees" in s:
+            return "FIN_INGRTUIT_1_0"
+        if "discounts and allowances from other institutional sources applied to auxiliary enterprises" in s:
+            return "FIN_INGRAUX_1_0"
+    if is_scholarship_section and (
         "scholarship allowances" in s
         or "discounts and allowances" in s
         or "tuition discounts" in s
@@ -765,10 +765,10 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
     if (
         "auxiliary enterprises" in s
         and ("revenue" in s or "revenues" in s or "net revenue" in s)
-        and not is_expense_section
+        and is_rev_like_section
     ):
         return "REV_AUXILIARY"
-    if not is_expense_section and "appropriations" in s and (
+    if is_rev_like_section and "appropriations" in s and (
         "federal" in s or "state" in s or "local" in s or "government" in s
     ):
         if "federal" in s:
@@ -778,7 +778,7 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         if "local" in s:
             return "REV_LOCAL_APPROPS"
         return "REV_GOV_APPROPS_TOTAL"
-    if not is_expense_section and ("grants and contracts" in s or ("grants" in s and "contracts" in s)):
+    if is_rev_like_section and ("grants and contracts" in s or ("grants" in s and "contracts" in s)):
         has_fed = "federal" in s
         has_state = "state" in s
         has_local = "local" in s
@@ -795,7 +795,7 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
 
         return None
     if (
-        not is_expense_section
+        is_rev_like_section
         and (
             "private gifts" in s
             or "private grants" in s
@@ -814,31 +814,31 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         or "return on investments" in s
         or "investment income (net of expenses)" in s
     ):
-        if not is_expense_section:
+        if is_rev_like_section:
             return "REV_INVESTMENT_RETURN"
-    if not is_expense_section and "hospital" in s and ("revenue" in s or "revenues" in s):
+    if is_rev_like_section and "hospital" in s and ("revenue" in s or "revenues" in s):
         return "REV_HOSPITAL"
-    if not is_expense_section and "independent operations" in s and ("revenue" in s or "revenues" in s):
+    if is_rev_like_section and "independent operations" in s and ("revenue" in s or "revenues" in s):
         return "REV_INDEPENDENT_OPS"
     if (
-        not is_expense_section
+        is_rev_like_section
         and "other" in s
         and "operating" in s
         and ("revenue" in s or "revenues" in s)
     ):
         return "REV_OTHER_OPERATING"
     if (
-        not is_expense_section
+        is_rev_like_section
         and "other" in s
         and "nonoperating" in s
         and ("revenue" in s or "revenues" in s)
     ):
         return "REV_OTHER_NONOPERATING"
-    if not is_expense_section and "capital appropriations" in s:
+    if is_rev_like_section and "capital appropriations" in s:
         return "REV_CAPITAL_APPROPS"
-    if not is_expense_section and ("capital grants" in s or "capital gifts" in s):
+    if is_rev_like_section and ("capital grants" in s or "capital gifts" in s):
         return "REV_CAPITAL_GRANTS_GIFTS"
-    if not is_expense_section and "permanent endow" in s:
+    if is_rev_like_section and "permanent endow" in s:
         return "REV_ADD_PERM_ENDOW"
 
     # EXPENSES BY FUNCTION
@@ -1240,6 +1240,11 @@ def main() -> None:
             parts = [p.strip().upper() for p in raw.split(";") if p.strip()]
             if not parts:
                 return False
+
+            for part in parts:
+                if part in OVERRIDE_SOURCE_SET:
+                    return True
+
             for part in parts:
                 key = (fam, survey, part)
                 if key in var_type_map and var_type_map[key]:
