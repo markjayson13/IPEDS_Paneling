@@ -25,6 +25,56 @@ OVERRIDES_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled
 DICTIONARY_LAKE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
 STEP0_SAMPLE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Step0/finance_step0_long_2004.parquet")
 
+CORE_SECTION_PATTERN = re.compile(r"^F[123][BCEH]", re.IGNORECASE)
+
+SOURCE_VAR_CONCEPT_OVERRIDES = {
+    # --- Revenues (GASB F1B) ---
+    "F1B01": "REV_TUITION_NET",
+    "F1B02": "REV_GRANTS_CONTRACTS_TOTAL",
+    "F1B03": "REV_GRANTS_CONTRACTS_TOTAL",
+    "F1B04": "REV_GRANTS_CONTRACTS_TOTAL",
+    "F1B05": "REV_AUXILIARY_NET",
+    "F1B10": "REV_GOV_APPROPS_TOTAL",
+    "F1B11": "REV_GOV_APPROPS_TOTAL",
+    "F1B12": "REV_GOV_APPROPS_TOTAL",
+    "F1B13": "REV_GRANTS_CONTRACTS_TOTAL",
+    "F1B14": "REV_GRANTS_CONTRACTS_TOTAL",
+    "F1B15": "REV_GRANTS_CONTRACTS_TOTAL",
+    "F1B16": "REV_PRIVATE_GIFTS",
+    "F1B17": "REV_INVESTMENT_RETURN",
+    "F1B27": "IS_REVENUES_TOTAL",
+    # --- Expenses (GASB F1C) ---
+    "F1C011": "EXP_INSTRUCTION",
+    "F1C021": "EXP_RESEARCH",
+    "F1C031": "EXP_PUBLIC_SERVICE",
+    "F1C051": "EXP_ACADEMIC_SUPPORT",
+    "F1C061": "EXP_STUDENT_SERVICES",
+    "F1C071": "EXP_INSTITUTIONAL_SUPPORT",
+    "F1C081": "EXP_OPERATIONS_PLANT",
+    "F1C101": "EXP_SCHOLARSHIPS_NET",
+    "F1C191": "IS_EXPENSES_TOTAL",
+    # --- Scholarships / Discounts (GASB F1E) ---
+    "F1E01": "EXP_SCHOLARSHIPS_NET",
+    "F1E02": "EXP_SCHOLARSHIPS_NET",
+    "F1E03": "EXP_SCHOLARSHIPS_NET",
+    "F1E04": "EXP_SCHOLARSHIPS_NET",
+    "F1E05": "EXP_SCHOLARSHIPS_NET",
+    "F1E06": "EXP_SCHOLARSHIPS_NET",
+    "F1E07": "EXP_SCHOLARSHIPS_NET",
+    "F1E08": "DISCOUNT_TUITION",
+    "F1E09": "DISCOUNT_TUITION",
+    "F1E10": "DISCOUNT_TUITION",
+    "F1E11": "EXP_SCHOLARSHIPS_NET",
+    "F1E17": "DISCOUNT_TUITION",
+    # --- Endowment (GASB F1H) ---
+    "F1H01": "BS_ENDOWMENT_FMV",
+    "F1H02": "BS_ENDOWMENT_FMV",
+    "F1H03": "BS_ENDOWMENT_FMV",
+    # Institutional grants funded/unfunded (F2 codes) - keep previous coverage
+    "F2C05": "EXP_SCHOLARSHIPS_NET",
+    "F2C06": "EXP_SCHOLARSHIPS_NET",
+}
+
 CONCEPTS = {
     "IS_REVENUES_TOTAL",
     "IS_EXPENSES_TOTAL",
@@ -114,8 +164,14 @@ def _strip_str_cols(df: pd.DataFrame, cols: tuple[str, ...]) -> None:
             df[col] = df[col].apply(lambda v: v.strip() if isinstance(v, str) else v)
 
 
-def assign_concept(label: str, form_family: str, base_key: str) -> str | None:
+def assign_concept(label: str, form_family: str, base_key: str, source_var: str | None = None) -> str | None:
     """Heuristic mapping from source_label_norm to the conceptual schema."""
+    source = (source_var or "").strip().upper()
+    if source in SOURCE_VAR_CONCEPT_OVERRIDES:
+        return SOURCE_VAR_CONCEPT_OVERRIDES[source]
+    if CORE_SECTION_PATTERN.match(source):
+        return None
+
     if not isinstance(label, str):
         return None
     s = " ".join(label.lower().split())
@@ -553,6 +609,9 @@ def main() -> None:
     for col in ("year_start", "year_end"):
         if col in cw.columns:
             cw[col] = pd.to_numeric(cw[col], errors="raise").astype("Int64")
+    core_sections = {"B", "C", "E", "H"}
+    if "section" in cw.columns:
+        cw = cw[cw["section"].isin(core_sections)].reset_index(drop=True)
     bad_range = cw["year_start"] > cw["year_end"]
     if bad_range.any():
         print("ERROR: Finance crosswalk has rows with year_start > year_end.")
@@ -581,6 +640,7 @@ def main() -> None:
             r.get("source_label_norm"),
             r.get("form_family"),
             r.get("base_key"),
+            r.get("source_var"),
         ),
         axis=1,
     )
@@ -645,10 +705,11 @@ def main() -> None:
         _assert_no_overlaps(mapped_nonblank, ("form_family", "base_key", "concept_key"))
 
     ck_series = cw["concept_key"].astype(str).str.strip()
-    missing_mask = ck_series.eq("") | ck_series.str.lower().eq("nan")
+    core_mask = cw["source_var"].astype(str).str.match(r"^F[123][BCEH]", na=False)
+    missing_mask = core_mask & (ck_series.eq("") | ck_series.str.lower().eq("nan"))
     if missing_mask.any():
-        print("ERROR: Finance crosswalk still has rows without concept_key. Sample:")
-        print(cw.loc[missing_mask, ["form_family", "base_key", "year_start", "year_end", "source_label_norm"]].head(10).to_string(index=False))
+        print("ERROR: Finance crosswalk still has core B/C/E/H rows without concept_key. Sample:")
+        print(cw.loc[missing_mask, ["form_family", "source_var", "base_key", "year_start", "year_end", "source_label_norm"]].head(10).to_string(index=False))
         raise SystemExit(1)
 
     _export_suspect_core(cw)
