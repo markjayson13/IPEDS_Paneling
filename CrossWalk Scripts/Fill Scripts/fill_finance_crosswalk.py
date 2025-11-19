@@ -7,7 +7,7 @@ This is a first-pass mapping into the conceptual schema:
 - IS_*  income statement
 - REV_* revenues
 - EXP_* expenses
-- DISCOUNT_TUITION
+- FIN_DISCOUNTS_* tuition/fee discounts
 
 You MUST review the output (finance_crosswalk_filled.csv) before using it in production.
 """
@@ -93,6 +93,10 @@ SOURCE_VAR_CONCEPT_OVERRIDES = {
     "F1C071": "EXP_INSTITUTIONAL_SUPPORT",
     "F1C081": "EXP_OPERATIONS_PLANT",
     "F1C101": "EXP_SCHOLARSHIPS_NET",
+    "F1C111": "EXP_AUXILIARY",
+    "F1C121": "EXP_HOSPITAL",
+    "F1C131": "EXP_INDEPENDENT_OPS",
+    "F1C141": "EXP_OTHER_FUNCTIONAL",
     "F1C191": "IS_EXPENSES_TOTAL",
     # --- Expenses (FASB F2E / F2B) ---
     "F2E011": "EXP_INSTRUCTION",
@@ -103,6 +107,10 @@ SOURCE_VAR_CONCEPT_OVERRIDES = {
     "F2E061": "EXP_INSTITUTIONAL_SUPPORT",
     "F2E081": "EXP_SCHOLARSHIPS_NET",
     "F2E111": "EXP_OPERATIONS_PLANT",
+    "F2E071": "EXP_AUXILIARY",
+    "F2E091": "EXP_HOSPITAL",
+    "F2E101": "EXP_INDEPENDENT_OPS",
+    "F2E121": "EXP_OTHER_FUNCTIONAL",
     "F2B02": "IS_EXPENSES_TOTAL",
     # --- Expenses (For-profit F3E) ---
     "F3E011": "EXP_INSTRUCTION",
@@ -111,7 +119,10 @@ SOURCE_VAR_CONCEPT_OVERRIDES = {
     "F3E03A1": "EXP_ACADEMIC_SUPPORT",
     "F3E03B1": "EXP_STUDENT_SERVICES",
     "F3E03C1": "EXP_INSTITUTIONAL_SUPPORT",
-    # TODO: identify explicit F3E code for operation & maintenance of plant totals.
+    "F3E041": "EXP_AUXILIARY",
+    "F3E061": "EXP_OTHER_FUNCTIONAL",
+    "F3E101": "EXP_HOSPITAL",
+    # TODO: identify explicit F3E code for operation & maintenance of plant totals / independent operations.
     "F3E051": "EXP_SCHOLARSHIPS_NET",
     "F3E071": "IS_EXPENSES_TOTAL",
     # --- Scholarships / Discounts (GASB F1E) ---
@@ -126,11 +137,11 @@ SOURCE_VAR_CONCEPT_OVERRIDES = {
     "F1E09": "FIN_DISCOUNTS_AUXILIARY",
     "F1E10": "FIN_DISCOUNTS_TOTAL",
     "F1E11": "FIN_SCHOLARSHIPS_NET",
-    "F1E17": "FIN_DISCOUNTS_TOTAL",
+    "F1E17": "FIN_DISCOUNTS_OTHER_INST_TOTAL",
     # --- Endowment (GASB F1H) ---
-    "F1H01": "BS_ENDOWMENT_FMV",
-    "F1H02": "BS_ENDOWMENT_FMV",
-    "F1H03": "BS_ENDOWMENT_FMV",
+    "F1H01": "FIN_ENDOW_ASSETS_BEGIN",
+    "F1H02": "FIN_ENDOW_ASSETS_END",
+    "F1H03": "FIN_ENDOW_NET_CHANGE",
     # --- Scholarships / Discounts (FASB F2C) ---
     "F2C01": "FIN_SCHOLARSHIPS_PELL",
     "F2C02": "FIN_SCHOLARSHIPS_OTHER_FED",
@@ -143,6 +154,7 @@ SOURCE_VAR_CONCEPT_OVERRIDES = {
     "F2C09": "FIN_DISCOUNTS_AUXILIARY",
     "F2C10": "FIN_DISCOUNTS_TOTAL",
     "F2C11": "FIN_SCHOLARSHIPS_NET",
+    "F2C17": "FIN_DISCOUNTS_OTHER_INST_TOTAL",
     # --- Scholarships / Discounts (For-profit F3C) ---
     "F3C01": "FIN_SCHOLARSHIPS_PELL",
     "F3C02": "FIN_SCHOLARSHIPS_OTHER_FED",
@@ -154,13 +166,14 @@ SOURCE_VAR_CONCEPT_OVERRIDES = {
     "F3C06": "FIN_DISCOUNTS_TUITION",
     "F3C07": "FIN_DISCOUNTS_AUXILIARY",
     "F3C08": "FIN_DISCOUNTS_TOTAL",
+    "F3C17": "FIN_DISCOUNTS_OTHER_INST_TOTAL",
     # --- Endowment (FASB / For-profit) ---
-    "F2H01": "BS_ENDOWMENT_FMV",
-    "F2H02": "BS_ENDOWMENT_FMV",
-    "F2H03": "BS_ENDOWMENT_FMV",
-    "F3H01": "BS_ENDOWMENT_FMV",
-    "F3H02": "BS_ENDOWMENT_FMV",
-    "F3H03": "BS_ENDOWMENT_FMV",
+    "F2H01": "FIN_ENDOW_ASSETS_BEGIN",
+    "F2H02": "FIN_ENDOW_ASSETS_END",
+    "F2H03": "FIN_ENDOW_NET_CHANGE",
+    "F3H01": "FIN_ENDOW_ASSETS_BEGIN",
+    "F3H02": "FIN_ENDOW_ASSETS_END",
+    "F3H03": "FIN_ENDOW_NET_CHANGE",
 }
 
 CONCEPTS = {
@@ -168,6 +181,9 @@ CONCEPTS = {
     "IS_EXPENSES_TOTAL",
     "BS_ASSETS_INVESTMENTS_TOTAL",
     "BS_ENDOWMENT_FMV",
+    "FIN_ENDOW_ASSETS_BEGIN",
+    "FIN_ENDOW_ASSETS_END",
+    "FIN_ENDOW_NET_CHANGE",
     "REV_TUITION_NET",
     "REV_GOV_APPROPS_TOTAL",
     "REV_FED_APPROPS",
@@ -197,9 +213,12 @@ CONCEPTS = {
     "EXP_ACADEMIC_SUPPORT",
     "EXP_STUDENT_SERVICES",
     "EXP_INSTITUTIONAL_SUPPORT",
+    "EXP_AUXILIARY",
+    "EXP_HOSPITAL",
+    "EXP_INDEPENDENT_OPS",
+    "EXP_OTHER_FUNCTIONAL",
     "EXP_OPERATIONS_PLANT",
     "EXP_SCHOLARSHIPS_NET",
-    "DISCOUNT_TUITION",
     "FIN_SCHOLARSHIPS_PELL",
     "FIN_SCHOLARSHIPS_OTHER_FED",
     "FIN_SCHOLARSHIPS_STATE",
@@ -210,6 +229,7 @@ CONCEPTS = {
     "FIN_DISCOUNTS_TUITION",
     "FIN_DISCOUNTS_AUXILIARY",
     "FIN_DISCOUNTS_TOTAL",
+    "FIN_DISCOUNTS_OTHER_INST_TOTAL",
     "FIN_SCHOLARSHIPS_NET",
 }
 
@@ -285,8 +305,6 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
     source = (source_var or "").strip().upper()
     if source in SOURCE_VAR_CONCEPT_OVERRIDES:
         return SOURCE_VAR_CONCEPT_OVERRIDES[source]
-    if CORE_SECTION_PATTERN.match(source):
-        return None
 
     if not isinstance(label, str):
         return None
@@ -351,7 +369,7 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         or "tuition discounts" in s
         or ("discounts" in s and "tuition" in s)
     ):
-        return "DISCOUNT_TUITION"
+        return "FIN_DISCOUNTS_TUITION"
     if "auxiliary enterprises" in s and ("revenue" in s or "revenues" in s or "net" in s):
         return "REV_AUXILIARY"
     if "appropriations" in s and ("federal" in s or "state" in s or "local" in s or "government" in s):
@@ -665,7 +683,7 @@ def inspect_endowment_base_keys(
     Helper for manual inspection of endowment base_keys.
 
     Reads a Step 0 long file (defaulting to STEP0_SAMPLE) and the filled crosswalk to
-    summarize which base_keys currently map to BS_ENDOWMENT_FMV and which base_keys
+    summarize which base_keys currently map to the endowment concepts and which base_keys
     appear for the F1 component families. Intended to be invoked manually in REPL.
     """
     step0_path = Path(step0_path) if step0_path else STEP0_SAMPLE
@@ -693,18 +711,28 @@ def inspect_endowment_base_keys(
     if "concept_key" not in crosswalk.columns:
         print("Crosswalk is missing concept_key column; cannot inspect endowments.")
     else:
-        endow = crosswalk[crosswalk["concept_key"] == "BS_ENDOWMENT_FMV"]
-        if endow.empty:
-            print("No BS_ENDOWMENT_FMV rows present in filled crosswalk.")
-        else:
+        endow_concepts = [
+            "BS_ENDOWMENT_FMV",
+            "FIN_ENDOW_ASSETS_BEGIN",
+            "FIN_ENDOW_ASSETS_END",
+            "FIN_ENDOW_NET_CHANGE",
+        ]
+        any_concepts = False
+        for concept in endow_concepts:
+            endow = crosswalk[crosswalk["concept_key"] == concept]
+            if endow.empty:
+                continue
+            any_concepts = True
             cols = [c for c in ["form_family", "base_key", "year_start", "year_end"] if c in endow.columns]
-            print("\nCrosswalk BS_ENDOWMENT_FMV entries:")
+            print(f"\nCrosswalk {concept} entries:")
             if cols:
                 preview = endow[cols].drop_duplicates().sort_values(cols)
                 print(preview.to_string(index=False))
             fam_counts = endow["form_family"].value_counts(dropna=False)
             print("\nCounts by form_family:")
             print(fam_counts.to_string())
+        if not any_concepts:
+            print("No endowment concept rows present in filled crosswalk.")
 
     required_cols = {"form_family", "base_key"}
     if not required_cols.issubset(step0.columns):
@@ -824,30 +852,40 @@ def main() -> None:
     if unknown:
         print("WARNING: crosswalk contains concept_keys not in the schema:", sorted(unknown))
 
-    endow = cw[cw["concept_key"] == "BS_ENDOWMENT_FMV"]
-    if not endow.empty:
-        print("\nBS_ENDOWMENT_FMV mappings by form_family:")
-        print(endow["form_family"].value_counts(dropna=False))
+    endow_concepts = [
+        "BS_ENDOWMENT_FMV",
+        "FIN_ENDOW_ASSETS_BEGIN",
+        "FIN_ENDOW_ASSETS_END",
+        "FIN_ENDOW_NET_CHANGE",
+    ]
+    any_endowment = False
+    for concept in endow_concepts:
+        subset = cw[cw["concept_key"] == concept]
+        if subset.empty:
+            continue
+        any_endowment = True
+        print(f"\n{concept} mappings by form_family:")
+        print(subset["form_family"].value_counts(dropna=False))
         preview_cols = ["form_family", "base_key", "year_start", "year_end"]
-        preview_cols = [c for c in preview_cols if c in endow.columns]
+        preview_cols = [c for c in preview_cols if c in subset.columns]
         if preview_cols:
             preview = (
-                endow[preview_cols]
+                subset[preview_cols]
                 .drop_duplicates()
                 .sort_values(preview_cols)
                 .head(20)
             )
-            print("\nSample of BS_ENDOWMENT_FMV rows:")
+            print(f"\nSample of {concept} rows:")
             print(preview.to_string(index=False))
-    else:
-        print("\nWARNING: no BS_ENDOWMENT_FMV mappings found in crosswalk.")
+    if not any_endowment:
+        print("\nWARNING: no endowment mappings found in crosswalk.")
 
     mapped_nonblank = cw[cw["concept_key"].astype(str).str.strip().ne("")]
     if not mapped_nonblank.empty:
         _assert_no_overlaps(mapped_nonblank, ("form_family", "base_key", "concept_key"))
 
     ck_series = cw["concept_key"].astype(str).str.strip()
-    core_mask = cw["source_var"].astype(str).str.match(r"^F[123][BCDEH]", na=False)
+    core_mask = cw["source_var"].astype(str).str.match(CORE_SECTION_PATTERN.pattern, na=False)
     missing_mask = core_mask & (ck_series.eq("") | ck_series.str.lower().eq("nan"))
     if missing_mask.any():
         print("ERROR: Finance crosswalk still has core B/C/E/H rows without concept_key. Sample:")
