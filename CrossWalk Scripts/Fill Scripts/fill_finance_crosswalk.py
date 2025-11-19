@@ -138,7 +138,25 @@ SOURCE_VAR_CONCEPT_OVERRIDES = {
     "F1E09": "FIN_DISCOUNTS_AUXILIARY",
     "F1E10": "FIN_DISCOUNTS_TOTAL",
     "F1E11": "FIN_SCHOLARSHIPS_NET",
-    "F1E17": "FIN_DISCOUNTS_OTHER_INST_TOTAL",
+    # --- Scholarships & discounts by source (GASB F1E, Pell/federal/state/local/endowment/institutional) ---
+    "F1E12": "FIN_PELLGROSS_1_0",
+    "F1E121": "FIN_PELLTUIT_1_0",
+    "F1E122": "FIN_PELLAUX_1_0",
+    "F1E13": "FIN_OTHFEDSCH_1_0",
+    "F1E131": "FIN_OTHFEDTUIT_1_0",
+    "F1E132": "FIN_OTHFEDAUX_1_0",
+    "F1E14": "FIN_STGRSCH_1_0",
+    "F1E141": "FIN_STGRTUIT_1_0",
+    "F1E142": "FIN_STGRAUX_1_0",
+    "F1E15": "FIN_LCGRSCH_1_0",
+    "F1E151": "FIN_LCGRTUIT_1_0",
+    "F1E152": "FIN_LCGRAUX_1_0",
+    "F1E16": "FIN_ENDOW1_1_0",
+    "F1E161": "FIN_ENDOWTUIT_1_0",
+    "F1E162": "FIN_ENDOWAUX_1_0",
+    "F1E17": "FIN_INGRRESSCH_1_0",
+    "F1E171": "FIN_INGRTUIT_1_0",
+    "F1E172": "FIN_INGRAUX_1_0",
     # --- Endowment (GASB F1H) ---
     "F1H01": "FIN_ENDOW_ASSETS_BEGIN",
     "F1H02": "FIN_ENDOW_ASSETS_END",
@@ -168,6 +186,10 @@ SOURCE_VAR_CONCEPT_OVERRIDES = {
     "F3C07": "FIN_DISCOUNTS_AUXILIARY",
     "F3C08": "FIN_DISCOUNTS_TOTAL",
     "F3C17": "FIN_DISCOUNTS_OTHER_INST_TOTAL",
+    # --- Endowment spending distribution for current use ---
+    "F1H03C": "FIN_SPENDDIS",
+    "F2H03C": "FIN_SPENDDIS",
+    "F3H03C": "FIN_SPENDDIS",
     # --- Endowment (FASB / For-profit) ---
     "F2H01": "FIN_ENDOW_ASSETS_BEGIN",
     "F2H02": "FIN_ENDOW_ASSETS_END",
@@ -232,6 +254,27 @@ CONCEPTS = {
     "FIN_DISCOUNTS_TOTAL",
     "FIN_DISCOUNTS_OTHER_INST_TOTAL",
     "FIN_SCHOLARSHIPS_NET",
+    "FIN_PELLGROSS_1_0",
+    "FIN_PELLTUIT_1_0",
+    "FIN_PELLAUX_1_0",
+    "FIN_OTHFEDSCH_1_0",
+    "FIN_OTHFEDTUIT_1_0",
+    "FIN_OTHFEDAUX_1_0",
+    "FIN_STGRSCH_1_0",
+    "FIN_STGRTUIT_1_0",
+    "FIN_STGRAUX_1_0",
+    "FIN_LCGRSCH_1_0",
+    "FIN_LCGRTUIT_1_0",
+    "FIN_LCGRAUX_1_0",
+    "FIN_ENDOW1_1_0",
+    "FIN_ENDOWTUIT_1_0",
+    "FIN_ENDOWAUX_1_0",
+    "FIN_INGRRESSCH_1_0",
+    "FIN_INGRTUIT_1_0",
+    "FIN_INGRAUX_1_0",
+    "FIN_OTHTUIT_1_0",
+    "FIN_OTHAUX_1_0",
+    "FIN_SPENDDIS",
 }
 
 IGNORED_CONCEPTS = {
@@ -318,6 +361,163 @@ def _strip_str_cols(df: pd.DataFrame, cols: tuple[str, ...]) -> None:
             df[col] = df[col].apply(lambda v: v.strip() if isinstance(v, str) else v)
 
 
+def _build_var_type_map(dict_path: Path | str | None = None) -> dict[tuple[str, str, str], bool]:
+    """
+    Return a map of (form_family, survey, source_var) -> is_amount flag using dictionary_lake metadata.
+
+    We treat cross_sectional/vartable entries as numeric amount rows and tablesdoc/description entries as categorical.
+    """
+    dict_path = Path(dict_path) if dict_path else Path()
+    if not dict_path.exists():
+        print(f"WARNING: dictionary lake not found at {dict_path}; cannot infer amount types.")
+        return {}
+
+    cols = [
+        "form_family",
+        "source_var",
+        "survey",
+        "source",
+        "sheet_name",
+        "table_name",
+        "source_label_norm",
+        "label_norm",
+        "source_label",
+    ]
+    try:
+        df = pd.read_parquet(dict_path, columns=cols)
+    except Exception:
+        try:
+            df = pd.read_parquet(dict_path)
+        except Exception as exc:  # pragma: no cover - diagnostics
+            print(f"WARNING: failed to load dictionary lake {dict_path}: {exc}")
+            return {}
+
+    if df.empty:
+        return {}
+
+    needed = {"form_family", "source_var"}
+    df = df.dropna(subset=[col for col in needed if col in df.columns])
+
+    def _norm(val: str | None) -> str:
+        return val.strip() if isinstance(val, str) else ""
+
+    df["form_family"] = df["form_family"].apply(lambda v: _norm(v).upper())
+    df["source_var"] = df["source_var"].apply(lambda v: _norm(v).upper())
+    if "survey" in df.columns:
+        df["survey"] = df["survey"].apply(lambda v: _norm(v).upper())
+    else:
+        df["survey"] = ""
+
+    amount_terms = (
+        "revenue",
+        "revenues",
+        "expense",
+        "expenses",
+        "tuition",
+        "fees",
+        "allowance",
+        "allowances",
+        "scholarship",
+        "scholarships",
+        "fellowship",
+        "grants",
+        "contracts",
+        "investment",
+        "endowment",
+        "assets",
+        "liabilities",
+        "net",
+        "total",
+        "capital",
+        "operations",
+        "plant",
+        "hospital",
+        "auxiliary",
+        "independent",
+        "gift",
+        "contribution",
+        "discount",
+        "appropriation",
+    )
+    categorical_terms = (
+        "code",
+        "flag",
+        "indicator",
+        "status",
+        "category",
+        "categories",
+        "type",
+        "types",
+        "level",
+        "levels",
+        "percent",
+        "percentage",
+        "ratio",
+        "classification",
+        "yes/no",
+        "yes or no",
+        "imputation",
+    )
+    amount_sources = {"cross_sectional", "panel", "longitudinal"}
+    doc_sheet_terms = ("varlist", "description", "doc", "note")
+
+    def _looks_amount_label(text: str) -> bool:
+        return any(term in text for term in amount_terms)
+
+    def _looks_categorical_label(text: str) -> bool:
+        return any(term in text for term in categorical_terms)
+
+    def _looks_categorical_var(var: str) -> bool:
+        suffixes = ("CD", "C", "CAT", "TYPE", "TYP", "IND", "INDICATOR", "FLAG", "FLG", "STAT")
+        return any(var.endswith(suf) for suf in suffixes)
+
+    mapping: dict[tuple[str, str, str], bool] = {}
+    for _, row in df.iterrows():
+        fam = row["form_family"]
+        var = row["source_var"]
+        survey = row.get("survey", "")
+        if not fam or not var:
+            continue
+
+        source_kind = _norm(row.get("source")).lower()
+        sheet_name = _norm(row.get("sheet_name")).lower()
+        table_name = _norm(row.get("table_name")).lower()
+        label_text = (
+            _norm(row.get("source_label_norm"))
+            or _norm(row.get("label_norm"))
+            or _norm(row.get("source_label"))
+        ).lower()
+
+        doc_signal = source_kind == "tablesdoc"
+        if sheet_name and not doc_signal and source_kind not in amount_sources:
+            doc_signal = any(term in sheet_name for term in doc_sheet_terms)
+        amount_signal = (
+            (source_kind in amount_sources)
+            or (sheet_name.startswith("vartable") if sheet_name else False)
+            or (table_name.startswith("f") if table_name else False)
+            or _looks_amount_label(label_text)
+            or survey == "FIN"
+        )
+        if _looks_categorical_label(label_text) or _looks_categorical_var(var):
+            doc_signal = True
+
+        is_amount = amount_signal and not doc_signal
+
+        key = (fam, survey, var)
+        if key not in mapping:
+            mapping[key] = is_amount
+        else:
+            mapping[key] = mapping[key] or is_amount
+
+        generic_key = (fam, "", var)
+        if generic_key not in mapping:
+            mapping[generic_key] = is_amount
+        else:
+            mapping[generic_key] = mapping[generic_key] or is_amount
+
+    return mapping
+
+
 def assign_concept(label: str, form_family: str, base_key: str, source_var: str | None = None) -> str | None:
     """Heuristic mapping from source_label_norm to the conceptual schema."""
     source = (source_var or "").strip().upper()
@@ -342,6 +542,8 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         or ("endowment" in s and ("assets" in s or "funds" in s) and ("end of" in s or "at the end" in s))
     ):
         return "BS_ENDOWMENT_FMV"
+    if "spending distribution for current use" in s and "endowment" in s:
+        return "FIN_SPENDDIS"
 
     # INCOME STATEMENT TOTALS
     if (
@@ -381,6 +583,55 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
         or "net tuition and fees" in s
     ):
         return "REV_TUITION_NET"
+    # Scholarships / discounts by source: Pell, federal, state, local, endowment, institutional.
+    if "pell grants represents the gross amount of pell grants" in s:
+        return "FIN_PELLGROSS_1_0"
+    if "discounts and allowances from pell grants applied to tuition and fees" in s:
+        return "FIN_PELLTUIT_1_0"
+    if "discounts and allowances from pell grants applied to auxiliary enterprises" in s:
+        return "FIN_PELLAUX_1_0"
+    if (
+        "other federal awards are expenditures for scholarships and fellowships" in s
+        and "discounts and allowances" not in s
+    ):
+        return "FIN_OTHFEDSCH_1_0"
+    if "discounts and allowances from other federal grants applied to tuition and fees" in s:
+        return "FIN_OTHFEDTUIT_1_0"
+    if "discounts and allowances from other federal grants applied to auxiliary enterprises" in s:
+        return "FIN_OTHFEDAUX_1_0"
+    if (
+        "grants by state government includes expenditures for scholarships and fellowships" in s
+        and "discounts and allowances" not in s
+    ):
+        return "FIN_STGRSCH_1_0"
+    if "discounts and allowances from state government grants applied to tuition and fees" in s:
+        return "FIN_STGRTUIT_1_0"
+    if "discounts and allowances from state government grants applied to auxiliary enterprises" in s:
+        return "FIN_STGRAUX_1_0"
+    if (
+        "grants by local government includes expenditures for scholarships and fellowships" in s
+        and "discounts and allowances" not in s
+    ):
+        return "FIN_LCGRSCH_1_0"
+    if "discounts and allowances from local government grants applied to tuition and fees" in s:
+        return "FIN_LCGRTUIT_1_0"
+    if "discounts and allowances from local government grants applied to auxiliary enterprises" in s:
+        return "FIN_LCGRAUX_1_0"
+    if (
+        "endowments are funds whose principal is nonexpendable" in s
+        and "discounts and allowances" in s
+    ):
+        return "FIN_ENDOW1_1_0"
+    if "discounts and allowances from endowments and gifts applied to tuition and fees" in s:
+        return "FIN_ENDOWTUIT_1_0"
+    if "discounts and allowances from endowments and gifts applied to auxiliary enterprises" in s:
+        return "FIN_ENDOWAUX_1_0"
+    if "institutional grants from restricted sources are expenditures for scholarships and fellowships" in s:
+        return "FIN_INGRRESSCH_1_0"
+    if "discounts and allowances from other institutional sources applied to tuition and fees" in s:
+        return "FIN_INGRTUIT_1_0"
+    if "discounts and allowances from other institutional sources applied to auxiliary enterprises" in s:
+        return "FIN_INGRAUX_1_0"
     if (
         "scholarship allowances" in s
         or "discounts and allowances" in s
@@ -484,7 +735,12 @@ def _collapse_block(block: pd.DataFrame, year_start: int, year_end: int) -> dict
 
     vars_raw: list[str] = []
     if "source_var" in block.columns:
-        for v in block["source_var"].dropna():
+        amount_rows = block
+        if "is_amount" in block.columns:
+            amount_rows = block[block["is_amount"].eq(True)]
+        if amount_rows.empty:
+            amount_rows = block
+        for v in amount_rows["source_var"].dropna():
             vars_raw.extend(str(v).split(";"))
     source_vars = sorted(set(v.strip() for v in vars_raw if v.strip()))
     source_var_val = ";".join(source_vars) if source_vars else first.get("source_var", "")
@@ -806,6 +1062,31 @@ def main() -> None:
             return _is_relevant_component(row.get("form_family"), row.get("section"))
 
         cw = cw[cw.apply(_is_relevant_component_row, axis=1)].reset_index(drop=True)
+
+    var_type_map = _build_var_type_map(DICTIONARY_LAKE)
+    if var_type_map:
+        def _row_is_amount(row: pd.Series) -> bool:
+            fam = (row.get("form_family") or "").strip().upper()
+            survey = (row.get("survey") or "").strip().upper()
+            raw = row.get("source_var")
+            if not fam or not isinstance(raw, str) or not raw.strip():
+                return False
+            parts = [p.strip().upper() for p in raw.split(";") if p.strip()]
+            if not parts:
+                return False
+            for part in parts:
+                key = (fam, survey, part)
+                if key in var_type_map and var_type_map[key]:
+                    return True
+                generic = (fam, "", part)
+                if generic in var_type_map and var_type_map[generic]:
+                    return True
+            return False
+
+        cw["is_amount"] = cw.apply(_row_is_amount, axis=1)
+    else:
+        print("WARNING: Unable to determine amount types; defaulting all rows to is_amount=True.")
+        cw["is_amount"] = True
     bad_range = cw["year_start"] > cw["year_end"]
     if bad_range.any():
         print("ERROR: Finance crosswalk has rows with year_start > year_end.")
@@ -829,7 +1110,13 @@ def main() -> None:
     cw["concept_key"] = cw["concept_key"].astype("string")
 
     mask_blank = cw["concept_key"].isna() | (cw["concept_key"].astype(str).str.strip() == "")
-    cw.loc[mask_blank, "concept_key"] = cw.loc[mask_blank].apply(
+    amount_mask = (
+        cw["is_amount"]
+        if "is_amount" in cw.columns
+        else pd.Series(True, index=cw.index)
+    )
+    mask_to_fill = mask_blank & amount_mask
+    cw.loc[mask_to_fill, "concept_key"] = cw.loc[mask_to_fill].apply(
         lambda r: assign_concept(
             r.get("source_label_norm"),
             r.get("form_family"),
@@ -910,7 +1197,13 @@ def main() -> None:
 
     ck_series = cw["concept_key"].astype(str).str.strip()
     core_mask = cw["source_var"].astype(str).str.match(CORE_SECTION_PATTERN.pattern, na=False)
-    missing_mask = core_mask & (ck_series.eq("") | ck_series.str.lower().eq("nan"))
+    amount_mask = (
+        cw["is_amount"]
+        if "is_amount" in cw.columns
+        else pd.Series(True, index=cw.index)
+    )
+    core_amount_mask = core_mask & amount_mask
+    missing_mask = core_amount_mask & (ck_series.eq("") | ck_series.str.lower().eq("nan"))
     if missing_mask.any():
         print("ERROR: Finance crosswalk still has core B/C/E/H rows without concept_key. Sample:")
         print(cw.loc[missing_mask, ["form_family", "source_var", "base_key", "year_start", "year_end", "source_label_norm"]].head(10).to_string(index=False))
