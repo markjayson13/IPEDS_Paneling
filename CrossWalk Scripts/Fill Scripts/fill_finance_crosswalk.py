@@ -399,20 +399,11 @@ def _build_var_type_map(dict_path: Path | str | None = None) -> dict[tuple[str, 
     """
     Return a map of (form_family, survey, source_var) -> is_amount flag using dictionary_lake metadata.
 
-    We treat cross_sectional/vartable entries as numeric amount rows and tablesdoc/description entries as categorical.
+    We treat cross_sectional/vartable entries as numeric amount rows and tablesdoc/value-code entries as categorical.
     """
     dict_path = Path(dict_path) if dict_path else Path()
     if not dict_path.exists():
         print(f"WARNING: dictionary lake not found at {dict_path}; cannot infer amount types.")
-        return {}
-
-    try:
-        df = pd.read_parquet(dict_path)
-    except Exception as exc:  # pragma: no cover - diagnostics
-        print(f"WARNING: failed to load dictionary lake {dict_path}: {exc}")
-        return {}
-
-    if df.empty:
         return {}
 
     cols_needed = [
@@ -425,7 +416,22 @@ def _build_var_type_map(dict_path: Path | str | None = None) -> dict[tuple[str, 
         "source_label_norm",
         "label_norm",
         "source_label",
+        "code_norm",
+        "value",
+        "data_filename",
     ]
+    try:
+        df = pd.read_parquet(dict_path, columns=cols_needed)
+    except Exception:
+        try:
+            df = pd.read_parquet(dict_path)
+        except Exception as exc:  # pragma: no cover - diagnostics
+            print(f"WARNING: failed to load dictionary lake {dict_path}: {exc}")
+            return {}
+
+    if df.empty:
+        return {}
+
     available = [c for c in cols_needed if c in df.columns]
     if not available:
         print("WARNING: dictionary lake missing required columns to infer amount types.")
@@ -444,6 +450,10 @@ def _build_var_type_map(dict_path: Path | str | None = None) -> dict[tuple[str, 
         df["survey"] = df["survey"].apply(lambda v: _norm(v).upper())
     else:
         df["survey"] = ""
+    if "code_norm" in df.columns:
+        df["code_norm"] = df["code_norm"].fillna("").astype(str).str.strip()
+    else:
+        df["code_norm"] = ""
 
     amount_terms = (
         "revenue",
@@ -496,7 +506,7 @@ def _build_var_type_map(dict_path: Path | str | None = None) -> dict[tuple[str, 
         "imputation",
     )
     amount_sources = {"cross_sectional", "panel", "longitudinal"}
-    doc_sheet_terms = ("varlist", "description", "doc", "note")
+    doc_sheet_terms = ("description", "doc", "note")
 
     def _looks_amount_label(text: str) -> bool:
         return any(term in text for term in amount_terms)
@@ -524,6 +534,21 @@ def _build_var_type_map(dict_path: Path | str | None = None) -> dict[tuple[str, 
             or _norm(row.get("label_norm"))
             or _norm(row.get("source_label"))
         ).lower()
+        code_norm = _norm(row.get("code_norm"))
+        value_text = _norm(row.get("value")).lower()
+        data_filename = _norm(row.get("data_filename")).lower()
+
+        value_table_signal = False
+        if source_kind.startswith("value"):
+            value_table_signal = True
+        if sheet_name and any(term in sheet_name for term in ("valuelabel", "value label")):
+            value_table_signal = True
+        if data_filename and "valuelabel" in data_filename:
+            value_table_signal = True
+        if value_text:
+            value_table_signal = True
+        if code_norm and code_norm.upper() != var:
+            value_table_signal = True
 
         doc_signal = source_kind == "tablesdoc"
         if sheet_name and not doc_signal and source_kind not in amount_sources:
@@ -536,6 +561,8 @@ def _build_var_type_map(dict_path: Path | str | None = None) -> dict[tuple[str, 
             or survey == "FIN"
         )
         if _looks_categorical_label(label_text) or _looks_categorical_var(var):
+            doc_signal = True
+        if value_table_signal:
             doc_signal = True
 
         is_amount = amount_signal and not doc_signal
@@ -590,7 +617,19 @@ def assign_concept(label: str, form_family: str, base_key: str, source_var: str 
     ):
         return "IS_REVENUES_TOTAL"
     if "total expenses" in s or "total operating expenses" in s:
-        return "IS_EXPENSES_TOTAL"
+        detail_disqualifiers = (
+            "salaries",
+            "wages",
+            "benefits",
+            "depreciation",
+            "all other",
+            "interest",
+            "operation and maintenance",
+            "natural classification",
+            "by function",
+        )
+        if not any(term in s for term in detail_disqualifiers):
+            return "IS_EXPENSES_TOTAL"
 
     # REVENUES: TUITION, DISCOUNTS, AUXILIARY, ETC.
     tuition_phrases = (
@@ -792,6 +831,10 @@ def _collapse_block(block: pd.DataFrame, year_start: int, year_end: int) -> dict
     source_vars = sorted(set(v.strip() for v in vars_raw if v.strip()))
     source_var_val = ";".join(source_vars) if source_vars else first.get("source_var", "")
 
+    is_amount_val = True
+    if "is_amount" in block.columns:
+        is_amount_val = bool(block["is_amount"].eq(True).any())
+
     source_label = _first_nonempty(block.get("source_label", pd.Series(dtype=object)))
     source_label_norm = _first_nonempty(block.get("source_label_norm", pd.Series(dtype=object)))
 
@@ -812,6 +855,7 @@ def _collapse_block(block: pd.DataFrame, year_start: int, year_end: int) -> dict
         "source_label_norm": source_label_norm,
         "weight": first.get("weight", 1.0),
         "notes": notes_val,
+        "is_amount": is_amount_val,
     }
 
 
@@ -1177,6 +1221,32 @@ def main() -> None:
 
     print("concept_key counts after auto-fill:")
     print(cw["concept_key"].value_counts(dropna=True).head(40))
+
+    if "is_amount" in cw.columns:
+        non_amount_with_concept = cw[
+            (cw["is_amount"] == False)
+            & cw["concept_key"].astype(str).str.strip().ne("")
+        ]
+        if not non_amount_with_concept.empty:
+            print(
+                f"[WARN] Clearing concept_key on {len(non_amount_with_concept)} non-amount rows to avoid mislabeling categorical variables."
+            )
+            print("\n[DEBUG] Sample non-amount rows that had concepts before clearing:")
+            cols = [
+                "form_family",
+                "base_key",
+                "year_start",
+                "year_end",
+                "survey",
+                "source_var",
+                "source_label",
+                "source_label_norm",
+                "concept_key",
+            ]
+            sample_cols = [c for c in cols if c in non_amount_with_concept.columns]
+            if sample_cols:
+                print(non_amount_with_concept[sample_cols].head(12).to_string(index=False))
+            cw.loc[non_amount_with_concept.index, "concept_key"] = ""
 
     filled = sorted(
         c
