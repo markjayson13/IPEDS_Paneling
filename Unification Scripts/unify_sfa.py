@@ -20,6 +20,9 @@ PANEL_WIDE_RAW = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled
 BASE_STEP0_SFA_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0sfa")
 BASE_SFA_LONG_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAlong")
 DEFAULT_DICTIONARY_LAKE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
+DEFAULT_SFA_CROSSWALK = Path(
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/sfa_crosswalk_filled.csv"
+)
 
 
 def _resolve_dict_columns(df: pd.DataFrame, candidates: Iterable[str], required: bool = True) -> str | None:
@@ -94,6 +97,8 @@ def build_long_panel(
     unitid_col: str,
     year_col: str,
     sfa_var_whitelist: list[str] | None = None,
+    crosswalk_allowed: set[str] | None = None,
+    explicit_allowed: set[str] | None = None,
 ) -> pd.DataFrame:
     id_cols = [unitid_col, year_col]
     if sfa_var_whitelist:
@@ -102,6 +107,25 @@ def build_long_panel(
     else:
         sfa_cols = identify_sfa_columns(df.columns, id_cols)
         logging.info("Using regex-based SFA detection for SFA cols (%d columns).", len(sfa_cols))
+
+    if crosswalk_allowed is not None:
+        before = len(sfa_cols)
+        sfa_cols = [c for c in sfa_cols if str(c).upper() in crosswalk_allowed]
+        logging.info(
+            "Applied crosswalk whitelist to SFA cols: %d -> %d columns retained.",
+            before,
+            len(sfa_cols),
+        )
+
+    if explicit_allowed is not None:
+        before = len(sfa_cols)
+        sfa_cols = [c for c in sfa_cols if str(c).upper() in explicit_allowed]
+        logging.info(
+            "Applied explicit care-vars whitelist to SFA cols: %d -> %d columns retained.",
+            before,
+            len(sfa_cols),
+        )
+
     if not sfa_cols:
         logging.warning("No SFA columns remain after applying filters; returning empty panel.")
         empty = pd.DataFrame(columns=[unitid_col, year_col, "source_var", "value"])
@@ -146,6 +170,17 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_DICTIONARY_LAKE,
         help="Optional path to dictionary_lake.parquet to refine SFA variable selection.",
     )
+    parser.add_argument(
+        "--crosswalk",
+        type=Path,
+        default=DEFAULT_SFA_CROSSWALK,
+        help="Optional path to filled SFA crosswalk to whitelist source_vars.",
+    )
+    parser.add_argument(
+        "--care-vars-file",
+        type=Path,
+        help="Optional text file listing SFA source_var names to keep (one per line).",
+    )
     parser.add_argument("--unitid-col", type=str, default="UNITID", help="UNITID column name in the wide panel.")
     parser.add_argument("--year-col", type=str, default="YEAR", help="Year column name in the wide panel.")
     return parser.parse_args()
@@ -157,6 +192,33 @@ def main() -> None:
 
     if not args.input_wide.exists():
         raise FileNotFoundError(f"Wide panel not found: {args.input_wide}")
+
+    crosswalk_allowed: set[str] | None = None
+    explicit_allowed: set[str] | None = None
+    if args.crosswalk and args.crosswalk.exists():
+        try:
+            cw = pd.read_csv(args.crosswalk)
+            if "source_var" in cw.columns:
+                vals: set[str] = set()
+                for raw in cw["source_var"].dropna():
+                    for part in str(raw).split(";"):
+                        part = part.strip().upper()
+                        if part:
+                            vals.add(part)
+                crosswalk_allowed = vals
+                logging.info("Loaded SFA crosswalk whitelist with %d source_vars.", len(crosswalk_allowed))
+            else:
+                logging.warning("Crosswalk %s missing source_var column; skipping whitelist.", args.crosswalk)
+        except Exception as exc:  # pragma: no cover - defensive
+            logging.warning("Failed to load SFA crosswalk whitelist %s: %s", args.crosswalk, exc)
+
+    if args.care_vars_file and args.care_vars_file.exists():
+        try:
+            raw = args.care_vars_file.read_text().splitlines()
+            explicit_allowed = {line.strip().upper() for line in raw if line.strip()}
+            logging.info("Loaded explicit care-vars whitelist with %d entries.", len(explicit_allowed))
+        except Exception as exc:  # pragma: no cover - defensive
+            logging.warning("Failed to load care-vars file %s: %s", args.care_vars_file, exc)
 
     logging.info("Loading wide panel: %s", args.input_wide)
     panel_df = load_wide_panel(args.input_wide)
@@ -192,6 +254,8 @@ def main() -> None:
         unitid_col,
         year_col,
         sfa_var_whitelist=sfa_var_whitelist,
+        crosswalk_allowed=crosswalk_allowed,
+        explicit_allowed=explicit_allowed,
     )
     logging.info("Long SFA rows: %d", len(long_df))
 

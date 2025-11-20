@@ -27,6 +27,40 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+DROP_LATE_INTRO_COLS = {
+    # ICAY: alternative tuition payment plan fields introduced mid-period
+    "ICAY__ICAY_ALTPLAN_ANY",
+    "ICAY__ICAY_ALTPLAN_GUARANTEE",
+    "ICAY__ICAY_ALTPLAN_OTHER",
+    "ICAY__ICAY_ALTPLAN_PAYMENT",
+    "ICAY__ICAY_ALTPLAN_PREPAID",
+    # ICAY: professional tuition variance (late intro)
+    "ICAY__ICAY_TUIT_PROF_FT_VAR_DOCPPSP",
+    # SFA: late-introduced grant/loan variants
+    "SFA__SFA_VAR_AGRNT_A",
+    "SFA__SFA_VAR_AGRNT_N",
+    "SFA__SFA_VAR_AGRNT_P",
+    "SFA__SFA_VAR_AGRNT_T",
+    "SFA__SFA_VAR_FGRNT_T",
+    "SFA__SFA_VAR_FLOAN_A",
+    "SFA__SFA_VAR_FLOAN_N",
+    "SFA__SFA_VAR_FLOAN_P",
+    "SFA__SFA_VAR_FLOAN_T",
+    # SFA: GIS4A series introduced mid-period
+    "SFA__SFA_VAR_GIS4A0",
+    "SFA__SFA_VAR_GIS4A10",
+}
+
+def _is_sfa_flag(col: str) -> bool:
+    """Return True for SFA flag/indicator columns we want to drop."""
+    if not isinstance(col, str):
+        return False
+    if not col.startswith("SFA__"):
+        return False
+    upper = col.upper()
+    return "_FLAG" in upper or upper.endswith("_IND") or upper.endswith("_STATUS")
+
+
 # HD variables to retain in the analysis panel
 KEEP_HD_COLS = [
     # Stable identity/grouping
@@ -117,6 +151,14 @@ def main() -> None:
     df = pd.read_csv(args.input)
     cols = list(df.columns)
 
+    drop_cols = set(DROP_LATE_INTRO_COLS)
+    sfa_flag_drops = [c for c in cols if _is_sfa_flag(c)]
+    drop_cols.update(sfa_flag_drops)
+
+    present_drops = [c for c in drop_cols if c in cols]
+    if present_drops:
+        print(f"[INFO] Dropping {len(present_drops)} columns for balance/flags: {present_drops}")
+
     # Always retain key identifiers so downstream grouping logic keeps working
     base_keep = []
     for key in ["UNITID", "YEAR"]:
@@ -130,16 +172,18 @@ def main() -> None:
 
     # Keep non-prefixed columns (anything without "__")
     for c in cols:
-        if "__" not in c:
+        if "__" not in c and c not in drop_cols:
             keep_cols.add(c)
 
     # HD pruning: only keep curated HD columns
     for c in cols:
-        if c.startswith("HD__") and c in KEEP_HD_COLS:
+        if c.startswith("HD__") and c in KEEP_HD_COLS and c not in drop_cols:
             keep_cols.add(c)
 
     # Keep all other prefixed components untouched for now
     for c in cols:
+        if c in drop_cols:
+            continue
         if c.startswith(("EF__", "SFA__", "FIN__", "ADM__", "ICAY__")):
             keep_cols.add(c)
         elif "__" in c and not c.startswith("HD__"):
