@@ -155,7 +155,8 @@ ENROLL_WIDE="$PARQUETS/Unify/Enrollwide/enrollment_concepts_wide.parquet"
 HD_CROSSWALK="$FILLED_CROSSWALKS/hd_crosswalk.csv"
 ENROLL_CROSSWALK="$FILLED_CROSSWALKS/enrollment_crosswalk_autofilled.csv"
 SFA_CROSSWALK="$FILLED_CROSSWALKS/sfa_crosswalk_filled.csv"
-FINANCE_CROSSWALK="$FILLED_CROSSWALKS/finance_crosswalk_filled.csv"
+FINANCE_CROSSWALK_FULL="$FILLED_CROSSWALKS/finance_crosswalk_filled.csv"
+FINANCE_CROSSWALK="$FILLED_CROSSWALKS/finance_crosswalk_core_only.csv"
 ICAY_CROSSWALK="$FILLED_CROSSWALKS/ic_ay_crosswalk_all.csv"
 ADMISSIONS_STEP0="$PARQUETS/Unify/Step0adm/adm_step0_long.parquet"
 SFA_STEP0="$PARQUETS/Unify/Step0sfa/sfa_step0_long.parquet"
@@ -225,6 +226,18 @@ python3 "CrossWalk Scripts/Fill Scripts/fill_ic_ay_crosswalk_all.py" --overwrite
 python3 "CrossWalk Scripts/Fill Scripts/auto_fill_sfa_crosswalk.py"
 python3 "CrossWalk Scripts/Fill Scripts/autofill_enrollment_crosswalk_core.py"
 python3 "CrossWalk Scripts/Fill Scripts/fill_finance_crosswalk.py"
+python3 - <<'PY'
+import pandas as pd
+from pathlib import Path
+full = Path("$FINANCE_CROSSWALK_FULL")
+core = Path("$FINANCE_CROSSWALK")
+df = pd.read_csv(full)
+mask = ~df["concept_key"].astype(str).str.contains("UNRESTRICTED|TEMP_RESTRICTED|PERM_RESTRICTED", na=False)
+df_core = df[mask]
+core.parent.mkdir(parents=True, exist_ok=True)
+df_core.to_csv(core, index=False)
+print(f"[INFO] Filtered finance crosswalk to core concepts: kept {len(df_core)}/{len(df)} rows at {core}")
+PY
 
 require_file "$HD_CROSSWALK" "HD crosswalk"
 require_file "$ICAY_CROSSWALK" "ICAY crosswalk"
@@ -274,4 +287,4 @@ python3 panel_prune_analysis.py \
 
 echo "Done."
 
-echo "Cleanup: Harmonize scripts (step 5) edits"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      qqqqqaa
+echo "Cleanup: Harmonize scripts (step 5) edits"
