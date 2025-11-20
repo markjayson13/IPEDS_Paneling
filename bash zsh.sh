@@ -288,3 +288,10 @@ python3 panel_prune_analysis.py \
 echo "Done."
 
 echo "Cleanup: Harmonize scripts (step 5) edits"
+
+ADM__ADM_SAT_EBRW_25_PCT_NEW can be integrated to ADM__ADM_SAT_CR_25_PCT_OLD
+ADM__ADM_SAT_EBRW_75_PCT_NEW can be integrated to ADM__ADM_SAT_CR_75_PCT_OLD
+ADM__ADM_SAT_MATH_25_PCT_NEW can be integrated to ADM__ADM_SAT_MATH_25_PCT_OLD
+ADM__ADM_SAT_MATH_75_PCT_NEW can be integrated to ADM__ADM_SAT_MATH_75_PCT_OLD
+ADM__ADM_SAT_WRIT_25_PCT_OLD can be integrated to ADM__ADM_SAT_WRIT_25_PCT_NEW
+ADM__ADM_SAT_WRIT_75_PCT_OLD can be integrated to ADM__ADM_SAT_WRIT_75_PCT_NEW

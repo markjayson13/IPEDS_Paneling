@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -15,14 +16,28 @@ CROSSWALK_UNIFIED = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/sfa_crosswalk_unified.csv"
 )
 
+FORM_FAMILY_PREFIXES = ("GIS4", "GRN4", "GIST", "GRNT", "NPGRN", "NPIST")
 
-def starts_with_any(text: str, prefixes: set[str]) -> bool:
-    return any(text.startswith(p) for p in prefixes)
+
+def make_label_slug(label: str) -> str:
+    s = str(label or "").upper()
+    s = re.sub(r",\s*\d{4}-\d{2}\s*$", "", s)
+    s = re.sub(r"\s+", " ", s)
+    return s.strip()
+
+
+def make_concept_slug(label_slug: str) -> str | None:
+    base = re.sub(r"[^A-Z0-9 ]", "", label_slug)
+    tokens = base.split()
+    tokens = tokens[:7]
+    if not tokens:
+        return None
+    return "SFA_" + "_".join(tokens)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Unify SFA crosswalk concepts across reporter types and income bands."
+        description="Unify SFA crosswalk concepts across reporter types and income bands using labels."
     )
     parser.add_argument("--input", type=Path, default=CROSSWALK_FILLED, help="Filled SFA crosswalk CSV")
     parser.add_argument("--output", type=Path, default=CROSSWALK_UNIFIED, help="Unified SFA crosswalk CSV")
@@ -35,85 +50,57 @@ def main() -> None:
     logging.basicConfig(level=getattr(logging, args.log_level), format="%(levelname)s %(message)s")
 
     df = pd.read_csv(args.input)
-    # Normalize
+
+    required = {"source_var", "concept_key", "label"}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(f"Missing required columns in SFA crosswalk: {sorted(missing)}")
+
     df["source_var"] = df["source_var"].astype(str).str.strip().str.upper()
-    df["concept_key"] = df["concept_key"].astype(str).str.strip()
+    df["concept_key"] = df["concept_key"].astype("object").astype(str).str.strip()
+    df["label"] = df["label"].astype(str)
 
     df["concept_key_raw"] = df["concept_key"]
     df["concept_key_unified"] = df["concept_key"]
+    df["label_slug"] = df["label"].apply(make_label_slug)
 
-    # Layer 1: Any aid (count and percent)
+    # Layer 1: AIDFS vs ANYAID (any aid)
     anyaid_n = {"AIDFSIN", "ANYAIDN"}
     anyaid_p = {"AIDFSIP", "ANYAIDP"}
-    mask_n = df["source_var"].isin(anyaid_n)
-    df.loc[mask_n, "concept_key_unified"] = "SFA_FTFT_N_ANY_AID"
-    mask_p = df["source_var"].isin(anyaid_p)
-    df.loc[mask_p, "concept_key_unified"] = "SFA_FTFT_PCT_ANY_AID"
+    df.loc[df["source_var"].isin(anyaid_n), "concept_key_unified"] = "SFA_FTFT_N_ANY_AID"
+    df.loc[df["source_var"].isin(anyaid_p), "concept_key_unified"] = "SFA_FTFT_PCT_ANY_AID"
 
-    # Layer 2: SCFA vs SCFY cohorts
-    scfa_scfy_groups = {
-        "SFA_COHORT_N_GROUP1": {"SCFA1N", "SCFY1N"},
-        "SFA_COHORT_N_GROUP2": {"SCFA2", "SCFY2"},
-        "SFA_COHORT_N_GROUP3": {"SCFA11N", "SCFY11N"},
-        "SFA_COHORT_N_GROUP4": {"SCFA12N", "SCFY12N"},
+    # Layer 2: SCFA vs SCFY (academic vs program reporters)
+    scfa_scfy_map = {
+        "SFA_COHORT_N_ALL_UG": {"SCFA1N", "SCFY1N"},
+        "SFA_COHORT_N_FTFT": {"SCFA2", "SCFY2"},
+        "SFA_COHORT_N_GRANT": {"SCFA11N", "SCFY11N"},
+        "SFA_COHORT_N_TIV": {"SCFA12N", "SCFY12N"},
     }
-    for concept_name, varset in scfa_scfy_groups.items():
+    for concept_name, varset in scfa_scfy_map.items():
         mask = df["source_var"].isin(varset)
         df.loc[mask, "concept_key_unified"] = concept_name
 
-    # Layer 3.1: Counts by income band
-    band_counts = {
-        "SFA_N_STUDENTS_INC_0_30K": {"GRN4N1", "GRN4N10", "GRN4N11", "GRN4N12"},
-        "SFA_N_STUDENTS_INC_30_48K": {"GRN4N2", "GRN4N20", "GRN4N21", "GRN4N22"},
-        "SFA_N_STUDENTS_INC_48_75K": {"GRN4N3", "GRN4N30", "GRN4N31", "GRN4N32"},
-        "SFA_N_STUDENTS_INC_75_110K": {"GRN4N4", "GRN4N40", "GRN4N41", "GRN4N42"},
-        "SFA_N_STUDENTS_INC_110K_PLUS": {"GRN4N5", "GRN4N50", "GRN4N51", "GRN4N52"},
-    }
-    for concept_name, varset in band_counts.items():
-        mask = df["source_var"].isin(varset)
-        df.loc[mask, "concept_key_unified"] = concept_name
+    # Layer 3: label-based unification for sector/form variants (GIS4/GRN4/GIST/GRNT/NPGRN/NPIST)
+    family_mask = df["source_var"].str.startswith(FORM_FAMILY_PREFIXES)
+    raw_like_mask = df["concept_key_unified"].str.startswith("SFA_VAR_")
+    family_df = df[family_mask & raw_like_mask].copy()
 
-    # Layer 3.2: Average grant by income band
-    band_avg_grant = {
-        "SFA_AVG_GRANT_INC_0_30K": {"GIS4A1", "GIS4A10", "GIS4A11", "GIS4A12"},
-        "SFA_AVG_GRANT_INC_30_48K": {"GIS4A2", "GIS4A20", "GIS4A21", "GIS4A22"},
-        "SFA_AVG_GRANT_INC_48_75K": {"GIS4A3", "GIS4A30", "GIS4A31", "GIS4A32"},
-        "SFA_AVG_GRANT_INC_75_110K": {"GIS4A4", "GIS4A40", "GIS4A41", "GIS4A42"},
-        "SFA_AVG_GRANT_INC_110K_PLUS": {"GIS4A5", "GIS4A50", "GIS4A51", "GIS4A52"},
-    }
-    for concept_name, varset in band_avg_grant.items():
-        mask = df["source_var"].isin(varset)
-        df.loc[mask, "concept_key_unified"] = concept_name
-
-    # Layer 3.3: Net price by income band (pattern-based)
-    band_net_price_prefixes = {
-        "SFA_AVG_NET_PRICE_INC_0_30K": {"NPT41"},
-        "SFA_AVG_NET_PRICE_INC_30_48K": {"NPT42"},
-        "SFA_AVG_NET_PRICE_INC_48_75K": {"NPT43"},
-        "SFA_AVG_NET_PRICE_INC_75_110K": {"NPT44"},
-        "SFA_AVG_NET_PRICE_INC_110K_PLUS": {"NPT45"},
-    }
-    src_series = df["source_var"].astype(str)
-    for concept_name, prefixes in band_net_price_prefixes.items():
-        mask = src_series.apply(lambda v: starts_with_any(v, prefixes))
-        df.loc[mask, "concept_key_unified"] = concept_name
-
-    # Unify legacy NET_PRICE_AVG_INC_* concept names into the SFA_AVG_NET_PRICE_* equivalents
-    net_price_suffixes = [
-        "0_30K",
-        "30_48K",
-        "48_75K",
-        "75_110K",
-        "110K_PLUS",
-    ]
-    key_remap = {
-        f"NET_PRICE_AVG_INC_{suf}": f"SFA_AVG_NET_PRICE_INC_{suf}"
-        for suf in net_price_suffixes
-    }
-    df["concept_key_unified"] = df["concept_key_unified"].replace(key_remap)
+    for label_slug, grp in family_df.groupby("label_slug"):
+        idx = grp.index
+        current = grp["concept_key_unified"].unique()
+        nonraw = [c for c in current if not c.startswith("SFA_VAR_") and c.strip()]
+        if len(nonraw) == 1:
+            canonical = nonraw[0]
+        elif len(nonraw) > 1:
+            canonical = sorted(nonraw)[0]
+        else:
+            canonical = make_concept_slug(label_slug)
+        if canonical:
+            df.loc[idx, "concept_key_unified"] = canonical
 
     df["concept_key"] = df["concept_key_unified"]
-    df = df.drop(columns=["concept_key_unified"])
+    df.drop(columns=["concept_key_unified"], inplace=True)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(args.output, index=False)
@@ -122,6 +109,7 @@ def main() -> None:
     print(f"Unified rows: {len(df)}")
     print(f"Distinct source_var: {nonempty['source_var'].nunique()}")
     print(f"Distinct concept_key: {nonempty['concept_key'].nunique()}")
+    print("Distinct concept_key per source_var (nunique distribution):")
     print(nonempty.groupby("source_var")["concept_key"].nunique().value_counts().head(10))
 
 
