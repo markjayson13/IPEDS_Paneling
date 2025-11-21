@@ -29,6 +29,9 @@ def resolve_column(df: pd.DataFrame, preferred: str, fallbacks: Iterable[str]) -
 def expand_crosswalk(crosswalk: pd.DataFrame) -> pd.DataFrame:
     cw = crosswalk.copy()
     cw = cw.dropna(subset=["source_var"])
+    # Normalize concept_key and drop blank/NaN concepts
+    cw["concept_key"] = cw["concept_key"].astype(str)
+    cw = cw[cw["concept_key"].str.strip().ne("") & cw["concept_key"].str.lower().ne("nan")]
     cw["weight"] = pd.to_numeric(cw.get("weight", 1.0), errors="coerce").fillna(1.0)
     cw["year_start"] = pd.to_numeric(cw.get("year_start"), errors="coerce")
     cw["year_end"] = pd.to_numeric(cw.get("year_end"), errors="coerce")

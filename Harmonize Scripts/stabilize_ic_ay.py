@@ -33,8 +33,9 @@ def _prepare_crosswalk(path: Path) -> pd.DataFrame:
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"Crosswalk missing required columns: {sorted(missing)}")
+    df = df.dropna(subset=["concept_key", "source_var"])
     df["concept_key"] = df["concept_key"].astype(str).str.strip()
-    df = df[df["concept_key"] != ""].copy()
+    df = df[df["concept_key"].str.lower().ne("nan") & df["concept_key"].ne("")]
     if df.empty:
         raise ValueError("Crosswalk has no populated concept_key rows.")
     df["survey"] = df["survey"].astype(str).str.upper()
@@ -232,55 +233,20 @@ def stabilize_ic_ay(
             "labels are aligned with actual IC_AY variables."
         )
 
-    has_price = merged["concept_key"].astype(str).str.upper().str.startswith("PRICE_").any()
-    if not has_price:
-        print(
-            "WARNING: No concept_key values starting with 'PRICE_' in merged data. "
-            "Applying hard-coded CHG/TUITION/FEE mapping fallback."
-        )
-        HARD_MAP = {
-            "CHG1": "PRICE_TUITFEE_IN_DISTRICT_FTFTUG",
-            "CHG2": "PRICE_TUITFEE_IN_STATE_FTFTUG",
-            "CHG3": "PRICE_TUITFEE_OUT_STATE_FTFTUG",
-            "CHG4": "PRICE_BOOK_SUPPLY_FTFTUG",
-            "CHG5": "PRICE_RMBD_ON_CAMPUS_FTFTUG",
-            "TUITION1": "UG_TUIT_IN_DISTRICT_FULLTIME_AVG",
-            "TUITION2": "UG_TUIT_IN_STATE_FULLTIME_AVG",
-            "TUITION3": "UG_TUIT_OUT_STATE_FULLTIME_AVG",
-            "FEE1": "UG_FEE_IN_DISTRICT_FULLTIME_AVG",
-            "FEE2": "UG_FEE_IN_STATE_FULLTIME_AVG",
-            "FEE3": "UG_FEE_OUT_STATE_FULLTIME_AVG",
-        }
-
-        def map_var_to_concept(var: str) -> str | None:
-            v = str(var).upper().strip()
-            for base, key in HARD_MAP.items():
-                if v.startswith(base):
-                    return key
-            return None
-
-        mapped_concepts = merged["varname"].map(map_var_to_concept)
-        fill_mask = mapped_concepts.notna()
-        merged.loc[fill_mask, "concept_key"] = mapped_concepts[fill_mask]
-        merged["concept_key"] = merged["concept_key"].astype(str).str.strip()
-        before = len(merged)
-        merged = merged[merged["concept_key"] != ""].copy()
-        after = len(merged)
-        print(f"Hard fallback mapping applied. Removed {before - after} rows with unmapped CHG/TUITION/FEE vars.")
-
     merged = merged[["unitid", "year", "concept_key", "value"]]
     merged["unitid"] = merged["unitid"].astype("int64")
     merged["year"] = merged["year"].astype("int64")
     wide = _pivot_wide(merged)
-    wide = wide.sort_values(["UNITID", "YEAR"]).reset_index(drop=True)
 
-    price_cols = [col for col in wide.columns if col.startswith("PRICE_")]
-    if price_cols:
-        wide = (
-            wide.groupby("UNITID", group_keys=False)
-            .apply(lambda g: _limited_gap_fill(g, price_cols))
-            .reset_index(drop=True)
-        )
+    # Ensure all crosswalk concept_keys appear as columns even if entirely missing in the data.
+    all_concepts = list(cw["concept_key"].unique())
+    for col in all_concepts:
+        if col not in wide.columns:
+            wide[col] = pd.NA
+    # Keep a stable column order: UNITID, YEAR, then concept keys in crosswalk order.
+    concept_cols = [c for c in all_concepts if c in wide.columns]
+    wide = wide[["UNITID", "YEAR", *concept_cols]]
+    wide = wide.sort_values(["UNITID", "YEAR"]).reset_index(drop=True)
 
     wide["UNITID"] = wide["UNITID"].astype("int64")
     wide["YEAR"] = wide["YEAR"].astype("int64")
@@ -300,7 +266,6 @@ def stabilize_ic_ay(
 
     print(f"Wrote IC_AY master panel to {output_path}")
     print(f"Shape: {wide.shape[0]:,} rows x {wide.shape[1]:,} columns")
-    print(f"Price columns gap-filled: {len(price_cols)}")
     return wide
 
 

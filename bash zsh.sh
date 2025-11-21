@@ -465,3 +465,134 @@ UPGRNTT, UPGRNTN, UPGRNTA, UAGRNTT, UAGRNTN, UAGRNTA, UFLOANT, UFLOANN, UFLOANA
  map both to a single concept and coalesce
 
  Harmonize Scripts/harmonize_sfa_concepts.py
+
+
+
+
+
+COA for in-district students living on campus
+CINDON
+COA for in-district students living off campus (with family) 
+CINDFAM
+COA for in-district students living off campus (not with family) 
+CINDOFF
+COA Comprehensive for in-district students
+CMP1AY3
+
+COA for in-state students living on campus 
+CINSON
+COA for in-state students living off campus (with family) 
+CINSFAM
+COA for in-state students living off campus (not with family) 
+CINSOFF
+COA Comprehensive for in-state students
+CMP2AY3
+
+COA for out-of-state students living on campus (with family) 
+COTSON
+COA for out-of-state students living off campus (with family) 
+COTSFAM
+CINSON
+Total price for in-state students living off campus (with family) 
+CINSFAM
+Total price for in-state students living off campus (not with family) 
+CINSOFF
+COA Comprehensive for out-of-state students
+CMP3AY3
+
+Total price for out-of-state students living on campus (with family) 
+COTSON
+Total price for out-of-state students living off campus (with family) 
+COTSFAM
+Total price for out-of-state students living off campus (not with family) 
+COTSOFF
+
+Total Price PY
+CMP1PY3 
+
+Published in-district tuition
+PCCHG1AT3 TUITION1 CHG1AT3
+Published in-state tuition
+PCCHG2AT3 TUITION2 CHG2AT3
+Published out-of-state tuition
+PCCHG3AT3 TUITION3 CHG3AT3
+
+Published in-district fees
+PCCHG1AF3 FEE1 CHG1AF3
+Published in-state fees
+PCCHG2AF3 FEE2 CHG2AF3
+Published out-of-state fees
+PCCHG3AF3 FEE3 CHG3AF3
+
+Published in-district tuition and fees
+PCCHG1AY3 CHG1AY3
+Published in-state tuition and fees
+PCCHG2AY3 CHG2AY3
+Published out-of-state tuition and fees
+PCCHG3AY3 CHG3AY3
+Published tuition and fees
+PCCHG1PY3 CHG1PY3
+
+Books and supplies
+CHG4AY3 CHG4PY3 PCCHG4AY3 PCCHG4PY3
+
+On campus, room and board
+CHG5AY3 CHG5PY3 PCCHG5AY3 PCCHG5PY3 PCCHG5PY3 RMBRDAMT BOARDAMT
+
+On campus, other expenses
+CHG6AY3 CHG6PY3 PCCHG6AY3 PCCHG6PY3
+
+Off campus (not with family), room and board
+CHG7AY3 CHG7PY3 PCCHG7AY3 PCCHG7PY3
+
+Off campus (not with family), other expenses
+CHG8AY3 CHG8PY3 PCCHG8AY3 PCCHG8PY3 
+
+Off campus (with family), other expenses
+CHG9AY3 CHG9PY3 PCCHG9AY3 PCCHG9PY3
+
+Flags: TUITVARY
+
+
+
+ICAY_COA_INDONC: COA for in-district students living on campus
+ICAY_COA_INDFAM: COA for in-district students living off campus (with family)
+ICAY_COA_INDOFFC: COA for in-district students living off campus (not with family)
+ICAY_COA_COMPIND: COA Comprehensive for in-district students
+ICAY_COA_INSTC: COA for in-state students living on campus
+ICAY_COA_INSTFAM: COA for in-state students living off campus (with family)
+ICAY_COA_INSTOFF: COA for in-state students living off campus (not with family)
+ICAY_COA_COMPSTATE: COA Comprehensive for in-state students
+ICAY_COA_OUTSON: COA for out-of-state students living on campus
+ICAY_COA_OUTSFAM: COA for out-of-state students living off campus (with family)
+ICAY_COA_OUTSOFF: COA for out-of-state students living off campus (not with family)
+ICAY_COA_COMPOUTST: COA Comprehensive for out-of-state students
+ICAY_COA_PY:  Total Price PY
+
+ICAY_T_IND:  in-district tuition
+ICAY_F_IND:  in-district fees
+ICAY_TF_IND:  in-district tuition and fees
+ICAY_T_STATE:  in-state tuition
+ICAY_F_STATE:  in-state fees
+ICAY_TF_STATE:  in-state tuition and fees
+ICAY_T_OUTST:  out-of-state tuition
+ICAY_F_OUTST:  out-of-state fees
+ICAY_TF_OUTST:  out-of-state tuition and fees
+ICAY_TOT_PY:  Published tuition and fees PY
+ICAY_BOOKSUPP: Books and supplies
+ICAY_ONCRMBRD:  campus, room and board
+ICAY_ONCOTHEXP:  campus, room and board
+ICAY_OFFCRMBRD: Off campus (not with family), room and board
+ICAY_OFFCOTHEXP: Off campus (not with family), other expenses
+ICAY_OFFCFOTHEXP: Off campus (with family), other expenses
+
+ICAY_COA_INDONC, ICAY_COA_INDFAM, ICAY_COA_INDOFFC, ICAY_COA_COMPIND,
+ICAY_COA_INSTC, ICAY_COA_INSTFAM, ICAY_COA_INSTOFF, ICAY_COA_COMPSTATE,
+ICAY_COA_OUTSON, ICAY_COA_OUTSFAM, ICAY_COA_OUTSOFF, ICAY_COA_COMPOUTST,
+ICAY_COA_PY,
+ICAY_T_IND, ICAY_F_IND, ICAY_TF_IND,
+ICAY_T_STATE, ICAY_F_STATE, ICAY_TF_STATE,
+ICAY_T_OUTST, ICAY_F_OUTST, ICAY_TF_OUTST,
+ICAY_TOT_PY, ICAY_BOOKSUPP,
+ICAY_ONCRMBRD, ICAY_ONCOTHEXP,
+ICAY_OFFCRMBRD, ICAY_OFFCOTHEXP, ICAY_OFFCFOTHEXP
