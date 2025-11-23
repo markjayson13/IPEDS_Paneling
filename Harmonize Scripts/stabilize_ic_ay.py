@@ -11,6 +11,7 @@ import pandas as pd
 
 DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
 DEFAULT_LONG_PANEL_PATH = DATA_ROOT / "Parquets" / "panel_long_hd_ic.parquet"
+RAW_MERGED_CSV = DATA_ROOT / "Paneled Datasets" / "Crosssections" / "panel_wide_raw_2004_2024_merged.csv"
 LONG_PANEL_FALLBACKS = [
     DATA_ROOT / "Parquets" / "Unify" / "panel_long_raw.parquet",
     DATA_ROOT / "Parquets" / "Raw data long" / "panel_long_raw_2023.parquet",
@@ -95,6 +96,29 @@ def _prepare_long_panel(path: Path) -> pd.DataFrame:
     return df
 
 
+def _raw_csv_fallback(cw: pd.DataFrame) -> pd.DataFrame:
+    """Load ICAY vars directly from the merged raw wide CSV if available."""
+    if not RAW_MERGED_CSV.exists():
+        raise FileNotFoundError(f"ICAY raw merged CSV not found at {RAW_MERGED_CSV}")
+    cols = ["UNITID", "YEAR"]
+    cw_vars = list(cw["source_var"].unique())
+    # Keep only crosswalk vars that are present in the raw CSV header
+    header = pd.read_csv(RAW_MERGED_CSV, nrows=0)
+    present = [c for c in cw_vars if c in header.columns]
+    cols += present
+    raw = pd.read_csv(RAW_MERGED_CSV, usecols=cols, dtype=str)
+    # Melt to long
+    long = raw.melt(id_vars=["UNITID", "YEAR"], var_name="varname", value_name="value")
+    long["survey"] = "IC"
+    long["UNITID"] = pd.to_numeric(long["UNITID"], errors="coerce")
+    long["YEAR"] = pd.to_numeric(long["YEAR"], errors="coerce")
+    # Coerce value to numeric where possible
+    long["value"] = pd.to_numeric(long["value"], errors="coerce")
+    long = long.dropna(subset=["UNITID", "YEAR"])
+    long = long.rename(columns={"UNITID": "unitid", "YEAR": "year"})
+    return long
+
+
 def _pivot_wide(df: pd.DataFrame) -> pd.DataFrame:
     wide = (
         df.pivot_table(index=["unitid", "year"], columns="concept_key", values="value", aggfunc="first")
@@ -170,6 +194,17 @@ def stabilize_ic_ay(
     step0_df = panel[survey_mask & var_mask].copy()
     if step0_df.empty:
         step0_df = panel[var_mask].copy()
+    # If still too sparse, supplement from the merged raw wide CSV.
+    if step0_df["varname"].nunique() < 30 or step0_df["value"].notna().sum() == 0:
+        try:
+            raw_df = _raw_csv_fallback(cw)
+            step0_df = pd.concat([raw_df, step0_df], ignore_index=True)
+            print(
+                f"Supplemented ICAY Step0 with raw CSV fallback: "
+                f"{raw_df['varname'].nunique()} variables from {RAW_MERGED_CSV.name}"
+            )
+        except FileNotFoundError:
+            pass
     if step0_df.empty:
         raise ValueError(
             "No IC_AY rows located in the long panel that match the filled crosswalk source variables. "
