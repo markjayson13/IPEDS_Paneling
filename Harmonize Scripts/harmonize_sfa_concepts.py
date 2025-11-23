@@ -121,6 +121,21 @@ def harmonize(long_df: pd.DataFrame, crosswalk_df: pd.DataFrame, unitid_col: str
     wide.sort_index(axis=1, inplace=True)
     wide.reset_index(inplace=True)
     wide.rename(columns={unitid_col: "UNITID", year_col: "YEAR"}, inplace=True)
+
+    # Integrate grant-all living status into Title IV living status.
+    coalesce_map = {
+        "SFA_LIVING_OFFCNWF_T4ALL_N": "SFA_LIVING_OFFCNWF_GRANTALL_N",
+        "SFA_LIVING_OFFCWF_T4ALL_N": "SFA_LIVING_OFFCWF_GRANTALL_N",
+        "SFA_LIVING_ONC_T4ALL_N": "SFA_LIVING_ONC_GRANTALL_N",
+        "SFA_LIVING_UNKWN_T4ALL_N": "SFA_LIVING_UNKWN_GRANTALL_N",
+    }
+    for target, source in coalesce_map.items():
+        if source in wide.columns:
+            if target not in wide.columns:
+                wide[target] = pd.NA
+            wide[target] = wide[target].combine_first(wide[source])
+            wide.drop(columns=[source], inplace=True, errors="ignore")
+
     return wide
 
 

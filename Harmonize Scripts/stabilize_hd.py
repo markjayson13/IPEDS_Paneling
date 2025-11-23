@@ -15,6 +15,7 @@ DEFAULT_FILLED_CROSSWALK_DIR = DEFAULT_CROSSWALK_DIR / "Filled"
 DEFAULT_CROSSWALK_PATH = DEFAULT_FILLED_CROSSWALK_DIR / "hd_crosswalk.csv"
 DEFAULT_WIDE_DIR = DATA_ROOT / "Parquets" / "Unify" / "HDICwide"
 DEFAULT_OUTPUT_PATH = DEFAULT_WIDE_DIR / "hd_master_panel.parquet"
+WIDE_CONCEPTS_DIR = DATA_ROOT / "Paneled Datasets" / "Wide Concepts"
 DEFAULT_RAW_PANEL_PATH = DATA_ROOT / "Parquets" / "panel_long_hd_ic.parquet"
 
 SURVEY_SYNONYMS = {

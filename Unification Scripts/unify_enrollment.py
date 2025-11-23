@@ -12,7 +12,7 @@ from typing import Iterable, List
 import pandas as pd
 
 DEFAULT_DICTIONARY = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet"
+    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet"
 )
 DEFAULT_PANEL_ROOT = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections"
