@@ -118,19 +118,26 @@ def _first_non_empty(series: pd.Series) -> str:
 
 def _ic_cost_mask(df: pd.DataFrame, survey_col: str) -> pd.Series:
     survey = df[survey_col].astype(str).str.upper()
-    survey_ic = survey.str.contains("IC", na=False)
+    # Any survey that looks like an IC variant (IC, ICyyyy, ICAY, ICPY, INSTITUTIONAL CHARACTERISTICS, etc.).
+    survey_ic = survey.str.contains(r"\bIC\b", na=False) | survey.str.contains("INSTITUTIONAL CHARACTERISTICS", na=False)
+    # Also catch forms like IC2020, IC2019, etc.
+    survey_ic |= survey.str.match(r"^IC\d{4}$", na=False)
 
     file_mask = pd.Series(False, index=df.index)
     for col in FILENAME_HINT_COLS:
         if col in df.columns:
             values = df[col].astype(str).str.lower()
             ic_hit = values.str.contains("ic", na=False)
+
             file_mask |= ic_hit & (
-                values.str.contains("ay", na=False)
-                | values.str.contains("py", na=False)
+                values.str.contains("icay", na=False)
+                | values.str.contains("icpy", na=False)
+                | values.str.contains("ic20", na=False)  # e.g., ic2020, ic2019, etc.
                 | values.str.contains("institutional characteristics", na=False)
+                | values.str.contains("student charges", na=False)
             )
-            # Also allow base IC (no ay/py suffix).
+
+            # As a fallback, allow any filename with "ic" that also hits CHARGE_KEYWORDS later.
             file_mask |= ic_hit
 
     table_mask = pd.Series(False, index=df.index)
@@ -140,6 +147,7 @@ def _ic_cost_mask(df: pd.DataFrame, survey_col: str) -> pd.Series:
         table_mask |= table_values.str.contains("icpy", na=False)
         table_mask |= table_values.str.contains("student charges", na=False)
         table_mask |= table_values.str.contains("institutional characteristics", na=False)
+        table_mask |= table_values.str.contains(r"\bic\d{4}\b", na=False)
 
     hint_mask = pd.Series(False, index=df.index)
     for col in SURVEY_HINT_COLS:
@@ -151,6 +159,7 @@ def _ic_cost_mask(df: pd.DataFrame, survey_col: str) -> pd.Series:
             hint_mask |= hints.str.contains("academic year", na=False)
             hint_mask |= hints.str.contains("program year", na=False)
             hint_mask |= hints.str.contains("institutional characteristics", na=False)
+            hint_mask |= hints.str.contains(r"\bic\b", na=False)
 
     var_upper = df["source_var"].astype(str).str.upper()
     var_mask = var_upper.str.match(r"^CHG\\d+$", na=False)
