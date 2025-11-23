@@ -122,6 +122,8 @@ def _ic_cost_mask(df: pd.DataFrame, survey_col: str) -> pd.Series:
     survey_ic = survey.str.contains(r"\bIC\b", na=False) | survey.str.contains("INSTITUTIONAL CHARACTERISTICS", na=False)
     # Also catch forms like IC2020, IC2019, etc.
     survey_ic |= survey.str.match(r"^IC\d{4}$", na=False)
+    # Derived IC (DRVIC) lives under the DRV survey umbrella.
+    survey_ic |= survey.str.contains("DRV", na=False) | survey.str.contains("DERIVED", na=False)
 
     file_mask = pd.Series(False, index=df.index)
     for col in FILENAME_HINT_COLS:
