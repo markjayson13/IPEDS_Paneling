@@ -289,16 +289,6 @@ echo "Done."
 
 echo "Cleanup: Harmonize scripts (step 5) edits"
 
-ADM__ADM_SAT_EBRW_25_PCT_NEW can be integrated to ADM__ADM_SAT_CR_25_PCT_OLD
-ADM__ADM_SAT_EBRW_75_PCT_NEW can be integrated to ADM__ADM_SAT_CR_75_PCT_OLD
-ADM__ADM_SAT_MATH_25_PCT_NEW can be integrated to ADM__ADM_SAT_MATH_25_PCT_OLD
-ADM__ADM_SAT_MATH_75_PCT_NEW can be integrated to ADM__ADM_SAT_MATH_75_PCT_OLD
-ADM__ADM_SAT_WRIT_25_PCT_OLD can be integrated to ADM__ADM_SAT_WRIT_25_PCT_NEW
-ADM__ADM_SAT_WRIT_75_PCT_OLD can be integrated to ADM__ADM_SAT_WRIT_75_PCT_NEW
-
-
-
-
 lets redo the CrossWalk Scripts/Fill Scripts/auto_fill_sfa_crosswalk.py. erase everything and lets build it. we have Paneled Datasets/Crosswalks/sfa_crosswalk_template.csv. Now i want to autofill the template with concept keys. These are the variables i really care about. I included there source_var names:
 
 1. Residency and Student counts

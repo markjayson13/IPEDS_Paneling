@@ -136,7 +136,32 @@ def harmonize(long_df: pd.DataFrame, crosswalk: pd.DataFrame, unitid_col: str, y
     wide = grouped.pivot_table(index=["UNITID", "YEAR"], columns="concept_key", values="value")
     wide.sort_index(axis=1, inplace=True)
     wide.reset_index(inplace=True)
-    return grouped, wide
+
+    # Integrate SAT old/new concepts (coalesce columns and drop alternates).
+    sat_merge_map = {
+        "ADM_SAT_CR_25_PCT_OLD": "ADM_SAT_EBRW_25_PCT_NEW",
+        "ADM_SAT_CR_75_PCT_OLD": "ADM_SAT_EBRW_75_PCT_NEW",
+        "ADM_SAT_MATH_25_PCT_OLD": "ADM_SAT_MATH_25_PCT_NEW",
+        "ADM_SAT_MATH_75_PCT_OLD": "ADM_SAT_MATH_75_PCT_NEW",
+        "ADM_SAT_WRIT_25_PCT_NEW": "ADM_SAT_WRIT_25_PCT_OLD",
+        "ADM_SAT_WRIT_75_PCT_NEW": "ADM_SAT_WRIT_75_PCT_OLD",
+    }
+    for target, source in sat_merge_map.items():
+        if source in wide.columns:
+            if target not in wide.columns:
+                wide[target] = pd.NA
+            wide[target] = wide[target].combine_first(wide[source])
+            wide.drop(columns=[source], inplace=True, errors="ignore")
+
+    # Rebuild long from the integrated wide to keep concept_key/value pairs consistent.
+    wide = wide.reset_index(drop=True)
+    long = (
+        wide.melt(id_vars=["UNITID", "YEAR"], var_name="concept_key", value_name="value")
+        .dropna(subset=["value"])
+        .sort_values(["UNITID", "YEAR", "concept_key"])
+        .reset_index(drop=True)
+    )
+    return long, wide
 
 
 def main() -> None:

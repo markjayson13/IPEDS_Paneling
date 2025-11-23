@@ -16,6 +16,17 @@ SUPPORTED_SUFFIXES = {".csv", ".tsv", ".txt", ".xlsx", ".xls"}
 SURVEY_PATTERNS: list[tuple[str, list[str]]] = [
     ("IC_AY", [r"IC\d{4}_AY", r"ICAY", r"IC[A-Z0-9]*AY"]),
     ("IC_PY", [r"IC\d{4}_PY", r"ICPY", r"IC[A-Z0-9]*PY"]),
+    # Derived components (DRV*) live under the DRV umbrella on IPEDS.
+    ("DRVIC", [r"DRVIC\d{4}", r"DRVIC"]),
+    ("DRVEF12", [r"DRVEF12\d{4}", r"DRVEF12"]),
+    ("DRVEF", [r"DRVEF\d{4}", r"DRVEF"]),
+    ("DRVF", [r"DRVF\d{4}", r"DRVF"]),
+    ("DRVGR", [r"DRVGR\d{4}", r"DRVGR"]),
+    ("DRVHR", [r"DRVHR\d{4}", r"DRVHR"]),
+    ("DRVADM", [r"DRVADM\d{4}", r"DRVADM"]),
+    ("DRVAL", [r"DRVAL\d{4}", r"DRVAL"]),
+    ("DRVOM", [r"DRVOM\d{4}", r"DRVOM"]),
+    ("DRVC", [r"DRVC\d{4}", r"DRVC"]),
     ("EFIA", [r"EFIA"]),
     ("E1D", [r"E1D"]),
     ("EFFY", [r"EFFY"]),
@@ -170,6 +181,9 @@ def build_raw_panel(root: Path, years: Optional[Set[int]], surveys: Optional[Set
         df = read_table(file_path)
         if df is None or df.empty:
             continue
+        # Normalize column labels to reduce trailing-space mismatches.
+        df.columns = [str(c).strip() if isinstance(c, str) else c for c in df.columns]
+
         unitid_col = find_unitid_column(df)
         if not unitid_col:
             logging.debug("Skipping %s (UNITID column missing)", file_path)
