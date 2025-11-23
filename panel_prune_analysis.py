@@ -140,6 +140,39 @@ COMPONENT_PREFIX_ORDER = [
     "FIN__",
 ]
 
+# Preferred ordering for ICAY columns (with component prefix added when present).
+ICAY_ORDER = [
+    "COA_INDONC",
+    "COA_INDFAM",
+    "COA_INDOFFC",
+    "COA_COMPIND",
+    "COA_INSTC",
+    "COA_INSTFAM",
+    "COA_INSTOFF",
+    "COA_COMPSTATE",
+    "COA_OUTSON",
+    "COA_OUTSFAM",
+    "COA_OUTSOFF",
+    "COA_COMPOUTST",
+    "COA_PY",
+    "T_IND",
+    "F_IND",
+    "TF_IND",
+    "T_STATE",
+    "F_STATE",
+    "TF_STATE",
+    "T_OUTST",
+    "F_OUTST",
+    "TF_OUTST",
+    "TOT_PY",
+    "BOOKSUPP",
+    "ONCRMBRD",
+    "ONCOTHEXP",
+    "OFFCRMBRD",
+    "OFFCOTHEXP",
+    "OFFCFOTHEXP",
+]
+
 
 def main() -> None:
     args = parse_args()
@@ -206,7 +239,28 @@ def main() -> None:
         add_if_present(priority, ope_flag)
 
     ordered_keep: list[str] = []
-    ordered_keep.extend(priority)
+    # Always start with UNITID/YEAR if present.
+    for key in ["UNITID", "YEAR"]:
+        if key in priority and key not in ordered_keep:
+            ordered_keep.append(key)
+
+    # Add curated HD columns next (in the order listed in KEEP_HD_COLS).
+    for hd_col in KEEP_HD_COLS:
+        if hd_col in keep_cols and hd_col not in ordered_keep:
+            ordered_keep.append(hd_col)
+
+    # Add ICAY columns in preferred order.
+    for suffix in ICAY_ORDER:
+        col_name = f"ICAY__{suffix}"
+        if col_name in keep_cols and col_name not in ordered_keep:
+            ordered_keep.append(col_name)
+
+    # Add the rest of the priority columns (excluding UNITID/YEAR to avoid duplicates).
+    for col in priority:
+        if col in ("UNITID", "YEAR"):
+            continue
+        if col not in ordered_keep:
+            ordered_keep.append(col)
 
     for prefix in COMPONENT_PREFIX_ORDER:
         for c in cols:

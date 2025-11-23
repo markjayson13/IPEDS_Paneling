@@ -55,7 +55,13 @@ def rename_component_columns(df: pd.DataFrame, label: str, drop_reporters: list[
     for col in df.columns:
         if col in ID_COLS:
             continue
-        new_name = f"{label_prefix}__{col}"
+        col_upper = str(col).upper()
+        if col_upper.startswith(f"{label_prefix}_"):
+            # Strip the redundant prefix and keep a single component prefix.
+            stripped = col[len(label_prefix) + 1 :]
+            new_name = f"{label_prefix}__{stripped}"
+        else:
+            new_name = f"{label_prefix}__{col}"
         rename_map[col] = new_name
     renamed = df.rename(columns=rename_map)
     for col in drop_reporters:
