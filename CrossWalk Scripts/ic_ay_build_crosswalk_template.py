@@ -58,6 +58,7 @@ FILENAME_HINT_COLS = ["dict_filename", "data_filename", "filename", "dict_file"]
 EXPLICIT_VARS = {
     var.strip().upper()
     for var in """
+CINDFAM CINDOFF CINDON CINSFAM CINSOFF CINSON COTSFAM COTSOFF COTSON TUFEYR0 TUFEYR1 TUFEYR2 TUFEYR3
 XCIPTUI1 CIPTUIT1 XCIPSUP1 CIPSUPP1 XCIPLGT1 CIPLGTH1 PRGMSR1 XMTHCMP1 MTHCMP1 XWKCMP1 WKCMP1 XLNAYHR1 LNAYHR1 XLNAYWK1 LNAYWK1
 XCHG1PY0 CHG1PY0 XCHG1PY1 CHG1PY1 XCHG1PY2 CHG1PY2 XCHG1PY3 CHG1PY3
 XCHG4PY0 CHG4PY0 XCHG4PY1 CHG4PY1 XCHG4PY2 CHG4PY2 XCHG4PY3 CHG4PY3
@@ -122,8 +123,16 @@ def _ic_cost_mask(df: pd.DataFrame, survey_col: str) -> pd.Series:
     survey_ic = survey.str.contains(r"\bIC\b", na=False) | survey.str.contains("INSTITUTIONAL CHARACTERISTICS", na=False)
     # Also catch forms like IC2020, IC2019, etc.
     survey_ic |= survey.str.match(r"^IC\d{4}$", na=False)
-    # Derived IC (DRVIC) lives under the DRV survey umbrella.
-    survey_ic |= survey.str.contains("DRV", na=False) | survey.str.contains("DERIVED", na=False)
+    # Derived IC (DRVIC) lives under the DRV survey umbrella; scope narrowly to DRVIC.
+    if "prefix_hint" in df.columns:
+        survey_ic |= df["prefix_hint"].astype(str).str.upper().str.startswith("DRVIC")
+    survey_ic |= survey.str.contains("DRVIC", na=False)
+    for col in FILENAME_HINT_COLS:
+        if col in df.columns:
+            survey_ic |= df[col].astype(str).str.lower().str.contains("drvic", na=False)
+    for col in SURVEY_HINT_COLS:
+        if col in df.columns:
+            survey_ic |= df[col].astype(str).str.lower().str.contains("drvic", na=False)
 
     file_mask = pd.Series(False, index=df.index)
     for col in FILENAME_HINT_COLS:
@@ -194,6 +203,10 @@ def _ic_cost_mask(df: pd.DataFrame, survey_col: str) -> pd.Series:
     var_mask |= var_upper.str.match(r"^CIPCODE[0-9]+", na=False)
     # Room/board etc.
     var_mask |= var_upper.isin(["TUITVARY", "BOARDAMT", "RMBRDAMT"])
+    # Derived IC cost variables.
+    var_mask |= var_upper.str.match(r"^CIN[DS]", na=False)
+    var_mask |= var_upper.str.match(r"^COT", na=False)
+    var_mask |= var_upper.str.match(r"^TUFEYR\\d+", na=False)
     # Force-include explicit targets
     var_mask |= var_upper.isin(TARGET_VARS)
 

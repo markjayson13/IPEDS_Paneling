@@ -31,6 +31,11 @@ def invert_mapping(mapping: Dict[str, Iterable[str]]) -> Dict[str, str]:
     return out
 
 
+def expand_vars(prefixes: Iterable[str], suffixes: Iterable[str] = ("0", "1", "2", "3")) -> list[str]:
+    """Return list of prefix+suffix combinations for convenience."""
+    return [f"{p}{s}" for p in prefixes for s in suffixes]
+
+
 def main() -> None:
     args = build_parser().parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level), format="%(levelname)s %(message)s")
@@ -62,30 +67,30 @@ def main() -> None:
         # COA program/year total price
         "ICAY_COA_PY": ["CMP1PY3"],
         # Tuition
-        "ICAY_T_IND": ["PCCHG1AT3", "TUITION1", "CHG1AT3"],
-        "ICAY_T_STATE": ["PCCHG2AT3", "TUITION2", "CHG2AT3"],
-        "ICAY_T_OUTST": ["PCCHG3AT3", "TUITION3", "CHG3AT3"],
+        "ICAY_T_IND": expand_vars(["PCCHG1AT", "CHG1AT"]) + ["TUITION1"],
+        "ICAY_T_STATE": expand_vars(["PCCHG2AT", "CHG2AT"]) + ["TUITION2"],
+        "ICAY_T_OUTST": expand_vars(["PCCHG3AT", "CHG3AT"]) + ["TUITION3"],
         # Fees
-        "ICAY_F_IND": ["PCCHG1AF3", "FEE1", "CHG1AF3"],
-        "ICAY_F_STATE": ["PCCHG2AF3", "FEE2", "CHG2AF3"],
-        "ICAY_F_OUTST": ["PCCHG3AF3", "FEE3", "CHG3AF3"],
+        "ICAY_F_IND": expand_vars(["PCCHG1AF", "CHG1AF"]) + ["FEE1"],
+        "ICAY_F_STATE": expand_vars(["PCCHG2AF", "CHG2AF"]) + ["FEE2"],
+        "ICAY_F_OUTST": expand_vars(["PCCHG3AF", "CHG3AF"]) + ["FEE3"],
         # Tuition + fees
-        "ICAY_TF_IND": ["PCCHG1AY3", "CHG1AY3"],
-        "ICAY_TF_STATE": ["PCCHG2AY3", "CHG2AY3"],
-        "ICAY_TF_OUTST": ["PCCHG3AY3", "CHG3AY3"],
-        "ICAY_TOT_PY": ["PCCHG1PY3", "CHG1PY3"],
+        "ICAY_TF_IND": expand_vars(["PCCHG1AY", "CHG1AY"]),
+        "ICAY_TF_STATE": expand_vars(["PCCHG2AY", "CHG2AY"]),
+        "ICAY_TF_OUTST": expand_vars(["PCCHG3AY", "CHG3AY"]),
+        "ICAY_TOT_PY": expand_vars(["PCCHG1PY", "CHG1PY"]),
         # Books and supplies
-        "ICAY_BOOKSUPP": ["CHG4AY3", "CHG4PY3", "PCCHG4AY3", "PCCHG4PY3"],
+        "ICAY_BOOKSUPP": expand_vars(["CHG4AY", "CHG4PY", "PCCHG4AY", "PCCHG4PY"]),
         # Room/board on campus
-        "ICAY_ONCRMBRD": ["CHG5AY3", "CHG5PY3", "PCCHG5AY3", "PCCHG5PY3", "RMBRDAMT", "BOARDAMT"],
+        "ICAY_ONCRMBRD": expand_vars(["CHG5AY", "CHG5PY", "PCCHG5AY", "PCCHG5PY"]) + ["RMBRDAMT", "BOARDAMT"],
         # Other on campus
-        "ICAY_ONCOTHEXP": ["CHG6AY3", "CHG6PY3", "PCCHG6AY3", "PCCHG6PY3"],
+        "ICAY_ONCOTHEXP": expand_vars(["CHG6AY", "CHG6PY", "PCCHG6AY", "PCCHG6PY"]),
         # Room/board off campus not with family
-        "ICAY_OFFCRMBRD": ["CHG7AY3", "CHG7PY3", "PCCHG7AY3", "PCCHG7PY3"],
+        "ICAY_OFFCRMBRD": expand_vars(["CHG7AY", "CHG7PY", "PCCHG7AY", "PCCHG7PY"]),
         # Other off campus not with family
-        "ICAY_OFFCOTHEXP": ["CHG8AY3", "CHG8PY3", "PCCHG8AY3", "PCCHG8PY3"],
+        "ICAY_OFFCOTHEXP": expand_vars(["CHG8AY", "CHG8PY", "PCCHG8AY", "PCCHG8PY"]),
         # Other off campus with family
-        "ICAY_OFFCFOTHEXP": ["CHG9AY3", "CHG9PY3", "PCCHG9AY3", "PCCHG9PY3"],
+        "ICAY_OFFCFOTHEXP": expand_vars(["CHG9AY", "CHG9PY", "PCCHG9AY", "PCCHG9PY"]),
         # Flags
         "ICAY_TUITVARY": ["TUITVARY"],
     }
