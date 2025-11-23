@@ -84,6 +84,10 @@ def load_dictionary(path: Path) -> tuple[pd.DataFrame, str, str | None, str | No
     year_col = resolve_column(dictionary, ["year", "YEAR", "survey_year", "SURVEYYEAR"], required=False)
     dict_copy = dictionary.copy()
     dict_copy[var_col] = dict_copy[var_col].astype(str).str.strip().str.upper()
+    # Treat DRV Admissions as part of Admissions for crosswalk purposes.
+    if "prefix_hint" in dict_copy.columns:
+        drv_mask = dict_copy["prefix_hint"].astype(str).str.upper().str.startswith("DRVADM")
+        dict_copy.loc[drv_mask, survey_col or "survey"] = "ADM"
     if year_col:
         dict_copy[year_col] = pd.to_numeric(dict_copy[year_col], errors="coerce")
         year_stats = (

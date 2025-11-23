@@ -154,18 +154,26 @@ def read_table(path: Path) -> pd.DataFrame | None:
     try:
         if suffix == ".csv":
             try:
-                return pd.read_csv(path, dtype=str, encoding_errors="ignore", on_bad_lines="skip")
+                df = pd.read_csv(path, dtype=str, encoding_errors="ignore", on_bad_lines="skip")
             except Exception:
-                return pd.read_csv(path, dtype=str, engine="python", encoding_errors="ignore", on_bad_lines="skip")
+                df = pd.read_csv(path, dtype=str, engine="python", encoding_errors="ignore", on_bad_lines="skip")
+            df.columns = df.columns.str.strip()
+            return df
         if suffix == ".tsv":
-            return pd.read_csv(path, dtype=str, sep="\t", encoding_errors="ignore", on_bad_lines="skip")
+            df = pd.read_csv(path, dtype=str, sep="\t", encoding_errors="ignore", on_bad_lines="skip")
+            df.columns = df.columns.str.strip()
+            return df
         if suffix == ".txt":
             try:
-                return pd.read_csv(path, dtype=str, sep=None, engine="python", encoding_errors="ignore", on_bad_lines="skip")
+                df = pd.read_csv(path, dtype=str, sep=None, engine="python", encoding_errors="ignore", on_bad_lines="skip")
             except Exception:
-                return pd.read_csv(path, dtype=str, delim_whitespace=True, encoding_errors="ignore", on_bad_lines="skip")
+                df = pd.read_csv(path, dtype=str, delim_whitespace=True, encoding_errors="ignore", on_bad_lines="skip")
+            df.columns = df.columns.str.strip()
+            return df
         if suffix in {".xlsx", ".xls"}:
-            return pd.read_excel(path, dtype=str)
+            df = pd.read_excel(path, dtype=str)
+            df.columns = df.columns.str.strip()
+            return df
     except Exception as exc:  # noqa: BLE001
         logging.warning("Failed to read %s (%s)", path, exc)
         return None

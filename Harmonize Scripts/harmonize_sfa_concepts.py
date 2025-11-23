@@ -14,7 +14,7 @@ CROSSWALK_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled 
 CROSSWALK_FILLED_DIR = CROSSWALK_DIR / "Filled"
 DEFAULT_SFA_CROSSWALK = CROSSWALK_FILLED_DIR / "sfa_crosswalk_filled.csv"
 SFA_WIDE_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAwide")
-SFA_HARMONIZED_CSV_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Harmonized/SFA")
+SFA_HARMONIZED_CSV_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Wide Concepts")
 STEP0_SFA_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0sfa")
 
 

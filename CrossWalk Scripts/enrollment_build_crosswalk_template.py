@@ -54,11 +54,19 @@ def load_lake(path: Path) -> pd.DataFrame:
 
 def select_enrollment_vars(lake: pd.DataFrame, years: Iterable[int]) -> pd.DataFrame:
     year_set = set(years)
+    survey_series = lake["survey"].astype(str).str.upper()
+    survey_hint_series = lake.get("survey_hint", pd.Series(index=lake.index, dtype=str)).astype(str).str.upper()
+    prefix_series = lake.get("prefix_hint", pd.Series(index=lake.index, dtype=str)).astype(str).str.upper()
+
     mask = (
         lake["year"].isin(year_set)
         & (
-            lake["survey"].str.upper().isin({"EF", "E12", "12MONTHENROLLMENT"})
-            | lake["survey_hint"].isin({"FallEnrollment", "12MonthEnrollment"})
+            survey_series.isin({"EF", "E12", "12MONTHENROLLMENT"})
+            | survey_hint_series.isin({"FALLENROLLMENT", "12MONTHENROLLMENT"})
+            # Include Derived (DRV*) enrollment extracts.
+            | survey_series.eq("DRV")
+            | survey_hint_series.eq("DERIVED")
+            | prefix_series.str.startswith("DRV")
         )
     )
     subset = lake.loc[mask].copy()

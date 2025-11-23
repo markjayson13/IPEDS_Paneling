@@ -29,12 +29,21 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     df = pd.read_parquet(args.dict_lake)
+    survey = df.get("survey", pd.Series(index=df.index, dtype=str)).astype(str).str.upper()
+    prefix = df.get("prefix_hint", pd.Series(index=df.index, dtype=str)).astype(str).str.upper()
     mask = (
         df.get("is_finance", False)
         & df.get("form_family").notna()
         & df.get("base_key").notna()
         & df.get("year").between(args.year_min, args.year_max)
     )
+    # Fallback: include DRV-derived finance rows even if is_finance flag is missing.
+    drv_mask = (
+        survey.eq("DRV")
+        | survey.eq("DERIVED")
+        | prefix.str.startswith("DRVF")
+    ) & df.get("year").between(args.year_min, args.year_max)
+    mask = mask | drv_mask
     subset = df.loc[mask, [
         "year",
         "survey",

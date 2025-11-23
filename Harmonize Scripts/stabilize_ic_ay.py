@@ -298,6 +298,10 @@ def stabilize_ic_ay(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wide.to_parquet(output_path, index=False)
+    # Also emit a CSV copy to Wide Concepts.
+    wide_concepts_dir = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Wide Concepts")
+    wide_concepts_dir.mkdir(parents=True, exist_ok=True)
+    wide.to_csv(wide_concepts_dir / "icay_concepts_wide.csv", index=False)
 
     print(f"Wrote IC_AY master panel to {output_path}")
     print(f"Shape: {wide.shape[0]:,} rows x {wide.shape[1]:,} columns")

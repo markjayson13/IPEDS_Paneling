@@ -98,6 +98,10 @@ def main() -> None:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     wide.to_parquet(args.output, index=False, compression="snappy")
+    # Also emit a CSV copy to Wide Concepts for convenience.
+    wide_concepts_dir = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Wide Concepts")
+    wide_concepts_dir.mkdir(parents=True, exist_ok=True)
+    wide.to_csv(wide_concepts_dir / "enrollment_concepts_wide.csv", index=False)
 
     logging.info("Wrote %s rows with %s concept columns to %s", len(wide), len(wide.columns) - 2, args.output)
     sample_keys = wide.columns[2:12]
