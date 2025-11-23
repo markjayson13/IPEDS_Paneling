@@ -50,7 +50,7 @@ DICTIONARY_LABEL_COLS = {
     "varlabel",
 }
 VAR_PREFIX_RE = re.compile(
-    r"^(F[123]A|EFFY|EFIA?|EFIB|EFIC|EFID|E1D|OM|HR|IC|SFA|GRS?|PE|AL|ADM|HD|C)",
+    r"^(DRV[A-Z0-9]*|F[123]A|EFFY|EFIA?|EFIB|EFIC|EFID|E1D|OM|HR|IC|SFA|GRS?|PE|AL|ADM|HD|C)",
     re.IGNORECASE,
 )
 FINANCE_VAR_RE = re.compile(r"^(F[123])([A-Z])(\d+[A-Z]?)$", re.IGNORECASE)
@@ -66,6 +66,17 @@ SURVEY_HINT_TOKENS = {
     "e12": "E12",
     "effy": "E12",
     "e1d": "E12",
+    "drv": "Derived",
+    "drvc": "Derived",
+    "drvef": "Derived",
+    "drvef12": "Derived",
+    "drvf": "Derived",
+    "drvgr": "Derived",
+    "drvhr": "Derived",
+    "drvadm": "Derived",
+    "drval": "Derived",
+    "drvom": "Derived",
+    "drvic": "Derived",
     "f1a": "F1A",
     "f2a": "F2A",
     "f3a": "F3A",
@@ -167,6 +178,7 @@ SURVEY_FALLBACK = [
     (r"(?i)\bsfa\b", "SFA"),
     (r"(?i)\bom\b", "OM"),
     (r"(?i)\bgrs?\b", "GR"),
+    (r"(?i)\bdrv", "DRV"),
 ]
 
 SUBSURVEY_HINTS = [
@@ -197,6 +209,20 @@ CANONICAL_SURVEYS = {
     "F3A": {"F3A", "F3"},
     "FIN": {"FIN", "FINANCE"},
     "GR": {"GR", "GRS", "GR200"},
+    "DRV": {
+        "DRV",
+        "DERIVED",
+        "DRVC",
+        "DRVEF",
+        "DRVEF12",
+        "DRVF",
+        "DRVHR",
+        "DRVADM",
+        "DRVOM",
+        "DRVIC",
+        "DRVGR",
+        "DRVAL",
+    },
 }
 
 
@@ -255,6 +281,17 @@ SURVEY_HINT_BY_PREFIX = {
     "ADM": "Admissions",
     "AL": "AcademicLibraries",
     "C": "Completions",
+    "DRV": "Derived",
+    "DRVC": "Derived",
+    "DRVEF": "Derived",
+    "DRVEF12": "Derived",
+    "DRVF": "Derived",
+    "DRVGR": "Derived",
+    "DRVHR": "Derived",
+    "DRVADM": "Derived",
+    "DRVAL": "Derived",
+    "DRVOM": "Derived",
+    "DRVIC": "Derived",
 }
 
 
@@ -361,7 +398,21 @@ def _infer_table_title(df: pd.DataFrame) -> str:
 
 
 def parse_file_meta(path: Path) -> dict | None:
-    match = RE_FILE.search(path.stem)
+    stem = path.stem
+    cleaned = re.sub(r"[^A-Za-z0-9]", "", stem)
+    year_match = re.search(r"(20\d{2})", cleaned)
+    if year_match:
+        year = int(year_match.group(1))
+        prefix_token = cleaned[: year_match.start()] or ""
+        suffix = cleaned[year_match.end() :].lower()
+        hint = (
+            SURVEY_HINT_TOKENS.get(prefix_token.lower())
+            or SURVEY_HINT_TOKENS.get(suffix)
+            or prefix_token.upper()
+        )
+        return {"year": year, "prefix_token": prefix_token.upper(), "survey_hint": hint}
+
+    match = RE_FILE.search(stem)
     if not match:
         return None
     gd = match.groupdict()
@@ -448,7 +499,7 @@ def load_dictionary_frames(path: Path) -> list[pd.DataFrame]:
 
 def derive_prefix(path: Path) -> str:
     match = re.search(
-        r"(F[123]A|EFFY|EF|E1D|OM|HR|IC|SFA|GRS?|PE|AL|ADM|HD|C)[_-]?",
+        r"(DRV[A-Z0-9]*|F[123]A|EFFY|EF|E1D|OM|HR|IC|SFA|GRS?|PE|AL|ADM|HD|C)[_-]?",
         path.stem.upper(),
     )
     return match.group(1) if match else ""
@@ -803,7 +854,7 @@ def main() -> None:
                     df.loc[df["prefix_hint"].eq(""), "prefix_hint"] = fallback
                 df["prefix_token"] = df["prefix_hint"]
                 df["release"] = derive_release(path.name)
-                path_hint = re.findall(r"/([A-Z]{1,4})[_-]", "/" + path.stem.upper() + "_")
+                path_hint = re.findall(r"/([A-Z]{1,8})[_-]", "/" + path.stem.upper() + "_")
                 fallback_hint_token = meta.get("survey_hint") or (path_hint[0] if path_hint else "")
                 fallback_mapped = map_survey_hint(fallback_hint_token, fallback_hint_token)
                 df["survey_hint"] = df["prefix_hint"].apply(lambda p: map_survey_hint(p, fallback_mapped))

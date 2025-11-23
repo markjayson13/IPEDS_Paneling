@@ -112,6 +112,10 @@ EFFY_SPECIAL_PATTERN = re.compile(r'EFFY[-_]?(\d{4})', re.IGNORECASE)
 FINANCE_FORM_PATTERN = re.compile(r'(?:^|[_-])(F[123][A-Z0-9]+)')
 HUMAN_RESOURCES_S_PATTERN = re.compile(r'(?:^|[_-])S(?:19|20)\d{2}')
 
+SURVEY_ALIASES: dict[str, str] = {
+    'DRV': 'Derived',
+}
+
 
 def ensure_directory(path: str) -> None:
     """Create a directory if it does not already exist."""
@@ -502,7 +506,9 @@ def write_year_manifest(year_dir: str, year: int, rows: list[dict]) -> None:
         print(f"WARNING: Unable to write manifest for {year}: {exc}")
 
 
-def process_year(year: int, *, manifest_only: bool = False) -> None:
+def process_year(
+    year: int, *, manifest_only: bool = False, allowed_surveys: set[str] | None = None
+) -> None:
     """Process downloads for a single year, handling all configured surveys."""
     print(f"\n>>> Processing Year {year}...")
     with requests.Session() as session:
@@ -533,6 +539,8 @@ def process_year(year: int, *, manifest_only: bool = False) -> None:
         year_manifest: list[dict] = []
 
         for survey_name in SURVEY_DEFINITIONS.keys():
+            if allowed_surveys is not None and survey_name not in allowed_surveys:
+                continue
             prefix_groups = survey_links.get(survey_name, {})
 
             if not prefix_groups:
@@ -654,6 +662,27 @@ def _parse_years(expr: str | None) -> list[int]:
     return [int(text)]
 
 
+def _parse_surveys(expr: str | None) -> set[str] | None:
+    if expr is None:
+        return None
+    text = expr.strip()
+    if not text:
+        return None
+    allowed: set[str] = set()
+    valid_map = {name.lower(): name for name in SURVEY_DEFINITIONS}
+    alias_map = {alias.lower(): target.lower() for alias, target in SURVEY_ALIASES.items()}
+    for part in text.split(","):
+        key = part.strip().lower()
+        if not key:
+            continue
+        target = valid_map.get(key) or valid_map.get(alias_map.get(key, ""))
+        if not target:
+            valid_names = ", ".join(SURVEY_DEFINITIONS.keys())
+            raise ValueError(f"Unknown survey '{part}'. Valid options: {valid_names}")
+        allowed.add(target)
+    return allowed or None
+
+
 def main(argv: list[str] | None = None) -> None:
     global DOWNLOAD_DIR  # noqa: PLW0603
     parser = argparse.ArgumentParser(description="Download IPEDS raw data files and dictionaries.")
@@ -672,12 +701,22 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Skip downloading files; only emit manifests (fetches Content-Length when possible).",
     )
+    parser.add_argument(
+        "--surveys",
+        default="",
+        help="Comma list of surveys to download (matches SURVEY_DEFINITIONS keys; alias: DRV=Derived).",
+    )
     args = parser.parse_args(argv)
     DOWNLOAD_DIR = args.out_root
     years = _parse_years(args.years)
+    allowed_surveys = _parse_surveys(args.surveys)
 
     ensure_directory(DOWNLOAD_DIR)
-    worker = partial(process_year, manifest_only=args.manifest_only)
+    worker = partial(
+        process_year,
+        manifest_only=args.manifest_only,
+        allowed_surveys=allowed_surveys,
+    )
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         list(executor.map(worker, years))
 
