@@ -30,6 +30,12 @@ GAP_FILL_COLS = [
     "STABLE_SECTOR",
     "STABLE_STFIPS",
     "STABLE_INSTITUTION_NAME",
+    "CBSA",
+    "CBSATYPE",
+    "CSA",
+    "COUNTYCD",
+    "COUNTYNM",
+    "NECTA",
 ]
 CARNEGIE_COLS = [
     "CARNEGIE_2005",
