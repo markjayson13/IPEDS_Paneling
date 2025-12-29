@@ -1,4 +1,4 @@
-# IPEDS Paneling
+# UNLVECON495Journal (formerly IPEDS Paneling)
 
 ![Python](https://img.shields.io/badge/Python-3.13-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
@@ -25,8 +25,8 @@ IPEDS Paneling builds research-ready institution-level panels from the U.S. Depa
 
 ## Installation
 ```bash
-git clone https://github.com/markjaysonfarol13/IPEDS_Paneling.git
-cd IPEDS_Paneling
+git clone https://github.com/markjayson13/UNLVECON495Journal.git
+cd UNLVECON495Journal
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip
@@ -149,7 +149,7 @@ MIT License. See `LICENSE` for details.
 ---
 
 ## Bug Tracker
-Report issues via GitHub: <https://github.com/markjaysonfarol13/IPEDS_Paneling/issues>
+Report issues via GitHub: <https://github.com/markjayson13/UNLVECON495Journal/issues>
 
 ---
 
