@@ -59,7 +59,7 @@ from urllib3.util.retry import Retry
 import requests
 from bs4 import BeautifulSoup
 
-DOWNLOAD_DIR = '/Users/markjaysonfarol13/Desktop/Research/IPED Paneling/Raw_Cross_Section_Data'
+DOWNLOAD_DIR = '/Users/markjaysonfarol13/IPED Paneling/Raw_Cross_Section_Data'
 YEARS_TO_DOWNLOAD = range(2001, 2025)
 BASE_URL = 'https://nces.ed.gov/ipeds/datacenter/'
 USER_AGENT = (
