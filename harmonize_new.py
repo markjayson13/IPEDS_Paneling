@@ -139,14 +139,14 @@ def _slugify(label: Optional[str]) -> str:
     cleaned = re.sub(r"_+", "_", cleaned).strip("_")
     return cleaned or "unknown"
 
-# Default output locations (absolute per user request)
-PARQUET_OUTPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets")
-CHECKS_OUTPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks")
-LABEL_CHECK_DIR = CHECKS_OUTPUT_DIR / "Label match"
-ARTIFACTS_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Artifacts")
+BASE_ROOT = Path("/Users/markjaysonfarol13/IPEDS_Paneling")
+PARQUET_OUTPUT_DIR = BASE_ROOT / "Panels"
+CHECKS_OUTPUT_DIR = BASE_ROOT / "Checks"
+LABEL_CHECK_DIR = CHECKS_OUTPUT_DIR / "Label_match"
+ARTIFACTS_DIR = BASE_ROOT / "Artifacts"
 LABEL_MATCH_PATH = LABEL_CHECK_DIR / "label_matches.csv"
 VALIDATION_REPORT_PATH = CHECKS_OUTPUT_DIR / "validation_report.csv"
-SUPP_PANEL_DIR = ARTIFACTS_DIR / "Supp. Panels"
+SUPP_PANEL_DIR = ARTIFACTS_DIR / "Supp_Panels"
 FORM_CONFLICTS_PATH = CHECKS_OUTPUT_DIR / "form_conflicts.csv"
 COVERAGE_SUMMARY_PATH = CHECKS_OUTPUT_DIR / "coverage_summary.csv"
 
@@ -314,11 +314,16 @@ class CandidateSelection:
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Label-driven IPEDS harmonizer")
-    parser.add_argument("--root", type=Path, default=Path("data/raw"), help="Raw data root containing year folders")
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=BASE_ROOT / "Raw_Cross_Section_Data",
+        help="Raw data root containing year folders",
+    )
     parser.add_argument(
         "--lake",
         type=Path,
-        default=Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet"),
+        default=BASE_ROOT / "Dictionary" / "dictionary_lake.parquet",
         help="Dictionary lake parquet path",
     )
     parser.add_argument("--output", type=Path, default=PARQUET_OUTPUT_DIR / "panel_long.parquet", help="Output parquet path")
@@ -1409,7 +1414,7 @@ def _write_split_surveys(df: pd.DataFrame, base_path: Path, split_dir: Optional[
     if df.empty:
         logging.info("Split-by-survey requested but output is empty; skipping additional files.")
         return
-    default_split_dir = ARTIFACTS_DIR / "Split Panels"
+    default_split_dir = PARQUET_OUTPUT_DIR / "Split"
     destination = split_dir or default_split_dir
     destination.mkdir(parents=True, exist_ok=True)
     stem = base_path.stem

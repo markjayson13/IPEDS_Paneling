@@ -26,14 +26,14 @@ except ImportError as exc:  # pragma: no cover - startup guard
     )
     raise
 
-ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas")
+BASE_ROOT = Path("/Users/markjaysonfarol13/IPEDS_Paneling")
+ROOT = BASE_ROOT / "Raw_Cross_Section_Data"
 TABLESDOC_ROOT = Path(
     "/Users/markjaysonfarol13/Higher Ed research/IPEDS/IPEDS ACCESS DB/IPEDS Database Tables Docs"
 )
-DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
-DICT_PARQUET_PATH = DATA_ROOT / "Parquets" / "Dictionary" / "dictionary_lake.parquet"
-INGEST_PROFILE_PATH = DATA_ROOT / "Checks" / "Dictionary" / "ingest_profile.csv"
-DICTIONARY_PROFILE_PATH = DATA_ROOT / "Artifacts" / "dictionary_profile.csv"
+DICT_PARQUET_PATH = BASE_ROOT / "Dictionary" / "dictionary_lake.parquet"
+INGEST_PROFILE_PATH = BASE_ROOT / "Dictionary" / "ingest_profile.csv"
+DICTIONARY_PROFILE_PATH = BASE_ROOT / "Dictionary" / "dictionary_profile.csv"
 DEFAULT_OUTPUT = DICT_PARQUET_PATH
 DICT_NAME_PATTERN = re.compile(
     r"(?:^|[/_-])(dict|dictionary|varlist|variables?|layout|codebook)(?:$|[_-])",
