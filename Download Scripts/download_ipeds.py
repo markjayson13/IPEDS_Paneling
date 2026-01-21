@@ -3,7 +3,7 @@ IPEDS "Power User" Data Downloader Script (v6 - Multithreaded, Comprehensive & S
 
 PURPOSE:
 This script automates the download and extraction of IPEDS "Complete Data Files"
-for a specified range of years (2004-2024). It is designed to be run from a local
+for a specified range of years (2001-2024). It is designed to be run from a local
 machine (e.g., in VS Code) to gather all necessary raw cross-sectional files
 and their corresponding data dictionaries.
 
@@ -59,8 +59,8 @@ from urllib3.util.retry import Retry
 import requests
 from bs4 import BeautifulSoup
 
-DOWNLOAD_DIR = '/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas'
-YEARS_TO_DOWNLOAD = range(2004, 2025)
+DOWNLOAD_DIR = '/Users/markjaysonfarol13/Desktop/Research/IPED Paneling/Raw_Cross_Section_Data'
+YEARS_TO_DOWNLOAD = range(2001, 2025)
 BASE_URL = 'https://nces.ed.gov/ipeds/datacenter/'
 USER_AGENT = (
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5) '
@@ -78,6 +78,35 @@ DICT_EXTENSION_PRIORITY = {
     '.txt': 1,
 }
 ALLOWED_DICT_EXTENSIONS = set(DICT_EXTENSION_PRIORITY.keys())
+VARNAME_COLUMN_CANDIDATES = {
+    'varname',
+    'var_name',
+    'variable',
+    'var',
+    'name',
+    'column',
+}
+VARNAME_LABEL_COLUMN_CANDIDATES = {
+    'label',
+    'varlabel',
+    'variable label',
+    'variable_label',
+    'vartitle',
+    'var title',
+    'description',
+    'long description',
+    'longdescription',
+}
+VARNAME_TABLE_COLUMN_CANDIDATES = {
+    'table',
+    'tablenm',
+    'tab',
+    'section',
+    'worksheet',
+    'sheet',
+}
+LOCAL_DICT_FILE_PRIORITY = ['.xlsx', '.xls', '.csv', '.txt']
+VARNAME_SHEET_PRIORITY = ('varlist', 'variables', 'layout')
 # This comprehensive map defines a "research name" (key) and
 # all its known historical file prefixes (values).
 SURVEY_DEFINITIONS: dict[str, list[str]] = {
@@ -442,6 +471,138 @@ def unzip_and_remove(zip_path: str, extract_to: str, *, context: str = '') -> No
         print(f"ERROR: Unable to process {zip_path}: {exc}")
 
 
+def _normalize_colname(name: object) -> str:
+    return str(name).strip().lower() if name is not None else ""
+
+
+def _pick_column(columns: list, candidates: set[str]) -> str | None:
+    for col in columns:
+        if _normalize_colname(col) in candidates:
+            return col
+    return None
+
+
+def _sheet_priority(name: str) -> tuple[int, str]:
+    lowered = name.lower()
+    for idx, hint in enumerate(VARNAME_SHEET_PRIORITY):
+        if hint in lowered:
+            return idx, lowered
+    return len(VARNAME_SHEET_PRIORITY), lowered
+
+
+def _extract_varnames_from_dataframe(
+    df, *, sheet_name: str | None, pd_mod
+) -> list[dict[str, str]]:
+    var_col = _pick_column(list(df.columns), VARNAME_COLUMN_CANDIDATES)
+    if not var_col:
+        return []
+    label_col = _pick_column(list(df.columns), VARNAME_LABEL_COLUMN_CANDIDATES)
+    table_col = _pick_column(list(df.columns), VARNAME_TABLE_COLUMN_CANDIDATES)
+
+    records: list[dict[str, str]] = []
+    for _, row in df.iterrows():
+        var_val = row[var_col]
+        if pd_mod.isna(var_val):
+            continue
+        varname = str(var_val).strip()
+        if not varname or varname.lower() == "nan":
+            continue
+        record = {
+            'varname': varname,
+            'label': '',
+            'table': '',
+            'sheet': sheet_name or '',
+        }
+        if label_col is not None:
+            label_val = row[label_col]
+            if not pd_mod.isna(label_val):
+                record['label'] = str(label_val).strip()
+        if table_col is not None:
+            table_val = row[table_col]
+            if not pd_mod.isna(table_val):
+                record['table'] = str(table_val).strip()
+        records.append(record)
+    return records
+
+
+def extract_varnames_from_file(path: str) -> list[dict[str, str]]:
+    """Return varName rows (varname/label/table/sheet) from a dictionary file."""
+    try:
+        import pandas as pd
+    except ImportError:
+        print("WARNING: pandas is required for --extract-varnames; skipping extraction.")
+        return []
+
+    ext = os.path.splitext(path)[1].lower()
+    if ext in {'.xlsx', '.xls'}:
+        try:
+            excel = pd.ExcelFile(path)
+        except Exception as exc:  # noqa: BLE001
+            print(f"WARNING: Unable to read {os.path.basename(path)}: {exc}")
+            return []
+        sheet_names = sorted(excel.sheet_names, key=_sheet_priority)
+        rows: list[dict[str, str]] = []
+        for sheet in sheet_names:
+            try:
+                df = excel.parse(sheet)
+            except Exception as exc:  # noqa: BLE001
+                print(f"WARNING: Unable to parse sheet {sheet} in {os.path.basename(path)}: {exc}")
+                continue
+            sheet_rows = _extract_varnames_from_dataframe(df, sheet_name=sheet, pd_mod=pd)
+            if sheet_rows:
+                for row in sheet_rows:
+                    row['sheet'] = sheet
+                rows.extend(sheet_rows)
+        return rows
+
+    try:
+        df = pd.read_csv(path, engine='python')
+    except Exception as exc:  # noqa: BLE001
+        print(f"WARNING: Unable to read dictionary file {os.path.basename(path)}: {exc}")
+        return []
+    return _extract_varnames_from_dataframe(df, sheet_name=None, pd_mod=pd)
+
+
+def extract_varnames_for_dictionary(
+    dict_destination: str, year_dir: str
+) -> list[dict[str, str]]:
+    """Find and extract varName rows from a downloaded dictionary."""
+    candidates: list[str] = []
+    if dict_destination.lower().endswith('.zip'):
+        extracted_dir = os.path.join(year_dir, os.path.splitext(os.path.basename(dict_destination))[0])
+        if os.path.isdir(extracted_dir):
+            for root, _dirs, files in os.walk(extracted_dir):
+                for name in files:
+                    candidates.append(os.path.join(root, name))
+    if os.path.isfile(dict_destination):
+        candidates.append(dict_destination)
+
+    def priority(path: str) -> int:
+        ext = os.path.splitext(path)[1].lower()
+        try:
+            return LOCAL_DICT_FILE_PRIORITY.index(ext)
+        except ValueError:
+            return len(LOCAL_DICT_FILE_PRIORITY)
+
+    candidates = [path for path in candidates if os.path.splitext(path)[1].lower() in LOCAL_DICT_FILE_PRIORITY]
+    candidates.sort(key=priority)
+
+    combined: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for path in candidates:
+        rows = extract_varnames_from_file(path)
+        if not rows:
+            continue
+        for row in rows:
+            row['source_file'] = os.path.basename(path)
+            key = (row.get('varname') or '').strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            combined.append(row)
+    return combined
+
+
 def find_dictionary_for_data(
     dict_entries: list[dict], data_entry: dict
 ) -> dict | None:
@@ -506,8 +667,38 @@ def write_year_manifest(year_dir: str, year: int, rows: list[dict]) -> None:
         print(f"WARNING: Unable to write manifest for {year}: {exc}")
 
 
+def write_year_varnames(year_dir: str, year: int, rows: list[dict]) -> None:
+    """Persist a per-year catalog of varNames pulled from dictionaries."""
+    if not rows:
+        return
+    out_path = os.path.join(year_dir, f'{year}_varnames.csv')
+    fieldnames = [
+        'year',
+        'survey',
+        'prefix',
+        'dictionary',
+        'source_file',
+        'sheet',
+        'varname',
+        'label',
+        'table',
+    ]
+    try:
+        with open(out_path, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        print(f"Wrote varName catalog with {len(rows)} rows to {out_path}")
+    except OSError as exc:
+        print(f"WARNING: Unable to write varName catalog for {year}: {exc}")
+
+
 def process_year(
-    year: int, *, manifest_only: bool = False, allowed_surveys: set[str] | None = None
+    year: int,
+    *,
+    manifest_only: bool = False,
+    allowed_surveys: set[str] | None = None,
+    extract_varnames: bool = False,
 ) -> None:
     """Process downloads for a single year, handling all configured surveys."""
     print(f"\n>>> Processing Year {year}...")
@@ -537,6 +728,7 @@ def process_year(
         year_dir = os.path.join(DOWNLOAD_DIR, str(year))
         ensure_directory(year_dir)
         year_manifest: list[dict] = []
+        year_varnames: list[dict] = []
 
         for survey_name in SURVEY_DEFINITIONS.keys():
             if allowed_surveys is not None and survey_name not in allowed_surveys:
@@ -631,11 +823,32 @@ def process_year(
                         if dict_destination.lower().endswith('.zip'):
                             print(f"Unzipping {dict_filename}...")
                             unzip_and_remove(dict_destination, year_dir, context=dict_filename)
+                        if extract_varnames:
+                            var_rows = extract_varnames_for_dictionary(dict_destination, year_dir)
+                            if var_rows:
+                                for row in var_rows:
+                                    row.update(
+                                        {
+                                            'year': year,
+                                            'survey': survey_name,
+                                            'prefix': prefix_label,
+                                            'dictionary': dict_filename,
+                                        }
+                                    )
+                                year_varnames.extend(var_rows)
+                            else:
+                                print(
+                                    f"WARNING: Unable to extract varName entries from {dict_filename} "
+                                    f"for {survey_name} ({prefix_label})."
+                                )
                         time.sleep(1)
                     downloaded_dicts.add(dict_filename)
 
         if DOWNLOAD_ACCESS_DATABASE and not manifest_only:
             download_access_database(session, year, year_dir, access_entries)
+
+        if extract_varnames and year_varnames:
+            write_year_varnames(year_dir, year, year_varnames)
 
         write_year_manifest(year_dir, year, year_manifest)
 
@@ -702,6 +915,11 @@ def main(argv: list[str] | None = None) -> None:
         help="Skip downloading files; only emit manifests (fetches Content-Length when possible).",
     )
     parser.add_argument(
+        "--extract-varnames",
+        action="store_true",
+        help="Pull varName + labels from downloaded dictionaries into a {year}_varnames.csv file.",
+    )
+    parser.add_argument(
         "--surveys",
         default="",
         help="Comma list of surveys to download (matches SURVEY_DEFINITIONS keys; alias: DRV=Derived).",
@@ -710,12 +928,15 @@ def main(argv: list[str] | None = None) -> None:
     DOWNLOAD_DIR = args.out_root
     years = _parse_years(args.years)
     allowed_surveys = _parse_surveys(args.surveys)
+    if args.extract_varnames and args.manifest_only:
+        print("WARNING: --extract-varnames is ignored when --manifest-only is set (no dictionaries downloaded).")
 
     ensure_directory(DOWNLOAD_DIR)
     worker = partial(
         process_year,
         manifest_only=args.manifest_only,
         allowed_surveys=allowed_surveys,
+        extract_varnames=args.extract_varnames,
     )
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         list(executor.map(worker, years))
