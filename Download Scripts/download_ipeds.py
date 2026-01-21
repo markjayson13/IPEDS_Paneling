@@ -51,7 +51,7 @@ import zipfile
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -134,6 +134,8 @@ SURVEY_DEFINITIONS: dict[str, list[str]] = {
     'OutcomeMeasures': ['OM'],
     'Admissions': ['ADM'],
     'AcademicLibraries': ['AL'],
+    'Cost': ['VCOST'],
+    'Flags': ['FLAGS'],
 }
 
 # Matches the uniquely named 12-Month Enrollment files (e.g., EFFY2004_RV.csv).
@@ -218,7 +220,7 @@ def build_prefix_pattern(prefix: str) -> re.Pattern[str]:
 
 def fetch_year_page(session: requests.Session, year: int) -> BeautifulSoup | None:
     """Retrieve and parse the HTML page listing files for a given year."""
-    url = urljoin(BASE_URL, f'DataFiles.aspx?year={year}')
+    url = urljoin(BASE_URL, f'DataFiles.aspx?year={year}&surveyNumber=-1')
     try:
         response = session.get(url, timeout=60, headers=HEADERS)
         response.raise_for_status()
@@ -270,6 +272,10 @@ def parse_year_links(
 
     def identify_survey(filename_upper: str) -> tuple[str, str] | None:
         """Return the matching survey and refined prefix (if applicable)."""
+        special_match = EFFY_SPECIAL_PATTERN.search(filename_upper)
+        if special_match and special_match.group(1) == str(year):
+            return '12MonthEnrollment', 'EFFY'
+
         for prefix in prefixes:
             if prefix_patterns[prefix].search(filename_upper):
                 survey_name, base_prefix = prefix_map[prefix]
@@ -278,9 +284,6 @@ def parse_year_links(
                 refined = refine_matched_prefix(survey_name, filename_upper, base_prefix)
                 return survey_name, refined
 
-        special_match = EFFY_SPECIAL_PATTERN.search(filename_upper)
-        if special_match and special_match.group(1) == str(year):
-            return '12MonthEnrollment', 'EFFY'
         return None
 
     survey_results: defaultdict[
@@ -291,62 +294,102 @@ def parse_year_links(
     for row_idx, row in enumerate(soup.find_all('tr')):
         row_text_lower = (row.get_text(separator=' ', strip=True) or '').lower()
         for link in row.find_all('a', href=True):
-            found_link = True
             row_id = f'row-{row_idx}'
             link_text = (link.get_text() or '').strip().lower()
             href = link['href']
             full_url = urljoin(BASE_URL, href)
-            if '/ipeds/datacenter/data/' not in full_url.lower():
-                continue
-            if 'access' in link_text and 'database' in link_text:
-                parsed = urlparse(full_url)
+            parsed = urlparse(full_url)
+            path_lower = parsed.path.lower()
+            query_params = parse_qs(parsed.query)
+
+            entry_type = None
+            filename = ""
+            filename_for_match = ""
+            is_revision = False
+            ext_priority = 0
+
+            if 'data-generator' in path_lower:
+                table_name = (
+                    query_params.get('tableName')
+                    or query_params.get('tablename')
+                    or ['']
+                )[0].strip()
+                if not table_name:
+                    continue
+                file_type = (query_params.get('type') or ['csv'])[0].lower()
+                if file_type and file_type != 'csv':
+                    # Only pull the CSV export to avoid duplicate Stata downloads.
+                    continue
+                has_rv = (query_params.get('hasrv') or ['0'])[0].lower()
+                is_revision = has_rv not in {'0', 'false', ''}
+                entry_type = 'data'
+                filename = f"{table_name}.zip"
+                filename_for_match = table_name.upper()
+                ext_priority = 1
+            elif 'dictionary-generator' in path_lower:
+                table_name = (
+                    query_params.get('tableName')
+                    or query_params.get('tablename')
+                    or ['']
+                )[0].strip()
+                if not table_name:
+                    continue
+                entry_type = 'dict'
+                filename = f"{table_name}_Dict.zip"
+                filename_for_match = table_name.upper()
+                ext_priority = DICT_EXTENSION_PRIORITY.get('.zip', 0)
+            elif '/ipeds/datacenter/data/' in full_url.lower():
+                if 'access' in link_text and 'database' in link_text:
+                    filename = os.path.basename(parsed.path)
+                    if not filename:
+                        continue
+                    is_revision = '_RV' in filename.upper()
+                    ext = os.path.splitext(filename)[1].lower()
+                    ext_priority = 1 if ext == '.zip' else 0
+                    access_entries.append(
+                        {
+                            'priority': (1 if is_revision else 0, ext_priority),
+                            'url': full_url,
+                            'filename': filename,
+                            'is_revision': is_revision,
+                            'release': 'revised' if is_revision else '',
+                        }
+                    )
+                    continue
+
                 filename = os.path.basename(parsed.path)
                 if not filename:
                     continue
-                is_revision = '_RV' in filename.upper()
-                ext = os.path.splitext(filename)[1].lower()
-                ext_priority = 1 if ext == '.zip' else 0
-                access_entries.append(
-                    {
-                        'priority': (1 if is_revision else 0, ext_priority),
-                        'url': full_url,
-                        'filename': filename,
-                        'is_revision': is_revision,
-                        'release': 'revised' if is_revision else '',
-                    }
+                filename_for_match = filename.upper()
+                entry_type = (
+                    'dict'
+                    if ('_DICT' in filename_for_match or 'dictionary' in link_text)
+                    else 'data'
                 )
-                continue
-            parsed = urlparse(full_url)
-            filename = os.path.basename(parsed.path)
-            if not filename:
+                is_revision = '_RV' in filename_for_match
+                ext = os.path.splitext(filename)[1].lower()
+                if entry_type == 'dict':
+                    if ext and ALLOWED_DICT_EXTENSIONS and ext not in ALLOWED_DICT_EXTENSIONS:
+                        continue
+                    ext_priority = DICT_EXTENSION_PRIORITY.get(ext, 0)
+                else:
+                    ext_priority = 1 if ext == '.zip' else 0
+            else:
                 continue
 
-            filename_upper = filename.upper()
-
-            survey_match = identify_survey(filename_upper)
+            survey_match = identify_survey(filename_for_match)
             if survey_match is None:
                 continue
 
+            found_link = True
             survey, matched_prefix = survey_match
-            entry_type = (
-                'dict'
-                if ('_DICT' in filename_upper or 'dictionary' in link_text)
-                else 'data'
-            )
-            is_revision = '_RV' in filename_upper
             revision_priority = 1 if is_revision else 0
-            ext = os.path.splitext(filename)[1].lower()
-            if entry_type == 'dict':
-                if ext and ALLOWED_DICT_EXTENSIONS and ext not in ALLOWED_DICT_EXTENSIONS:
-                    # Skip HTML or other non-dictionary links that occasionally masquerade as downloads.
-                    continue
-                ext_priority = DICT_EXTENSION_PRIORITY.get(ext, 0)
-            else:
-                ext_priority = 1 if ext == '.zip' else 0
 
             release = 'revised' if 'revised' in row_text_lower else ''
             if not release and 'provisional' in row_text_lower:
                 release = 'provisional'
+            if not release and is_revision:
+                release = 'revised'
 
             candidate = {
                 'priority': (revision_priority, ext_priority),
