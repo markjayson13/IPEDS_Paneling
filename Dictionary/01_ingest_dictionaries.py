@@ -39,7 +39,7 @@ DICT_NAME_PATTERN = re.compile(
     r"(?:^|[/_-])(dict|dictionary|varlist|variables?|layout|codebook)(?:$|[_-])",
     re.IGNORECASE,
 )
-SUPPORTED_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt"}
+SUPPORTED_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt", ".htm", ".html"}
 DICTIONARY_VAR_COLS = {"varname", "variable", "var", "var_name", "name", "column"}
 DICTIONARY_LABEL_COLS = {
     "label",
@@ -478,6 +478,31 @@ def load_dictionary_frames(path: Path) -> list[pd.DataFrame]:
         fallback["sheet_name"] = xls.sheet_names[0]
         fallback["table_title"] = _infer_table_title(raw)
         return [fallback]
+
+    if suffix in {".htm", ".html"}:
+        try:
+            tables = pd.read_html(path)
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(f"Unable to parse HTML dictionary {path} ({exc})")
+        for idx, raw in enumerate(tables):
+            raw = raw.astype(str)
+            raw.columns = [str(c) for c in raw.columns]
+            candidate = extract_columns(raw)
+            if candidate is None:
+                if raw.shape[1] >= 2:
+                    candidate = raw.iloc[:, :2].copy()
+                    candidate.columns = ["source_var", "source_label"]
+                else:
+                    series = raw.iloc[:, 0].astype(str)
+                    split = series.str.split(r"\\s+", n=1, expand=True)
+                    if split.shape[1] == 1:
+                        split[1] = ""
+                    split.columns = ["source_var", "source_label"]
+                    candidate = split
+            candidate["sheet_name"] = f"html_table_{idx}"
+            candidate["table_title"] = _infer_table_title(raw)
+            frames.append(candidate)
+        return frames
 
     if suffix == ".csv":
         df = pd.read_csv(path, dtype=str, encoding_errors="ignore", low_memory=False)

@@ -599,6 +599,18 @@ def extract_varnames_from_file(path: str) -> list[dict[str, str]]:
                 rows.extend(sheet_rows)
         return rows
 
+    if ext in {'.htm', '.html'}:
+        try:
+            tables = pd.read_html(path)
+        except Exception as exc:  # noqa: BLE001
+            print(f"WARNING: Unable to read HTML dictionary {os.path.basename(path)}: {exc}")
+            return []
+        rows: list[dict[str, str]] = []
+        for idx, df in enumerate(tables):
+            sheet_rows = _extract_varnames_from_dataframe(df, sheet_name=f"html_table_{idx}", pd_mod=pd)
+            rows.extend(sheet_rows)
+        return rows
+
     try:
         df = pd.read_csv(path, engine='python')
     except Exception as exc:  # noqa: BLE001

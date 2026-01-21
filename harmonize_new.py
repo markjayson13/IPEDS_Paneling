@@ -505,6 +505,11 @@ def filter_candidates_by_forms(df: pd.DataFrame, forms: Optional[Sequence[str]])
         return df.copy()
     allowed = {f.upper() for f in forms}
 
+    # Ensure the expected hint columns exist to avoid Series.get lookups on missing keys.
+    for col in ("survey", "survey_hint", "prefix_hint"):
+        if col not in df.columns:
+            df[col] = ""
+
     def _candidate_tokens(row: pd.Series) -> set[str]:
         tokens: set[str] = set()
         for col in ("survey", "survey_hint", "prefix_hint"):
