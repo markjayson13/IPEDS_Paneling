@@ -107,6 +107,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "form_aliases": ["IC"],
             "label_regex": [r"^employer identification number$|^ein$"],
             "exclude_regex": [],
+            "varname_exact": "ein",
             "code_regex": r"(?i)^EIN$",
         },
         "dir_opeflag": {
@@ -119,6 +120,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "form_aliases": ["IC"],
             "label_regex": [r"^ope title iv eligibility indicator code$|^title iv participant$"],
             "exclude_regex": [],
+            "varname_exact": "opeflag",
             "code_regex": r"(?i)^OPEFLAG$",
         },
         "dir_opeid": {
@@ -130,6 +132,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["HD", "IC"],
             "label_regex": [r"^ope id number$|^office of postsecondary education.*id number$"],
             "exclude_regex": [],
+            "varname_exact": "opeid",
             "code_regex": r"(?i)^OPEID\d*$",
         },
         "dir_multi_campus_org": {
@@ -141,6 +144,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["HD", "IC"],
             "label_regex": [r"^multi[- ]institution or multi[- ]campus organization$"],
             "exclude_regex": [],
+            "varname_exact": "f1systyp",
             "code_regex": r"(?i)^(MCORG|MULTICAMP)$",
         },
         "dir_multi_campus_id": {
@@ -154,6 +158,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "min_year": 2013,
             "label_regex": [r"^identification number of multi[- ]institution or multi[- ]campus organization$"],
             "exclude_regex": [],
+            "varname_exact": "f1syscod",
         },
         "dir_county_fips": {
             "target_var": "dir_county_fips",
@@ -198,6 +203,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "form_aliases": ["IC"],
             "label_regex": [r"^core based statistical area.*$|^cbsa$"],
             "exclude_regex": [],
+            "varname_exact": "pccbsa",
             "code_regex": r"(?i)^CBSA$",
         },
         "dir_cbsa_type": {
@@ -210,6 +216,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "form_aliases": ["IC"],
             "label_regex": [r"^cbsa type.*metropolitan or micropolitan$|^cbsa type$"],
             "exclude_regex": [],
+            "varname_exact": "pccbsatype",
             "code_regex": r"(?i)^CBSATYPE$",
         },
         "dir_csa_code": {
@@ -222,6 +229,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "form_aliases": ["IC"],
             "label_regex": [r"^combined statistical area.*$|^csa$"],
             "exclude_regex": [],
+            "varname_exact": "pccsa",
             "code_regex": r"(?i)^CSA$",
         },
         "dir_necta_code": {
@@ -246,6 +254,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "min_year": 2009,
             "label_regex": [r"^longitude.*location of institution$|^longitude$"],
             "exclude_regex": [],
+            "varname_exact": "longitud",
         },
         "dir_latitude": {
             "target_var": "dir_latitude",
@@ -257,6 +266,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "min_year": 2009,
             "label_regex": [r"^latitude.*location of institution$|^latitude$"],
             "exclude_regex": [],
+            "varname_exact": "latitude",
         },
         "ic_open_public": {
             "target_var": "ic_open_public",
@@ -266,6 +276,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "label_regex": [r"^institution open to the general public$"],
             "exclude_regex": [],
+            "varname_exact": "openpubl",
         },
         "ic_active_in_year": {
             "target_var": "ic_active_in_year",
@@ -275,6 +286,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "AY",
             "label_regex": [r"^institution is active in current year$|^status of institution$"],
             "exclude_regex": [],
+            "varname_exact": "cyactive",
         },
 
         # =====================================================
@@ -388,6 +400,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^degree of urbanization.*$|^urban[- ]?centric locale$|^urbanization$|^urbanicity$"],
             "exclude_regex": [],
+            "varname_exact": "locale",
         },
 
         # =====================================================
@@ -401,6 +414,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^institutional control or affiliation$"],
             "exclude_regex": [],
+            "varname_exact": "cntlaffi",
         },
         "ic_public_control_primary": {
             "target_var": "ic_public_control_primary",
@@ -410,6 +424,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^primary public control$"],
             "exclude_regex": [],
+            "varname_exact": "pubprime",
         },
         "ic_public_control_secondary": {
             "target_var": "ic_public_control_secondary",
@@ -419,6 +434,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^secondary public control$"],
             "exclude_regex": [],
+            "varname_exact": "pubsecon",
         },
         "ic_religious_affiliation": {
             "target_var": "ic_religious_affiliation",
@@ -428,6 +444,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^religious affiliation$"],
             "exclude_regex": [],
+            "varname_exact": "relaffil",
         },
 
         # =====================================================
@@ -1120,6 +1137,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^calendar system$"],
             "exclude_regex": [],
             "transform": "identity",
+            "varname_exact": "calsys",
         },
         "ic_tuition_charge_varies": {
             "target_var": "ic_tuition_charge_varies",
@@ -1144,6 +1162,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "max_year": 2023,
             "label_regex": [r"^any alternative tuition plans offered by institution$"],
             "exclude_regex": [],
+            "varname_exact": "tuitpl",
         },
         "ic_alt_tuition_guaranteed": {
             "target_var": "ic_alt_tuition_guaranteed",
@@ -1155,6 +1174,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "max_year": 2023,
             "label_regex": [r"^tuition guaranteed plan$"],
             "exclude_regex": [],
+            "varname_exact": "tuitpl1",
         },
         "ic_alt_tuition_prepaid": {
             "target_var": "ic_alt_tuition_prepaid",
@@ -1166,6 +1186,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "max_year": 2023,
             "label_regex": [r"^prepaid tuition plan$"],
             "exclude_regex": [],
+            "varname_exact": "tuitpl2",
         },
         "ic_alt_tuition_payment": {
             "target_var": "ic_alt_tuition_payment",
@@ -1177,6 +1198,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "max_year": 2023,
             "label_regex": [r"^tuition payment plan$"],
             "exclude_regex": [],
+            "varname_exact": "tuitpl3",
         },
         "ic_alt_tuition_other": {
             "target_var": "ic_alt_tuition_other",
@@ -1188,6 +1210,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "max_year": 2023,
             "label_regex": [r"^other alternative tuition plan$"],
             "exclude_regex": [],
+            "varname_exact": "tuitpl4",
         },
         "ic_promise_program_flag": {
             "target_var": "ic_promise_program_flag",
@@ -1199,6 +1222,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "max_year": 2023,
             "label_regex": [r"^participates in a promise program$"],
             "exclude_regex": [],
+            "varname_exact": "prmpgm",
         },
         "ic_open_admissions": {
             "target_var": "ic_open_admissions",
@@ -1209,6 +1233,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^open admissions?$|^open admissions? policy$|^open admission policy$"],
             "exclude_regex": [r"test|sat|act|requirement|recommend"],
             "transform": "identity",
+            "varname_exact": "openadmp",
         },
         "ic_distance_programs": {
             "target_var": "ic_distance_programs",
@@ -1243,6 +1268,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^historically black college or university$|^hbcu$"],
             "exclude_regex": [],
             "transform": "identity",
+            "varname_exact": "hbcu",
         },
         "ic_tribal_flag": {
             "target_var": "ic_tribal_flag",
@@ -1253,6 +1279,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^tribal college$|^american indian.*tribal$"],
             "exclude_regex": [],
             "transform": "identity",
+            "varname_exact": "tribal",
         },
         "ic_med_school_flag": {
             "target_var": "ic_med_school_flag",
@@ -1398,6 +1425,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^investment return(?:.*)$|^investment income(?:.*)$|^net investment (?:income|return)(?:.*)$"],
             "exclude_regex": [r"endowment (?:market )?value|assets"],
             "notes": "Flow; distinct from endowment asset balances.",
+            "varname_regex": r"(?i)^(F1AF09|F2AF09|F3AF09)$",
         },
 
         # =========================
@@ -1533,6 +1561,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "FY",
             "forms": ["F1A", "F2A", "F3A"],
             "label_regex": [r"^total expenses?(?: and deductions)?$|^total expenses?$"],
+            "varname_regex": r"(?i)^(F1AF12|F2AF12|F3AF12)$",
         },
 
         # =========================
@@ -1814,6 +1843,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^student[- ]to[- ]faculty ratio$|^student/faculty ratio$"],
             "code_regex": r"(?i)^(STUFACR|SFRATIO)$",
             "exclude_regex": [],
+            "varname_exact": "stufacr",
         },
         "ef_residence_state_ftft": {
             "target_var": "ef_residence_state_ftft",
@@ -2011,6 +2041,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["ADM"],
             "label_regex": [r"^applicants total$|^total number of applicants$"],
             "exclude_regex": [r"transfer|graduate only|nondegree"],
+            "varname_exact": "applcn",
         },
         "adm_admits_total": {
             "target_var": "adm_admits_total",
@@ -2021,6 +2052,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["ADM"],
             "label_regex": [r"^admissions? total$|^total number admitted$"],
             "exclude_regex": [r"transfer|graduate only|conditional"],
+            "varname_exact": "admssn",
         },
         "adm_enrolled_ftft": {
             "target_var": "adm_enrolled_ftft",
@@ -2035,6 +2067,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "exclude_regex": [r"part[- ]?time|transfer|graduate"],
             "notes": "Prefer the explicit FTFT row when both total and FTFT appear.",
+            "varname_exact": "enrlt",
         },
 
         # ===========================================
@@ -2253,6 +2286,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^students receiving any financial aid$",
             ],
             "exclude_regex": [r"amount|dollars|\$|average|per[- ]?recipient"],
+            "varname_exact": "anyaidn",
         },
         "sfa_any_aid_amount": {
             "target_var": "sfa_any_aid_amount",
@@ -2482,6 +2516,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "notes": "Restrict to FTFT cohort; exclude dollar amounts.",
             "transform": "identity",
+            "varname_regex": r"(?i)^(PGRNT_N|PGRNT_P|FGRNT_A)$",
         },
         "pell_amount": {
             "target_var": "pell_amount",
@@ -2513,6 +2548,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^students.*in[- ]district tuition rates$",
             ],
             "exclude_regex": [r"percent|percentage|amount|\$"],
+            "varname_exact": "scfa11n",
         },
         "sfa_ftft_in_state_count": {
             "target_var": "sfa_ftft_in_state_count",
@@ -2539,6 +2575,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^students.*out[- ]of[- ]state tuition rates$",
             ],
             "exclude_regex": [r"percent|percentage|amount|\$"],
+            "varname_exact": "scfa13n",
         },
         "sfa_ftft_unknown_rate_count": {
             "target_var": "sfa_ftft_unknown_rate_count",
@@ -2570,6 +2607,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "requires_keywords": ANP_REQUIRED_KEYWORDS,
             "notes": "Title IV FTFT; SFA 2009–2023. (Add CST coverage separately when needed.)",
             "min_accept_score": 4.0,
+            "varname_regex": r"(?i)^(NPIS412|NPIS422|NPIS432)$",
         },
         "anp_0_30": {
             "target_var": "anp_0_30",
@@ -2591,6 +2629,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "band_max": 30000,
             "open_upper": False,
             "min_accept_score": 4.0,
+            "varname_regex": r"(?i)^(NPIS412|NPT412|NPIS411)$",
         },
         "anp_30_48": {
             "target_var": "anp_30_48",
@@ -2612,6 +2651,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "band_max": 48000,
             "open_upper": False,
             "min_accept_score": 4.0,
+            "varname_regex": r"(?i)^(NPIS422|NPT422|NPIS421)$",
         },
         "anp_48_75": {
             "target_var": "anp_48_75",
@@ -2633,6 +2673,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "band_max": 75000,
             "open_upper": False,
             "min_accept_score": 4.0,
+            "varname_regex": r"(?i)^(NPIS432|NPT432|NPIS431)$",
         },
         "anp_75_110": {
             "target_var": "anp_75_110",
@@ -2654,6 +2695,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "band_max": 110000,
             "open_upper": False,
             "min_accept_score": 4.0,
+            "varname_regex": r"(?i)^(NPIS442|NPT442|NPIS441)$",
         },
         "anp_110_plus": {
             "target_var": "anp_110_plus",
@@ -2675,7 +2717,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "band_max": None,
             "open_upper": True,
             "min_accept_score": 4.0,
+            "varname_regex": r"(?i)^(NPIS452|NPT452|NPIS451)$",
         },
     }
 )
-
