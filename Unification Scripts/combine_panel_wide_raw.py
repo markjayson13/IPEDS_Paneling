@@ -11,9 +11,9 @@ from typing import Iterable
 
 import pandas as pd
 
-DEFAULT_INPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections")
+DEFAULT_INPUT_DIR = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosssections")
 DEFAULT_PATTERN = "panel_wide_raw_*.csv"
-DEFAULT_OUTPUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/panel_wide_raw.csv")
+DEFAULT_OUTPUT = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/panel_wide_raw.csv")
 YEAR_RX = re.compile(r"(\d{4})")
 YEAR_COL_CANDIDATES = ["YEAR", "year", "SURVEY_YEAR", "survey_year", "SURVEYYEAR", "panel_year", "ACADYR"]
 

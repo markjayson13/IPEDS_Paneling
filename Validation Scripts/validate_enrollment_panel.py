@@ -35,10 +35,10 @@ E12_TOTAL = "E12_HEAD_ALL_UG_TOT_ALL"
 
 TOLERANCE = 1.0  # headcount tolerance
 DEFAULT_INPUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrollwide/enrollment_concepts_wide.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/Enrollwide/enrollment_concepts_wide.parquet"
 )
 DEFAULT_OUTPUT_DIR = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Checks/Enrollment"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/Enrollment"
 )
 
 

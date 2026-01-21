@@ -18,14 +18,14 @@ from typing import Iterable
 import pandas as pd
 
 DEFAULT_STEP0 = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0adm/adm_step0_long.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/Step0adm/adm_step0_long.parquet"
 )
-DEFAULT_DICT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
+DEFAULT_DICT = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet")
 DEFAULT_OUTPUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/adm_crosswalk.csv"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/adm_crosswalk.csv"
 )
 DEFAULT_FILLED_OUTPUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/adm_crosswalk_filled.csv"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/Filled/adm_crosswalk_filled.csv"
 )
 
 

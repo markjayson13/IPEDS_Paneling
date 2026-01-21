@@ -12,7 +12,7 @@ from typing import List, Pattern
 import numpy as np
 import pandas as pd
 
-DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
+DATA_ROOT = Path("/Users/markjaysonfarol13/IPEDS_Paneling")
 XWALK_PATH = DATA_ROOT / "Paneled Datasets" / "Crosswalks" / "Filled" / "ic_ay_crosswalk_all.csv"
 ICAY_WIDE_PATH = DATA_ROOT / "Parquets" / "Unify" / "ICAYwide" / "icay_concepts_wide.parquet"
 REPORT_PATH = DATA_ROOT / "Parquets" / "Validation" / "ic_ay_concept_coverage.csv"

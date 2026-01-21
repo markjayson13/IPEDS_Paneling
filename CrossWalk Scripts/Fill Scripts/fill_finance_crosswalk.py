@@ -35,11 +35,11 @@ def _normalize_form_family(fam: str | None) -> str:
 
 
 # Assumes you run this from the repo root where finance_crosswalk_template.csv lives.
-CROSSWALK_IN = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_template.csv")
-CROSSWALK_OUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/finance_crosswalk_filled.csv")
-OVERRIDES_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_crosswalk_overrides.csv")
-DICTIONARY_LAKE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
-STEP0_SAMPLE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Step0/finance_step0_long_2004.parquet")
+CROSSWALK_IN = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/finance_crosswalk_template.csv")
+CROSSWALK_OUT = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/Filled/finance_crosswalk_filled.csv")
+OVERRIDES_PATH = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/finance_crosswalk_overrides.csv")
+DICTIONARY_LAKE = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet")
+STEP0_SAMPLE = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Step0/finance_step0_long_2004.parquet")
 
 # Only treat the component-core F1/F2/F3 sections as required rows (F3 has no H component).
 CORE_SECTION_PATTERN = re.compile(r"^(?:F1[BCDEH]|F2[BCDEH]|F3[BCDE])", re.IGNORECASE)

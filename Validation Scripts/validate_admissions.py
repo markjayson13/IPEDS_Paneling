@@ -11,9 +11,9 @@ from typing import Iterable, List
 import pandas as pd
 
 DEFAULT_WIDE = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/ADMwide/adm_concepts_wide.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/ADMwide/adm_concepts_wide.parquet"
 )
-DEFAULT_OUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Validation")
+DEFAULT_OUT_DIR = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Checks/Validation")
 
 UNITID_CANDIDATES = ["UNITID", "unitid", "UNIT_ID", "unit_id"]
 YEAR_CANDIDATES = ["YEAR", "year", "SURVEY_YEAR", "survey_year", "panel_year"]

@@ -12,11 +12,11 @@ from typing import Iterable, List
 import pandas as pd
 
 DEFAULT_DICTIONARY = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Parquets/dictionary_lake.parquet"
 )
 DEFAULT_YEARS = "2004-2024"
 DEFAULT_OUTPUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/enrollment_crosswalk_template.csv"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/enrollment_crosswalk_template.csv"
 )
 
 

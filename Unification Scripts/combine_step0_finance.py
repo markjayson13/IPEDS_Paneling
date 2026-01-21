@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DEFAULT_INPUT_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0Finlong")
+DEFAULT_INPUT_DIR = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/Step0Finlong")
 DEFAULT_PATTERN = "Step0Finlong_*.parquet"
 DEFAULT_OUTPUT = DEFAULT_INPUT_DIR / "finance_step0_long.parquet"
 

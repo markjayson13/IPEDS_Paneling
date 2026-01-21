@@ -8,7 +8,7 @@ python3 "Unification Scripts/unify_sfa.py"
 
 # Download IPEDS data for years 2004 to 2024
 python3 "Download Scripts/download_ipeds.py" \
---out-root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
+--out-root "/Users/markjaysonfarol13/IPEDS_Paneling/Cross sectional Datas" \
 --years 2004 (line 2024)
 
 #Dictionary
@@ -18,7 +18,7 @@ python3 Dictionary/01_ingest_dictionaries.py
 python3 "CrossWalk Scripts/hd_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/ic_ay_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/adm_build_crosswalk_template.py"
-python3 "Cr/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/enrollment_crosswalk_autofilled.csvossWalk Scripts/enrollment_build_crosswalk_template.py"
+python3 "Cr/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/Filled/enrollment_crosswalk_autofilled.csvossWalk Scripts/enrollment_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/sfa_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/finance_build_crosswalk_template.py"
     #Auto fill crosswalks
@@ -47,18 +47,18 @@ python3 "Harmonize Scripts/stabilize_hd.py" --crosswalk "$HD_CROSSWALK"
 
 #Global Harmonization & Panel Build
 python3 harmonize_new.py \
-  --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas"\
-  --lake "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet" \
+  --root "/Users/markjaysonfarol13/IPEDS_Paneling/Cross sectional Datas"\
+  --lake "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
   --years 2004:2024 \
-  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long.parquet" \
+  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Parquets/panel_long.parquet" \
   --rules validation_rules.yaml \
   --strict-release \
   --strict-coverage
 
 # Final Wide Panel
 python3 panelize_panel.py \
-  --source "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long.parquet" \
-  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Final/panel_wide.csv"
+  --source "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Parquets/panel_long.parquet" \
+  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Final/panel_wide.csv"
 
 # Validation scripts:
 python3 "Validation Scripts/hd_validate_master_panel.py"
@@ -94,10 +94,10 @@ python3 "Unification Scripts/combine_step0_finance.py"
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/Unification Scripts/unify_sfa.py"
 python3 "/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling/CrossWalk Scripts/sfa_build_crosswalk_template.py"
 python3 "Harmonize Scripts/harmonize_sfa_concepts.py" \
-  --input-long "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0sfa/sfa_step0_long.parquet" \
-  --crosswalk "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/sfa_crosswalk_filled.csv"
+  --input-long "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/Step0sfa/sfa_step0_long.parquet" \
+  --crosswalk "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/Filled/sfa_crosswalk_filled.csv"
 python3 "Harmonize Scripts/harmonize_finance_concepts.py" \
-  --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0Finlong/finance_step0_long.parquet"
+  --step0 "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/Step0Finlong/finance_step0_long.parquet"
 python3 "Validation Scripts/validate_sfa_panel.py"
 
 #ADM Unify and crosswalk scripts:
@@ -118,7 +118,7 @@ python3 "CrossWalk Scripts/finance_build_crosswalk_template.py"
 python3 "CrossWalk Scripts/Fill Scripts/fill_finance_crosswalk.py"
 python3 "Unification Scripts/combine_step0_finance.py"
 python3 "Harmonize Scripts/harmonize_finance_concepts.py" \
-  --step0 "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0Finlong/finance_step0_long.parquet"
+  --step0 "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/Step0Finlong/finance_step0_long.parquet"
 LEGACY_STEP0
 
 set -euo pipefail
@@ -138,9 +138,9 @@ require_file() {
 
 # === User paths ===
 REPO="/Users/markjaysonfarol13/Documents/GitHub/IPEDS_Paneling"
-OUT_ROOT="/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas"
-PARQUETS="/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets"
-PANELED_DIR="/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets"
+OUT_ROOT="/Users/markjaysonfarol13/IPEDS_Paneling/Cross sectional Datas"
+PARQUETS="/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Parquets"
+PANELED_DIR="/Users/markjaysonfarol13/IPEDS_Paneling/Panels"
 CROSSSECT_DIR="$PANELED_DIR/Crosssections"
 CROSSWALK_DIR="$PANELED_DIR/Crosswalks"
 FILLED_CROSSWALKS="$CROSSWALK_DIR/Filled"
@@ -149,7 +149,7 @@ PANEL_LONG="$PARQUETS/panel_long.parquet"
 PANEL_WIDE="$PANELED_DIR/Final/panel_wide.csv"
 PANEL_WIDE_CLEAN="$PANELED_DIR/Final/panel_wide_cleanparent.csv"
 PANEL_WIDE_CLEANROBUST="$PANELED_DIR/Final/panel_wide_cleanrobust.csv"
-PANEL_WIDE_RAW="/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/panel_wide_raw.csv"
+PANEL_WIDE_RAW="/Users/markjaysonfarol13/IPEDS_Paneling/Panels/panel_wide_raw.csv"
 ENROLL_STEP0="$PARQUETS/Unify/Enrolllong/enrollment_step0_long.parquet"
 ENROLL_WIDE="$PARQUETS/Unify/Enrollwide/enrollment_concepts_wide.parquet"
 HD_CROSSWALK="$FILLED_CROSSWALKS/hd_crosswalk.csv"

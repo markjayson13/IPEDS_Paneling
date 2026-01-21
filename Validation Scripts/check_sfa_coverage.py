@@ -14,10 +14,10 @@ SURVEY_HINTS = ("SFA", "STUDENT FINANCIAL AID", "NET PRICE", "NET-PRICE")
 VAR_COL_CANDIDATES = ["varname", "var_name", "var", "variable"]
 SURVEY_COL_CANDIDATES = ["survey", "SURVEY", "component", "COMPONENT", "survey_label", "component_name"]
 
-DICT_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
-SFA_STEP0_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0sfa/sfa_step0_long.parquet")
-SFA_CROSSWALK_FILLED = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/sfa_crosswalk_filled.csv")
-SFA_WIDE_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAwide/sfa_concepts_wide.parquet")
+DICT_PATH = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet")
+SFA_STEP0_PATH = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/Step0sfa/sfa_step0_long.parquet")
+SFA_CROSSWALK_FILLED = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/Filled/sfa_crosswalk_filled.csv")
+SFA_WIDE_PATH = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/SFAwide/sfa_concepts_wide.parquet")
 
 
 def _resolve_column(df: pd.DataFrame, candidates: Iterable[str]) -> str | None:

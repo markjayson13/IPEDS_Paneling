@@ -7,8 +7,8 @@ Usage (default paths):
 
 Or with explicit paths:
     python auto_fill_hd_crosswalk.py \
-        --template "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/hd_crosswalk_template.csv" \
-        --out "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/hd_crosswalk.csv"
+        --template "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/hd_crosswalk_template.csv" \
+        --out "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/Filled/hd_crosswalk.csv"
 
 This script:
   - Reads the template (with columns: concept_key, survey, varname, year_start, year_end, notes)
@@ -33,7 +33,7 @@ import pandas as pd
 # --------------------------------------------------------------------
 # Canonical paths (same base you use elsewhere)
 # --------------------------------------------------------------------
-DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
+DATA_ROOT = Path("/Users/markjaysonfarol13/IPEDS_Paneling")
 DEFAULT_CROSSWALK_DIR = DATA_ROOT / "Paneled Datasets" / "Crosswalks"
 DEFAULT_TEMPLATE_PATH = DEFAULT_CROSSWALK_DIR / "hd_crosswalk_template.csv"
 DEFAULT_FILLED_DIR = DEFAULT_CROSSWALK_DIR / "Filled"

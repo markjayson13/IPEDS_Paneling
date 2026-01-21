@@ -9,19 +9,19 @@ from pathlib import Path
 import pandas as pd
 
 DEFAULT_STEP0 = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_step0_long.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Long/finance_step0_long.parquet"
 )
 DEFAULT_CROSSWALK = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/finance_crosswalk_filled.csv"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/Filled/finance_crosswalk_filled.csv"
 )
 DEFAULT_LONG_OUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_concepts_long.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Long/finance_concepts_long.parquet"
 )
 DEFAULT_WIDE_OUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Long/finance_concepts_wide.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Long/finance_concepts_wide.parquet"
 )
 DEFAULT_COVERAGE = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/finance_concepts_coverage.csv"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/finance_concepts_coverage.csv"
 )
 
 ID_COLS = ["YEAR", "UNITID"]
@@ -174,7 +174,7 @@ def main() -> None:
     args.output_wide.parent.mkdir(parents=True, exist_ok=True)
     wide.to_parquet(args.output_wide, index=False)
     # Also emit a CSV copy of the wide finance concepts.
-    wide_concepts_dir = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Wide Concepts")
+    wide_concepts_dir = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Wide_Concepts")
     wide_concepts_dir.mkdir(parents=True, exist_ok=True)
     wide.to_csv(wide_concepts_dir / "finance_concepts_wide.csv", index=False)
 

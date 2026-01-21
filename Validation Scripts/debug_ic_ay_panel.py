@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
+DATA_ROOT = Path("/Users/markjaysonfarol13/IPEDS_Paneling")
 CW_PATH = DATA_ROOT / "Paneled Datasets" / "Crosswalks" / "Filled" / "ic_ay_crosswalk_all.csv"
 STEP0_LONG = DATA_ROOT / "Parquets" / "Unify" / "Step0ICAYlong" / "icay_step0_long.parquet"
 CONCEPT_LONG = DATA_ROOT / "Parquets" / "Unify" / "ICAYlong" / "icay_concepts_long.parquet"

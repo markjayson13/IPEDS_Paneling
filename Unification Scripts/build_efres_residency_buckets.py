@@ -76,13 +76,13 @@ BUCKET_COLS = {
 }
 
 DEFAULT_EFRES = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/efres_long.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/Enrolllong/efres_long.parquet"
 )
 DEFAULT_HD = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/HD/hd_state_panel.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/HD/hd_state_panel.parquet"
 )
 DEFAULT_OUTPUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/efres_residency_buckets.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/Enrolllong/efres_residency_buckets.parquet"
 )
 
 

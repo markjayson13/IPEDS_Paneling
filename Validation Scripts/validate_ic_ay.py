@@ -9,7 +9,7 @@ from typing import Iterable, List
 import numpy as np
 import pandas as pd
 
-DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
+DATA_ROOT = Path("/Users/markjaysonfarol13/IPEDS_Paneling")
 DEFAULT_IC_AY_PANEL = DATA_ROOT / "Parquets" / "Unify" / "ICAYwide" / "icay_concepts_wide.parquet"
 DEFAULT_HD_PANEL = DATA_ROOT / "Parquets" / "Unify" / "HDICwide" / "hd_master_panel.parquet"
 DEFAULT_VALIDATION_DIR = DATA_ROOT / "Parquets" / "Validation"

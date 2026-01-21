@@ -8,7 +8,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
+DATA_ROOT = Path("/Users/markjaysonfarol13/IPEDS_Paneling")
 DEFAULT_RAW_HDIC = DATA_ROOT / "Parquets" / "panel_long_hd_ic.parquet"
 DEFAULT_MASTER = DATA_ROOT / "Paneled Datasets" / "Final" / "hd_master_panel.csv"
 FALLBACK_MASTER = DATA_ROOT / "Parquets" / "Unify" / "HDICwide" / "hd_master_panel.parquet"

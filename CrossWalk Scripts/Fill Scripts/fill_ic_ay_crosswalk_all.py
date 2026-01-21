@@ -8,7 +8,7 @@ from typing import Dict, Iterable, List
 
 import pandas as pd
 
-CROSSWALK_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks")
+CROSSWALK_DIR = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks")
 TEMPLATE = CROSSWALK_DIR / "ic_ay_crosswalk_template.csv"
 FILLED = CROSSWALK_DIR / "Filled" / "ic_ay_crosswalk_all.csv"
 

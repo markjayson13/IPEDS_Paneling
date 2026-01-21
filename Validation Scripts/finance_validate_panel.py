@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 DEFAULT_PANEL = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/finance_concepts_wide.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Parquets/finance_concepts_wide.parquet"
 )
 
 

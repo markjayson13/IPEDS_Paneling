@@ -17,9 +17,9 @@ NET_PRICE_BINS = [
     "NET_PRICE_AVG_INC_75_110K",
     "NET_PRICE_AVG_INC_110K_PLUS",
 ]
-SFA_LONG_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAlong")
-SFA_WIDE_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAwide")
-VALIDATION_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Validation")
+SFA_LONG_DIR = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/SFAlong")
+SFA_WIDE_DIR = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/SFAwide")
+VALIDATION_DIR = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Checks/Validation")
 
 
 def resolve_column(df: pd.DataFrame, preferred: str, fallbacks: Sequence[str]) -> str:

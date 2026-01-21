@@ -10,12 +10,12 @@ import pandas as pd
 
 UNITID_CANDIDATES = ["UNITID", "unitid", "UNIT_ID", "unit_id"]
 YEAR_CANDIDATES = ["YEAR", "year", "SURVEY_YEAR", "survey_year", "panel_year", "SURVYEAR", "survyear"]
-CROSSWALK_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks")
+CROSSWALK_DIR = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks")
 CROSSWALK_FILLED_DIR = CROSSWALK_DIR / "Filled"
 DEFAULT_SFA_CROSSWALK = CROSSWALK_FILLED_DIR / "sfa_crosswalk_filled.csv"
-SFA_WIDE_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAwide")
-SFA_HARMONIZED_CSV_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Wide Concepts")
-STEP0_SFA_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0sfa")
+SFA_WIDE_DIR = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/SFAwide")
+SFA_HARMONIZED_CSV_DIR = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Wide_Concepts")
+STEP0_SFA_DIR = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/Step0sfa")
 
 
 def resolve_column(df: pd.DataFrame, preferred: str, fallbacks: Iterable[str]) -> str:

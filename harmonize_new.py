@@ -330,7 +330,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--years",
         type=str,
-        default="2004:2024",
+        default="2002:2024",
         help="Year expression: 'YYYY', 'YYYY:YYYY', or comma list 'YYYY,YYYY'",
     )
     parser.add_argument(
@@ -351,8 +351,18 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Destination directory for split-by-survey parquet files (default: same directory as --output).",
     )
     parser.add_argument("--rules", type=Path, default=Path("validation_rules.yaml"), help="Validation rules YAML path")
-    parser.add_argument("--strict-release", action="store_true", help="Error if mixed provisional/revised releases")
-    parser.add_argument("--strict-coverage", action="store_true", help="Error if any concept fails to meet MIN_ACCEPT_SCORE")
+    parser.add_argument(
+        "--strict-release",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Error if mixed provisional/revised releases (default: true)",
+    )
+    parser.add_argument(
+        "--strict-coverage",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Error if any concept fails to meet MIN_ACCEPT_SCORE (default: true)",
+    )
     parser.add_argument("--log-level", type=str, default="INFO", help="Logging level (e.g., INFO, DEBUG)")
     parser.add_argument("--reporting-map", type=Path, default=None, help="CSV crosswalk with UNITID->reporting_unitid actions")
     parser.add_argument("--scorecard-merge", action="store_true", help="Enable Scorecard merge guard (requires --scorecard-crosswalk)")
@@ -533,7 +543,7 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
     code_norm = str(row.get("code_norm") or row.get("source_var") or "").strip().upper()
     table_norm = str(row.get("table_name_norm") or row.get("table_name") or "").strip().lower()
 
-    if METADATA_NEGATIVES.match(label_raw.lower()):
+    if METADATA_NEGATIVES.match(label_raw.lower()) and not str(concept.get("target_var", "")).startswith("dir_"):
         return -5.0
 
     score = 0.0
@@ -639,7 +649,10 @@ def choose_candidate(
     for _, row in df.iterrows():
         source_var = str(row.get("source_var") or "")
         label_norm = str(row.get("source_label_norm") or row.get("source_label") or "")
-        if GLOBAL_EXCLUDE.search(source_var) or GLOBAL_EXCLUDE.search(label_norm):
+        if (
+            not str(concept.get("target_var", "")).startswith("dir_")
+            and (GLOBAL_EXCLUDE.search(source_var) or GLOBAL_EXCLUDE.search(label_norm))
+        ):
             continue
         if survey_lower == "finance" and FINANCE_STOCK_EXCLUDE.search(label_norm):
             continue

@@ -9,8 +9,8 @@ from typing import Dict, Iterable, List
 import pandas as pd
 
 # Defaults
-TEMPLATE_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/sfa_crosswalk_template.csv")
-FILLED_PATH = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/sfa_crosswalk_filled.csv")
+TEMPLATE_PATH = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/sfa_crosswalk_template.csv")
+FILLED_PATH = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/Filled/sfa_crosswalk_filled.csv")
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -49,7 +49,7 @@ flowchart LR
 ### 0. Download/refresh raw files & manifests
 ```bash
 python download_ipeds.py \
-  --out-root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
+  --out-root "/Users/markjaysonfarol13/IPEDS_Paneling/Cross sectional Datas" \
   --years 2004:2024
 ```
 This writes one manifest per year (now stored in `manifests/baseline/` for drift checking) and downloads every survey file plus dictionary, unzipping into the existing folder hierarchy. Use `--manifest-only` to scrape manifests without downloading payloads (the CI guard relies on this mode).
@@ -57,32 +57,32 @@ This writes one manifest per year (now stored in `manifests/baseline/` for drift
 ### 1. Build the dictionary lake
 ```bash
 python 01_ingest_dictionaries.py \
-  --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
-  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet"
+  --root "/Users/markjaysonfarol13/IPEDS_Paneling/Cross sectional Datas" \
+  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Parquets/dictionary_lake.parquet"
 ```
 
 ### 2. Harmonize to a long panel (2004–2024+)
 ```bash
 python harmonize_new.py \
-  --root "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Cross sectional Datas" \
-  --lake "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/dictionary_lake.parquet" \
+  --root "/Users/markjaysonfarol13/IPEDS_Paneling/Cross sectional Datas" \
+  --lake "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Parquets/dictionary_lake.parquet" \
   --years 2004:2024 \
-  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long.parquet" \
+  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Parquets/panel_long.parquet" \
   --rules validation_rules.yaml \
   --strict-release \
   --strict-coverage
 ```
 *(Optional `--reporting-map reporting_map.csv` if you have a UNITID→reporting-unit crosswalk.)*
 
-> **Note:** All parquet/CSV outputs are written under `/Users/markjaysonfarol13/Higher Ed research/IPEDS/...` to keep the Git repository code-only. Do not add generated artifacts to version control.
+> **Note:** All parquet/CSV outputs are written under `/Users/markjaysonfarol13/IPEDS_Paneling/...` to keep the Git repository code-only. Do not add generated artifacts to version control.
 
 ### 3. Pivot to the classic wide CSV
 ```bash
 python panelize_panel.py \
-  --source "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/panel_long.parquet" \
-  --output "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/panel_wide.csv"
+  --source "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Parquets/panel_long.parquet" \
+  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/panel_wide.csv"
 ```
-If you spin off supplemental scenarios, keep them under `/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks/Supp. Panels`.
+If you spin off supplemental scenarios, keep them under `/Users/markjaysonfarol13/IPEDS_Paneling/Checks/Supp. Panels`.
 
 ### 4. Spot-check label matches
 ```bash
@@ -102,8 +102,8 @@ PY
 - Finance basis tagging (GASB/FASB/For-profit) per extracted row.
 - EF residence long-family extraction with state column.
 - QC outputs written outside the repo:
-  - `label_matches.csv` → `/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks/Label match/`
-  - `validation_report.csv`, `form_conflicts.csv`, `coverage_summary.csv` → `/Users/markjaysonfarol13/Higher Ed research/IPEDS/Checks/`
+  - `label_matches.csv` → `/Users/markjaysonfarol13/IPEDS_Paneling/Checks/Label match/`
+  - `validation_report.csv`, `form_conflicts.csv`, `coverage_summary.csv` → `/Users/markjaysonfarol13/IPEDS_Paneling/Checks/`
 - Manifest drift guard workflow (`.github/workflows/manifest-drift.yml`) that scrapes current manifests in `--manifest-only` mode and fails PRs if they differ from the committed snapshot in `manifests/baseline/`. Update the baseline when you intentionally ingest new releases.
 
 ---

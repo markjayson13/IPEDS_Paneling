@@ -8,7 +8,7 @@ from typing import Optional, Tuple
 import pandas as pd
 
 
-DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
+DATA_ROOT = Path("/Users/markjaysonfarol13/IPEDS_Paneling")
 XWALK_PATH = DATA_ROOT / "Paneled Datasets" / "Crosswalks" / "Filled" / "ic_ay_crosswalk_all.csv"
 OUT_DIR = DATA_ROOT / "Parquets" / "Validation"
 

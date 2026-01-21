@@ -9,7 +9,7 @@ from typing import List
 
 import pandas as pd
 
-DEFAULT_INPUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/enrollment_crosswalk_autofilled.csv")
+DEFAULT_INPUT = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/Filled/enrollment_crosswalk_autofilled.csv")
 DEFAULT_MAX_SAMPLE = 15
 
 STATES = [

@@ -12,7 +12,7 @@ from typing import Dict, List, Tuple
 import pandas as pd
 
 ID_COLS = ["UNITID", "YEAR"]
-DEFAULT_OUTPUT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Final/panel_wide.csv")
+DEFAULT_OUTPUT = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Final/panel_wide.csv")
 
 
 def parse_component(spec: str) -> Tuple[str, Path]:

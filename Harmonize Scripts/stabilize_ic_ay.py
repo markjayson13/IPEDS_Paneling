@@ -9,7 +9,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-DATA_ROOT = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS")
+DATA_ROOT = Path("/Users/markjaysonfarol13/IPEDS_Paneling")
 DEFAULT_LONG_PANEL_PATH = DATA_ROOT / "Parquets" / "panel_long_hd_ic.parquet"
 RAW_MERGED_CSV = DATA_ROOT / "Paneled Datasets" / "Crosssections" / "panel_wide_raw_2004_2024_merged.csv"
 LONG_PANEL_FALLBACKS = [
@@ -299,7 +299,7 @@ def stabilize_ic_ay(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wide.to_parquet(output_path, index=False)
     # Also emit a CSV copy to Wide Concepts.
-    wide_concepts_dir = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Wide Concepts")
+    wide_concepts_dir = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Wide_Concepts")
     wide_concepts_dir.mkdir(parents=True, exist_ok=True)
     wide.to_csv(wide_concepts_dir / "icay_concepts_wide.csv", index=False)
 

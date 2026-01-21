@@ -12,14 +12,14 @@ from typing import Iterable, List
 import pandas as pd
 
 DEFAULT_DICTIONARY = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet"
 )
 DEFAULT_PANEL_ROOT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosssections"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosssections"
 )
 DEFAULT_YEARS = "2004-2024"
 DEFAULT_OUTPUT = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Enrolllong/enrollment_step0_long.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/Enrolllong/enrollment_step0_long.parquet"
 )
 
 

@@ -11,19 +11,19 @@ from typing import Iterable
 import pandas as pd
 
 DEFAULT_STEP0 = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0adm/adm_step0_long.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/Step0adm/adm_step0_long.parquet"
 )
 DEFAULT_CROSSWALK = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/adm_crosswalk_filled.csv"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/Filled/adm_crosswalk_filled.csv"
 )
 DEFAULT_OUT_LONG = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/ADMlong/adm_concepts_long.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/ADMlong/adm_concepts_long.parquet"
 )
 DEFAULT_OUT_WIDE = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/ADMwide/adm_concepts_wide.parquet"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/ADMwide/adm_concepts_wide.parquet"
 )
 DEFAULT_OUT_CSV = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Harmonized/ADM/adm_concepts_wide.csv"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Harmonized/ADM/adm_concepts_wide.csv"
 )
 
 UNITID_CANDIDATES = ["UNITID", "unitid", "UNIT_ID", "unit_id"]

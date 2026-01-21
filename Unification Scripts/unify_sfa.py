@@ -16,12 +16,12 @@ VAR_COL_CANDIDATES = ["varname", "var_name", "var", "variable"]
 SURVEY_COL_CANDIDATES = ["survey", "SURVEY", "component", "COMPONENT", "survey_label", "component_name"]
 SURVEY_YEAR_CANDIDATES = ["survey_year", "SURVEY_YEAR", "year", "YEAR", "panel_year"]
 SURVEY_HINTS = ("SFA", "STUDENT FINANCIAL AID", "NET PRICE", "NET-PRICE")
-PANEL_WIDE_RAW = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/panel_wide_raw.csv")
-BASE_STEP0_SFA_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/Step0sfa")
-BASE_SFA_LONG_DIR = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Unify/SFAlong")
-DEFAULT_DICTIONARY_LAKE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Parquets/Dictionary/dictionary_lake.parquet")
+PANEL_WIDE_RAW = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/panel_wide_raw.csv")
+BASE_STEP0_SFA_DIR = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/Step0sfa")
+BASE_SFA_LONG_DIR = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Unify/SFAlong")
+DEFAULT_DICTIONARY_LAKE = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet")
 DEFAULT_SFA_CROSSWALK = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Crosswalks/Filled/sfa_crosswalk_filled.csv"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Crosswalks/Filled/sfa_crosswalk_filled.csv"
 )
 
 

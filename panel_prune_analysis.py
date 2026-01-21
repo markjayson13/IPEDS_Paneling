@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pandas as pd
 
-PANEL_WIDE = Path("/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Final/panel_wide.csv")
+PANEL_WIDE = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Final/panel_wide.csv")
 PANEL_WIDE_CLEANROBUST = Path(
-    "/Users/markjaysonfarol13/Higher Ed research/IPEDS/Paneled Datasets/Final/panel_wide_cleanrobust.csv"
+    "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/Final/panel_wide_cleanrobust.csv"
 )
 
 

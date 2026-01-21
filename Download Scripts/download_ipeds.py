@@ -3,7 +3,8 @@ IPEDS "Power User" Data Downloader Script (v6 - Multithreaded, Comprehensive & S
 
 PURPOSE:
 This script automates the download and extraction of IPEDS "Complete Data Files"
-for a specified range of years (2001-2024). It is designed to be run from a local
+for a specified range of years (2002-2024; 2001 is skipped because HD is absent).
+It is designed to be run from a local
 machine (e.g., in VS Code) to gather all necessary raw cross-sectional files
 and their corresponding data dictionaries.
 
@@ -60,7 +61,7 @@ import requests
 from bs4 import BeautifulSoup
 
 DOWNLOAD_DIR = '/Users/markjaysonfarol13/IPEDS_Paneling/Raw_Cross_Section_Data'
-YEARS_TO_DOWNLOAD = range(2001, 2025)
+YEARS_TO_DOWNLOAD = range(2002, 2025)
 BASE_URL = 'https://nces.ed.gov/ipeds/datacenter/'
 USER_AGENT = (
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5) '
