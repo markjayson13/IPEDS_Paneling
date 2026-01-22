@@ -149,6 +149,7 @@ VALIDATION_REPORT_PATH = CHECKS_OUTPUT_DIR / "validation_report.csv"
 SUPP_PANEL_DIR = ARTIFACTS_DIR / "Supp_Panels"
 FORM_CONFLICTS_PATH = CHECKS_OUTPUT_DIR / "form_conflicts.csv"
 COVERAGE_SUMMARY_PATH = CHECKS_OUTPUT_DIR / "coverage_summary.csv"
+MATCH_STATS_PATH = CHECKS_OUTPUT_DIR / "match_stats.csv"
 
 OUTPUT_COLUMNS = [
     "UNITID",
@@ -563,31 +564,36 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
         return -5.0
 
     score = 0.0
-    label_patterns = concept.get("label_regex") or []
-    if not isinstance(label_patterns, (list, tuple, set)):
-        label_patterns = [label_patterns]
+    # If we have a varname hint, treat it as primary and skip label penalties/keyword gates.
+    has_varname_hint = bool(concept.get("varname_exact") or concept.get("varname_regex"))
     matched_label = False
-    for pattern in label_patterns:
-        if not pattern:
-            continue
-        regex = pattern if hasattr(pattern, "search") else re.compile(pattern, re.IGNORECASE)
-        if regex.fullmatch(search_text):
-            score = max(score, 4.0)
-            matched_label = True
-            break
-        if regex.search(search_text):
-            score = max(score, 2.5)
-            matched_label = True
-    if not matched_label:
-        score -= 1.0
+    if not has_varname_hint:
+        label_patterns = concept.get("label_regex") or []
+        if not isinstance(label_patterns, (list, tuple, set)):
+            label_patterns = [label_patterns]
+        for pattern in label_patterns:
+            if not pattern:
+                continue
+            regex = pattern if hasattr(pattern, "search") else re.compile(pattern, re.IGNORECASE)
+            if regex.fullmatch(search_text):
+                score = max(score, 4.0)
+                matched_label = True
+                break
+            if regex.search(search_text):
+                score = max(score, 2.5)
+                matched_label = True
+        if not matched_label:
+            score -= 1.0
 
-    required_keywords = [
-        tok.strip().lower()
-        for tok in (concept.get("requires_keywords") or [])
-        if isinstance(tok, str) and tok.strip()
-    ]
-    if required_keywords and not all(tok in search_text for tok in required_keywords):
-        score = min(score, 3.0)
+        required_keywords = [
+            tok.strip().lower()
+            for tok in (concept.get("requires_keywords") or [])
+            if isinstance(tok, str) and tok.strip()
+        ]
+        if required_keywords and not all(tok in search_text for tok in required_keywords):
+            score = min(score, 3.0)
+    else:
+        matched_label = True
 
     varname_exact = concept.get("varname_exact")
     if varname_exact and var_norm == str(varname_exact).lower():
@@ -1877,6 +1883,29 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         .nunique()
         .reset_index(name="n_concepts")
     )
+    # Match statistics by year/survey: total concepts evaluated vs accepted
+    total_per_group = (
+        audit_df.groupby(["year", "survey"], dropna=False)["target_var"]
+        .nunique()
+        .rename("total_concepts")
+    )
+    accepted_per_group = (
+        audit_df[audit_df["accepted"] == True]  # noqa: E712
+        .groupby(["year", "survey"], dropna=False)["target_var"]
+        .nunique()
+        .rename("matched_concepts")
+    )
+    stats = (
+        pd.concat([total_per_group, accepted_per_group], axis=1)
+        .fillna(0)
+        .reset_index()
+    )
+    stats["matched_concepts"] = stats["matched_concepts"].astype(int)
+    stats["total_concepts"] = stats["total_concepts"].astype(int)
+    stats["unmatched_concepts"] = stats["total_concepts"] - stats["matched_concepts"]
+    stats.to_csv(MATCH_STATS_PATH, index=False)
+    logging.info("Match stats by year/survey written to %s", MATCH_STATS_PATH)
+
     COVERAGE_SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
     coverage.to_csv(COVERAGE_SUMMARY_PATH, index=False)
     logging.info("Coverage by year and survey written to %s", COVERAGE_SUMMARY_PATH)

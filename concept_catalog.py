@@ -171,6 +171,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "min_year": 2009,
             "label_regex": [r"^fips county code$|^county fips code$"],
             "exclude_regex": [],
+            "varname_regex": r"(?i)^(CNTYFIPS|COUNTYFIPS?|COUNTYCD)$",
         },
         "dir_county_name": {
             "target_var": "dir_county_name",
@@ -183,6 +184,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "min_year": 2009,
             "label_regex": [r"^county name$"],
             "exclude_regex": [],
+            "varname_regex": r"(?i)^COUNTY(NM|NAME)?$",
         },
         "dir_congress_district": {
             "target_var": "dir_congress_district",
@@ -195,6 +197,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "min_year": 2009,
             "label_regex": [r"^congressional district code$"],
             "exclude_regex": [],
+            "varname_regex": r"(?i)^(CONGDIST|CD)$",
         },
         "dir_cbsa_code": {
             "target_var": "dir_cbsa_code",
@@ -207,6 +210,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^core based statistical area.*$|^cbsa$"],
             "exclude_regex": [],
             "varname_exact": "pccbsa",
+            "varname_regex": r"(?i)^(P?CCBSA|CBSA)$",
             "code_regex": r"(?i)^CBSA$",
         },
         "dir_cbsa_type": {
@@ -220,6 +224,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^cbsa type.*metropolitan or micropolitan$|^cbsa type$"],
             "exclude_regex": [],
             "varname_exact": "pccbsatype",
+            "varname_regex": r"(?i)^(P?CCBSATYPE|CBSATYPE)$",
             "code_regex": r"(?i)^CBSATYPE$",
         },
         "dir_csa_code": {
@@ -233,6 +238,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^combined statistical area.*$|^csa$"],
             "exclude_regex": [],
             "varname_exact": "pccsa",
+            "varname_regex": r"(?i)^(P?CCSA|CSA)$",
             "code_regex": r"(?i)^CSA$",
         },
         "dir_necta_code": {
@@ -245,6 +251,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "form_aliases": ["IC"],
             "label_regex": [r"^new england city and town areas.*$|^necta.*$"],
             "exclude_regex": [],
+            "varname_regex": r"(?i)^(NECTA|NECTA\s*CODE)$",
             "code_regex": r"(?i)^NECTA$",
         },
         "dir_longitude": {

@@ -35,11 +35,13 @@ DICT_PARQUET_PATH = BASE_ROOT / "Dictionary" / "dictionary_lake.parquet"
 INGEST_PROFILE_PATH = BASE_ROOT / "Dictionary" / "ingest_profile.csv"
 DICTIONARY_PROFILE_PATH = BASE_ROOT / "Dictionary" / "dictionary_profile.csv"
 DEFAULT_OUTPUT = DICT_PARQUET_PATH
+MIN_YEAR = 2002
 DICT_NAME_PATTERN = re.compile(
     r"(?:^|[/_-])(dict|dictionary|varlist|variables?|layout|codebook)(?:$|[_-])",
     re.IGNORECASE,
 )
-SUPPORTED_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt", ".htm", ".html"}
+# Prefer structured files; HTML dictionaries are noisy and handled via header fallback.
+SUPPORTED_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt"}
 DICTIONARY_VAR_COLS = {"varname", "variable", "var", "var_name", "name", "column"}
 DICTIONARY_LABEL_COLS = {
     "label",
@@ -295,6 +297,59 @@ SURVEY_HINT_BY_PREFIX = {
 }
 
 
+SURVEY_HINT_CANON = {
+    "institutionalcharacteristics": "InstitutionalCharacteristics",
+    "institutional characteristics": "InstitutionalCharacteristics",
+    "ic": "InstitutionalCharacteristics",
+    "hd": "InstitutionalCharacteristics",
+    "directory": "InstitutionalCharacteristics",
+    "fallenrollment": "FallEnrollment",
+    "fall enrollment": "FallEnrollment",
+    "ef": "FallEnrollment",
+    "12monthenrollment": "12MonthEnrollment",
+    "12-month enrollment": "12MonthEnrollment",
+    "e12": "12MonthEnrollment",
+    "efia": "12MonthEnrollment",
+    "effy": "12MonthEnrollment",
+    "e1d": "12MonthEnrollment",
+    "studentfinancialaid": "StudentFinancialAid",
+    "student financial aid": "StudentFinancialAid",
+    "sfa": "StudentFinancialAid",
+    "admissions": "Admissions",
+    "adm": "Admissions",
+    "academiclibraries": "AcademicLibraries",
+    "academic libraries": "AcademicLibraries",
+    "al": "AcademicLibraries",
+    "graduationrates": "GraduationRates",
+    "graduation rates": "GraduationRates",
+    "gr": "GraduationRates",
+    "grs": "GraduationRates",
+    "gr200": "GraduationRates",
+    "pe": "GraduationRates",
+    "outcomemeasures": "OutcomeMeasures",
+    "om": "OutcomeMeasures",
+    "humanresources": "HumanResources",
+    "human resources": "HumanResources",
+    "hr": "HumanResources",
+    "completions": "Completions",
+    "c": "Completions",
+    "finance": "Finance",
+    "fin": "Finance",
+    "f": "Finance",
+    "f1a": "Finance",
+    "f2a": "Finance",
+    "f3a": "Finance",
+    "derived": "Derived",
+    "drv": "Derived",
+}
+
+
+def standardize_survey_hint(value: str) -> str:
+    key = (value or "").strip()
+    key_compact = key.replace(" ", "").lower()
+    return SURVEY_HINT_CANON.get(key_compact, key)
+
+
 def _normalize_label_text(value: object) -> str:
     return _norm_text(value)
 
@@ -400,11 +455,26 @@ def _infer_table_title(df: pd.DataFrame) -> str:
 def parse_file_meta(path: Path) -> dict | None:
     stem = path.stem
     cleaned = re.sub(r"[^A-Za-z0-9]", "", stem)
-    year_match = re.search(r"(20\d{2})", cleaned)
-    if year_match:
-        year = int(year_match.group(1))
-        prefix_token = cleaned[: year_match.start()] or ""
-        suffix = cleaned[year_match.end() :].lower()
+    # Prefer a clear 4-digit panel year; if ambiguous (e.g., GR200_08), fall back to the trailing 2-digit token.
+    year_tokens = re.findall(r"(20\d{2})", cleaned)
+    year = int(year_tokens[-1]) if year_tokens else None
+    if year is None:
+        two_digit_tail = re.findall(r"(\d{2})(?!.*\d)", stem)
+        if two_digit_tail:
+            year = int(f"20{two_digit_tail[-1]}")
+    if year is not None:
+        prefix_token = ""
+        if str(year) in cleaned:
+            prefix_token = cleaned.split(str(year))[0]
+            suffix = cleaned.split(str(year), 1)[1]
+        else:
+            two_digit = str(year % 100).zfill(2)
+            if two_digit in cleaned:
+                prefix_token = cleaned.split(two_digit)[0]
+                suffix = cleaned.split(two_digit, 1)[1]
+            else:
+                suffix = ""
+        suffix = suffix.lower()
         hint = (
             SURVEY_HINT_TOKENS.get(prefix_token.lower())
             or SURVEY_HINT_TOKENS.get(suffix)
@@ -809,24 +879,48 @@ def _find_data_file(year_dir: Path, filename: str) -> Path | None:
     for ext in (".csv", ".txt"):
         for pat in {stem, stem.lower(), stem.upper()}:
             candidates.extend(year_dir.rglob(f"{pat}*{ext}"))
+    # Fallback: any CSV/TXT under year_dir if no name match
+    if not candidates:
+        for ext in (".csv", ".txt"):
+            fallback = list(year_dir.rglob(f"*{ext}"))
+            if fallback:
+                candidates.extend(fallback)
+                break
     return candidates[0] if candidates else None
 
 
 def fallback_headers_from_data(year_dir: Path, year: int) -> pd.DataFrame:
     """Seed varnames from raw data headers when dictionaries are missing/unparseable."""
     manifest_path = year_dir / f"{year}_manifest.csv"
-    if not manifest_path.exists():
-        return pd.DataFrame()
-    try:
-        manifest = pd.read_csv(manifest_path)
-    except Exception:
-        return pd.DataFrame()
+    manifest = None
+    if manifest_path.exists():
+        try:
+            manifest = pd.read_csv(manifest_path)
+        except Exception:
+            manifest = None
+
+    targets = []
+    if manifest is not None:
+        for _, row in manifest.iterrows():
+            targets.append(
+                (
+                    str(row.get("filename") or "").strip(),
+                    str(row.get("prefix") or "").strip(),
+                    str(row.get("survey") or "").strip(),
+                )
+            )
+    # Fallback: every CSV/TXT in the year folder
+    if not targets:
+        for data_path in year_dir.rglob("*"):
+            if data_path.suffix.lower() not in {".csv", ".txt"}:
+                continue
+            targets.append((data_path.name, derive_prefix(data_path), ""))
 
     records: list[dict] = []
-    for _, row in manifest.iterrows():
-        filename = str(row.get("filename") or "").strip()
-        prefix_hint = str(row.get("prefix") or "").strip()
-        survey = map_survey_hint(prefix_hint, str(row.get("survey") or "").strip())
+    for filename, prefix_hint, survey_hint in targets:
+        if not filename:
+            continue
+        survey_hint = standardize_survey_hint(map_survey_hint(prefix_hint, survey_hint))
         data_path = _find_data_file(year_dir, filename)
         if not data_path:
             continue
@@ -865,8 +959,8 @@ def fallback_headers_from_data(year_dir: Path, year: int) -> pd.DataFrame:
                     "source": "data_header",
                     "dict_row_sha256": "",
                     "year": year,
-                    "survey_hint": survey,
-                    "survey": survey,
+                    "survey_hint": survey_hint,
+                    "survey": survey_hint,
                 }
             )
     if not records:
@@ -957,7 +1051,7 @@ def main() -> None:
                 df["survey_hint"] = df["prefix_hint"].apply(lambda p: map_survey_hint(p, fallback_mapped))
                 if survey_from_content:
                     df["survey_hint"] = map_survey_hint(survey_from_content, survey_from_content)
-                df["survey_hint"] = df["survey_hint"].fillna(fallback_mapped)
+                df["survey_hint"] = df["survey_hint"].fillna(fallback_mapped).apply(standardize_survey_hint)
                 df["survey"] = df["survey_hint"].apply(canonicalize_survey)
                 df["subsurvey"] = subsurvey
                 df["varname"] = df["source_var"]
@@ -1030,7 +1124,7 @@ def main() -> None:
     lake["dict_filename"] = lake["dict_filename"].astype(str)
     lake["filename"] = lake["filename"].astype(str)
     lake["prefix_hint"] = lake["prefix_hint"].fillna("").astype(str).str.upper()
-    lake["survey_hint"] = lake["survey_hint"].fillna("").astype(str)
+    lake["survey_hint"] = lake["survey_hint"].fillna("").astype(str).apply(standardize_survey_hint)
     if "survey" not in lake.columns:
         lake["survey"] = lake["survey_hint"]
     lake["survey"] = lake["survey"].apply(canonicalize_survey)
@@ -1112,6 +1206,15 @@ def main() -> None:
     missing = [col for col in required_cols if col not in lake.columns]
     if missing:
         raise RuntimeError(f"Dictionary lake missing required columns: {missing}")
+
+    # Drop out-of-scope years and obvious empty year entries
+    lake = lake[lake["year"].notna() & (lake["year"] >= MIN_YEAR)].copy()
+
+    # Prune obvious duplicates across sources (same year/survey/var/label/table)
+    lake = (
+        lake.sort_values(["year", "survey", "source", "source_var", "table_name_norm", "dict_file"])
+        .drop_duplicates(["year", "survey", "source_var", "source_label_norm", "table_name_norm", "source"])
+    )
 
     dedup_key = ["year", "dict_row_sha256"]
     dup_rows = lake[lake.duplicated(dedup_key, keep=False)].copy()
