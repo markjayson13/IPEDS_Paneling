@@ -150,6 +150,8 @@ SUPP_PANEL_DIR = ARTIFACTS_DIR / "Supp_Panels"
 FORM_CONFLICTS_PATH = CHECKS_OUTPUT_DIR / "form_conflicts.csv"
 COVERAGE_SUMMARY_PATH = CHECKS_OUTPUT_DIR / "coverage_summary.csv"
 MATCH_STATS_PATH = CHECKS_OUTPUT_DIR / "match_stats.csv"
+MATCH_DETAILS_PATH = CHECKS_OUTPUT_DIR / "match_details.csv"
+UNMATCHED_DETAILS_PATH = CHECKS_OUTPUT_DIR / "unmatched_details.csv"
 
 OUTPUT_COLUMNS = [
     "UNITID",
@@ -1905,6 +1907,25 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     stats["unmatched_concepts"] = stats["total_concepts"] - stats["matched_concepts"]
     stats.to_csv(MATCH_STATS_PATH, index=False)
     logging.info("Match stats by year/survey written to %s", MATCH_STATS_PATH)
+
+    # Detailed accepted/unaccepted by concept/year/survey
+    matched_details = (
+        audit_df[audit_df["accepted"] == True]  # noqa: E712
+        .groupby(["year", "survey", "target_var"], dropna=False)
+        .size()
+        .reset_index(name="n_rows")
+    )
+    matched_details.to_csv(MATCH_DETAILS_PATH, index=False)
+    logging.info("Matched details written to %s", MATCH_DETAILS_PATH)
+
+    unmatched_details = (
+        audit_df[audit_df["accepted"] == False]  # noqa: E712
+        .groupby(["year", "survey", "target_var"], dropna=False)
+        .size()
+        .reset_index(name="n_rows")
+    )
+    unmatched_details.to_csv(UNMATCHED_DETAILS_PATH, index=False)
+    logging.info("Unmatched details written to %s", UNMATCHED_DETAILS_PATH)
 
     COVERAGE_SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
     coverage.to_csv(COVERAGE_SUMMARY_PATH, index=False)

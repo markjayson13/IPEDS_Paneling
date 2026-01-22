@@ -158,7 +158,6 @@ LABEL_COLUMN_PRIORITY = [
     "value label",
 ]
 
-
 def _norm_text(value: object) -> str:
     if value is None:
         return ""
