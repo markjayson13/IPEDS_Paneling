@@ -548,6 +548,17 @@ def score_candidate(row: pd.Series, concept: dict) -> float:
     code_norm = str(row.get("code_norm") or row.get("source_var") or "").strip().upper()
     table_norm = str(row.get("table_name_norm") or row.get("table_name") or "").strip().lower()
 
+    # If the short varName is an exact match, treat it as authoritative regardless of label quality.
+    varname_exact = concept.get("varname_exact")
+    if varname_exact and var_norm == str(varname_exact).lower():
+        return 10.0
+
+    varname_regex = concept.get("varname_regex")
+    if varname_regex:
+        regex = varname_regex if hasattr(varname_regex, "search") else re.compile(varname_regex, re.IGNORECASE)
+        if regex.fullmatch(var_norm) or regex.fullmatch(code_norm.lower()):
+            return 8.0
+
     if METADATA_NEGATIVES.match(label_raw.lower()) and not str(concept.get("target_var", "")).startswith("dir_"):
         return -5.0
 

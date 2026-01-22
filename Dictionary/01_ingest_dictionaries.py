@@ -802,6 +802,78 @@ def map_survey_hint(prefix_hint: str, fallback: str) -> str:
     return fallback
 
 
+def _find_data_file(year_dir: Path, filename: str) -> Path | None:
+    """Locate a data file extracted from the given archive filename."""
+    stem = Path(filename).stem
+    candidates = []
+    for ext in (".csv", ".txt"):
+        for pat in {stem, stem.lower(), stem.upper()}:
+            candidates.extend(year_dir.rglob(f"{pat}*{ext}"))
+    return candidates[0] if candidates else None
+
+
+def fallback_headers_from_data(year_dir: Path, year: int) -> pd.DataFrame:
+    """Seed varnames from raw data headers when dictionaries are missing/unparseable."""
+    manifest_path = year_dir / f"{year}_manifest.csv"
+    if not manifest_path.exists():
+        return pd.DataFrame()
+    try:
+        manifest = pd.read_csv(manifest_path)
+    except Exception:
+        return pd.DataFrame()
+
+    records: list[dict] = []
+    for _, row in manifest.iterrows():
+        filename = str(row.get("filename") or "").strip()
+        prefix_hint = str(row.get("prefix") or "").strip()
+        survey = map_survey_hint(prefix_hint, str(row.get("survey") or "").strip())
+        data_path = _find_data_file(year_dir, filename)
+        if not data_path:
+            continue
+        try:
+            df = pd.read_csv(data_path, dtype=str, nrows=0, encoding_errors="ignore", low_memory=False)
+        except Exception:
+            continue
+        for col in df.columns:
+            var = str(col).strip()
+            if not var:
+                continue
+            var_lower = var.lower()
+            var_upper = var.upper()
+            records.append(
+                {
+                    "source_var": var,
+                    "source_label": "",
+                    "var_name_norm": var_lower,
+                    "source_var_norm": var_lower,
+                    "search_text": var_lower,
+                    "code_norm": var_upper,
+                    "table_name": "",
+                    "table_name_norm": "",
+                    "table_title": "",
+                    "data_filename": str(data_path),
+                    "dict_file": str(data_path),
+                    "dict_filename": data_path.name,
+                    "filename": data_path.name,
+                    "sheet_name": "data_header",
+                    "prefix_hint": prefix_hint,
+                    "prefix_token": prefix_hint,
+                    "release": "",
+                    "subsurvey": "",
+                    "varlab": "",
+                    "long_description": "",
+                    "source": "data_header",
+                    "dict_row_sha256": "",
+                    "year": year,
+                    "survey_hint": survey,
+                    "survey": survey,
+                }
+            )
+    if not records:
+        return pd.DataFrame()
+    return pd.DataFrame.from_records(records)
+
+
 def main() -> None:
     args = parse_args()
     report_duplicate_modules()
@@ -899,6 +971,11 @@ def main() -> None:
                     + df["table_name_norm"].fillna("")
                 ).map(lambda s: hashlib.sha256(s.encode("utf-8")).hexdigest())
                 rows.append(df)
+
+        # Fallback: seed varNames from data headers when dictionaries are missing/unparseable
+        header_df = fallback_headers_from_data(year_dir, default_year)
+        if not header_df.empty:
+            rows.append(header_df)
 
     if not rows:
         sys.exit("No dictionary files found. Did you run the downloader?")
