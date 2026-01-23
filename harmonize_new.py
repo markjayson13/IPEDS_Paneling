@@ -538,6 +538,11 @@ def expand_forms(concept: dict) -> list[str]:
         upper = str(item).upper()
         if upper not in combo:
             combo.append(upper)
+        # Also add stripped finance form families like F1 from F1A to make matching more permissive.
+        if upper.startswith("F") and len(upper) == 3 and upper.endswith("A"):
+            short = upper[:2]
+            if short not in combo:
+                combo.append(short)
     return combo
 
 

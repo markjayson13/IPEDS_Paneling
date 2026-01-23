@@ -488,6 +488,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^revision status.*institutional characteristics component$"],
             "exclude_regex": [],
             "code_regex": r"(?i)^(ICREVST|REVSTAT)$",
+            "varname_regex": r"(?i)^(ICREVST|REVSTAT|REV_IC)$",
             "notes": "Applicable 2008-09 to 2022-23 per IC documentation.",
         },
         "ic_status_when_migrated": {
@@ -688,6 +689,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^(room and board|housing and meals).*on[- ]campus$",
             ],
             "exclude_regex": [],
+            "varname_regex": r"(?i)^(RMBRDAMT|ROOMBOARD)$",
         },
         "ic_room_charge_on_campus": {
             "target_var": "ic_room_charge_on_campus",
@@ -699,6 +701,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "max_year": 2023,
             "label_regex": [r"^typical room charge for academic year$"],
             "exclude_regex": [],
+            "varname_regex": r"(?i)^ROOMAMT$",
         },
         "ic_board_charge_on_campus": {
             "target_var": "ic_board_charge_on_campus",
@@ -710,6 +713,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "max_year": 2023,
             "label_regex": [r"^typical board charge for academic year$"],
             "exclude_regex": [],
+            "varname_regex": r"(?i)^BOARDAMT$",
         },
         "ic_room_board_combined_on_campus": {
             "target_var": "ic_room_board_combined_on_campus",
@@ -721,6 +725,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "max_year": 2023,
             "label_regex": [r"^combined charge for room and board$"],
             "exclude_regex": [],
+            "varname_regex": r"(?i)^(RMBRDAMT|ROOMBOARD)$",
         },
         "ic_room_board_off_campus_not_family": {
             "target_var": "ic_room_board_off_campus_not_family",
@@ -778,95 +783,102 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         "max_year": 2023,
         "label_regex": [r"^books? and supplies?$|^books?$|^supplies?$"],
         "exclude_regex": [],
+        "varname_regex": r"(?i)BOOKS",
     },
 
     # =====================================================
     # Cost (CST) — 2024+ analogs to IC cost & net price
     # =====================================================
-    "cst_tuition_ft_ug_in_district": {
-        "target_var": "cst_tuition_ft_ug_in_district",
-        "concept": "Undergraduate tuition, full-time, in-district",
-        "units": "USD",
-        "survey": "Cost",
-        "period_type": "AY",
-        "forms": ["CST"],
-        "min_year": 2024,
-        "label_regex": [
-            r"^undergraduate students.*in[- ]district.*full[- ]?time.*tuition$",
-            r"^tuition.*undergraduate.*full[- ]?time.*in[- ]district$",
-        ],
-        "exclude_regex": [r"per credit hour|part[- ]?time|required fees|largest program"],
-    },
-    "cst_fees_ft_ug_in_district": {
-        "target_var": "cst_fees_ft_ug_in_district",
-        "concept": "Undergraduate required fees, full-time, in-district",
-        "units": "USD",
-        "survey": "Cost",
-        "period_type": "AY",
-        "forms": ["CST"],
-        "min_year": 2024,
-        "label_regex": [
-            r"^undergraduate students.*in[- ]district.*full[- ]?time.*required fees$",
-            r"^required fees.*undergraduate.*full[- ]?time.*in[- ]district$",
-        ],
-        "exclude_regex": [r"per credit hour|part[- ]?time|tuition|largest program"],
-    },
-    "cst_tuition_ft_ug_in_state": {
-        "target_var": "cst_tuition_ft_ug_in_state",
-        "concept": "Undergraduate tuition, full-time, in-state",
-        "units": "USD",
-        "survey": "Cost",
-        "period_type": "AY",
-        "forms": ["CST"],
-        "min_year": 2024,
-        "label_regex": [
-            r"^undergraduate students.*in[- ]state.*full[- ]?time.*tuition$",
-            r"^tuition.*undergraduate.*full[- ]?time.*in[- ]state$",
-        ],
-        "exclude_regex": [r"per credit hour|part[- ]?time|required fees|largest program"],
-    },
-    "cst_fees_ft_ug_in_state": {
-        "target_var": "cst_fees_ft_ug_in_state",
-        "concept": "Undergraduate required fees, full-time, in-state",
-        "units": "USD",
-        "survey": "Cost",
-        "period_type": "AY",
-        "forms": ["CST"],
-        "min_year": 2024,
-        "label_regex": [
-            r"^undergraduate students.*in[- ]state.*full[- ]?time.*required fees$",
-            r"^required fees.*undergraduate.*full[- ]?time.*in[- ]state$",
-        ],
-        "exclude_regex": [r"per credit hour|part[- ]?time|tuition|largest program"],
-    },
-    "cst_tuition_ft_ug_out_state": {
-        "target_var": "cst_tuition_ft_ug_out_state",
-        "concept": "Undergraduate tuition, full-time, out-of-state",
-        "units": "USD",
-        "survey": "Cost",
-        "period_type": "AY",
-        "forms": ["CST"],
-        "min_year": 2024,
-        "label_regex": [
-            r"^undergraduate students.*out[- ]of[- ]state.*full[- ]?time.*tuition$",
-            r"^tuition.*undergraduate.*full[- ]?time.*out[- ]of[- ]state$",
-        ],
-        "exclude_regex": [r"per credit hour|part[- ]?time|required fees|largest program"],
-    },
-    "cst_fees_ft_ug_out_state": {
-        "target_var": "cst_fees_ft_ug_out_state",
-        "concept": "Undergraduate required fees, full-time, out-of-state",
-        "units": "USD",
-        "survey": "Cost",
-        "period_type": "AY",
-        "forms": ["CST"],
-        "min_year": 2024,
-        "label_regex": [
-            r"^undergraduate students.*out[- ]of[- ]state.*full[- ]?time.*required fees$",
-            r"^required fees.*undergraduate.*full[- ]?time.*out[- ]of[- ]state$",
-        ],
-        "exclude_regex": [r"per credit hour|part[- ]?time|tuition|largest program"],
-    },
+        "cst_tuition_ft_ug_in_district": {
+            "target_var": "cst_tuition_ft_ug_in_district",
+            "concept": "Undergraduate tuition, full-time, in-district",
+            "units": "USD",
+            "survey": "Cost",
+            "period_type": "AY",
+            "forms": ["CST"],
+            "min_year": 2024,
+            "label_regex": [
+                r"^undergraduate students.*in[- ]district.*full[- ]?time.*tuition$",
+                r"^tuition.*undergraduate.*full[- ]?time.*in[- ]district$",
+                r"^published in[- ]district.*tuition and fees",
+            ],
+            "exclude_regex": [r"per credit hour|part[- ]?time|required fees|largest program"],
+        },
+        "cst_fees_ft_ug_in_district": {
+            "target_var": "cst_fees_ft_ug_in_district",
+            "concept": "Undergraduate required fees, full-time, in-district",
+            "units": "USD",
+            "survey": "Cost",
+            "period_type": "AY",
+            "forms": ["CST"],
+            "min_year": 2024,
+            "label_regex": [
+                r"^undergraduate students.*in[- ]district.*full[- ]?time.*required fees$",
+                r"^required fees.*undergraduate.*full[- ]?time.*in[- ]district$",
+                r"^in[- ]district comprehensive fee$",
+            ],
+            "exclude_regex": [r"per credit hour|part[- ]?time|tuition|largest program"],
+        },
+        "cst_tuition_ft_ug_in_state": {
+            "target_var": "cst_tuition_ft_ug_in_state",
+            "concept": "Undergraduate tuition, full-time, in-state",
+            "units": "USD",
+            "survey": "Cost",
+            "period_type": "AY",
+            "forms": ["CST"],
+            "min_year": 2024,
+            "label_regex": [
+                r"^undergraduate students.*in[- ]state.*full[- ]?time.*tuition$",
+                r"^tuition.*undergraduate.*full[- ]?time.*in[- ]state$",
+                r"^published in[- ]state.*tuition and fees",
+            ],
+            "exclude_regex": [r"per credit hour|part[- ]?time|required fees|largest program"],
+        },
+        "cst_fees_ft_ug_in_state": {
+            "target_var": "cst_fees_ft_ug_in_state",
+            "concept": "Undergraduate required fees, full-time, in-state",
+            "units": "USD",
+            "survey": "Cost",
+            "period_type": "AY",
+            "forms": ["CST"],
+            "min_year": 2024,
+            "label_regex": [
+                r"^undergraduate students.*in[- ]state.*full[- ]?time.*required fees$",
+                r"^required fees.*undergraduate.*full[- ]?time.*in[- ]state$",
+                r"^in[- ]state comprehensive fee$",
+            ],
+            "exclude_regex": [r"per credit hour|part[- ]?time|tuition|largest program"],
+        },
+        "cst_tuition_ft_ug_out_state": {
+            "target_var": "cst_tuition_ft_ug_out_state",
+            "concept": "Undergraduate tuition, full-time, out-of-state",
+            "units": "USD",
+            "survey": "Cost",
+            "period_type": "AY",
+            "forms": ["CST"],
+            "min_year": 2024,
+            "label_regex": [
+                r"^undergraduate students.*out[- ]of[- ]state.*full[- ]?time.*tuition$",
+                r"^tuition.*undergraduate.*full[- ]?time.*out[- ]of[- ]state$",
+                r"^published out[- ]of[- ]state.*tuition and fees",
+            ],
+            "exclude_regex": [r"per credit hour|part[- ]?time|required fees|largest program"],
+        },
+        "cst_fees_ft_ug_out_state": {
+            "target_var": "cst_fees_ft_ug_out_state",
+            "concept": "Undergraduate required fees, full-time, out-of-state",
+            "units": "USD",
+            "survey": "Cost",
+            "period_type": "AY",
+            "forms": ["CST"],
+            "min_year": 2024,
+            "label_regex": [
+                r"^undergraduate students.*out[- ]of[- ]state.*full[- ]?time.*required fees$",
+                r"^required fees.*undergraduate.*full[- ]?time.*out[- ]of[- ]state$",
+                r"^out[- ]of[- ]state comprehensive fee$",
+            ],
+            "exclude_regex": [r"per credit hour|part[- ]?time|tuition|largest program"],
+        },
     "cst_tuition_ft_gr_in_district": {
         "target_var": "cst_tuition_ft_gr_in_district",
         "concept": "Graduate tuition, full-time, in-district (excl. doctoral-professional practice)",
@@ -1759,6 +1771,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["EF"],
             "label_regex": [r"^graduate (?:and first[- ]?professional )?total$|^graduate total$"],
             "exclude_regex": [r"undergraduate|by race|ethnicity|sex|gender|age|residence|major field"],
+            "varname_exact": "efgrad",
         },
         "ef_ug_degseek_total": {
             "target_var": "ef_ug_degseek_total",
@@ -1769,6 +1782,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["EF"],
             "label_regex": [r"^undergraduate degree/?certificate[- ]seeking total$"],
             "exclude_regex": [r"by race|ethnicity|sex|gender|age|residence|major field"],
+            "varname_regex": r"(?i)^efug(cnt|1st)$",
         },
         "ef_ftft_ug_total": {
             "target_var": "ef_ftft_ug_total",
@@ -1782,6 +1796,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^first time total$",
             ],
             "exclude_regex": [r"transfer|part[- ]?time|by race|ethnicity|sex|gender|residence|major field"],
+            "varname_exact": "efug1st",
         },
         "ef_full_time_total": {
             "target_var": "ef_full_time_total",
@@ -1792,6 +1807,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["EF"],
             "label_regex": [r"^full[- ]?time total$|^total full[- ]?time students$"],
             "exclude_regex": [r"part[- ]?time|by race|ethnicity|sex|gender|age|residence|major field"],
+            "varname_exact": "efage05",
         },
         "ef_part_time_total": {
             "target_var": "ef_part_time_total",
@@ -1802,6 +1818,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["EF"],
             "label_regex": [r"^part[- ]?time total$|^total part[- ]?time students$"],
             "exclude_regex": [r"full[- ]?time|by race|ethnicity|sex|gender|age|residence|major field"],
+            "varname_exact": "efage06",
         },
         "ef_de_exclusive": {
             "target_var": "ef_de_exclusive",
@@ -1858,6 +1875,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^retention rate.*first[- ]time.*full[- ]time.*undergraduate$"],
             "exclude_regex": [],
             "code_regex": r"(?i)^(RET_NMF|RET_FT)$",
+            "varname_regex": r"(?i)^(ret_ft|ret_nmf)$",
         },
         "ef_retention_ftft_part_time": {
             "target_var": "ef_retention_ftft_part_time",
@@ -1869,6 +1887,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^retention rate.*first[- ]time.*part[- ]time.*undergraduate$"],
             "exclude_regex": [],
             "code_regex": r"(?i)^(RET_NMP|RET_PT)$",
+            "varname_regex": r"(?i)^(ret_pt|ret_nmp)$",
         },
         "ef_student_faculty_ratio": {
             "target_var": "ef_student_faculty_ratio",
@@ -1897,6 +1916,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"percent|percentage|ratio|migration|net migration|in[- ]state %|out[- ]of[- ]state %|foreign|country|unknown"
             ],
             "notes": "Emits one long row per state via family=state_residence. Counts first-time degree/cert seeking undergraduates by state of residence at application.",
+            "varname_regex": r"(?i)^efres\\d{2}$",
         },
 
         # =====================================================
@@ -1911,6 +1931,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["E12", "E1D", "EFFY", "EFIA"],
             "label_regex": [r"^grand total$|^all students total$|^total$"],
             "exclude_regex": [r"\bfall\b|\bsnapshot\b|residence|migration|race|ethnicity|sex|gender"],
+            "varname_regex": r"(?i)^(efytotl[mtw]|effy(lev|dlev|alev)|undup)$",
         },
         "e12_ug_undup": {
             "target_var": "e12_ug_undup",
@@ -1921,6 +1942,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["E12", "E1D", "EFFY", "EFIA"],
             "label_regex": [r"^undergraduate.*unduplicated headcount$|^unduplicated.*undergraduate$"],
             "exclude_regex": [r"\bfall\b|graduate|residence|migration|race|ethnicity|sex|gender"],
+            "varname_regex": r"(?i)^e12ug(ad)?(ft|pt|1st|cnt)?$",
         },
         "e12_gr_undup": {
             "target_var": "e12_gr_undup",
@@ -1931,6 +1953,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["E12", "E1D", "EFFY", "EFIA"],
             "label_regex": [r"^graduate.*unduplicated headcount$|^unduplicated.*graduate$"],
             "exclude_regex": [r"\bfall\b|undergraduate|residence|migration|race|ethnicity|sex|gender"],
+            "varname_regex": r"(?i)^e12grad(ft|pt)?$",
         },
         "e12_credit_hours_ug": {
             "target_var": "e12_credit_hours_ug",
@@ -1942,6 +1965,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^undergraduate.*credit hours?$|^credit hours.*undergraduate$"],
             "exclude_regex": [r"contact hours?|clock hours?|graduate|\bfall\b"],
             "code_regex": r"(?i)(CHUG|UGCH|CRHRSUG|UGCRHRS)",
+            "varname_regex": r"(?i)^efteug$",
         },
         "e12_credit_hours_gr": {
             "target_var": "e12_credit_hours_gr",
@@ -1953,6 +1977,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^graduate.*credit hours?$|^credit hours.*graduate$"],
             "exclude_regex": [r"contact hours?|clock hours?|undergraduate|\bfall\b"],
             "code_regex": r"(?i)(CHGR|GRCH|CRHRSGR|GRCRHRS)",
+            "varname_regex": r"(?i)^ftegd$",
         },
         "e12_contact_hours_ug": {
             "target_var": "e12_contact_hours_ug",
@@ -1964,6 +1989,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^undergraduate.*(contact|clock) hours?$|^(contact|clock) hours.*undergraduate$"],
             "exclude_regex": [r"credit hours?|graduate|\bfall\b"],
             "code_regex": r"(?i)(CLHUG|UGCLH|CKHRSUG|UGCKHRS)",
+            "varname_regex": r"(?i)^efteug$",
         },
         "e12_contact_hours_gr": {
             "target_var": "e12_contact_hours_gr",
@@ -1975,6 +2001,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^graduate.*(contact|clock) hours?$|^(contact|clock) hours.*graduate$"],
             "exclude_regex": [r"credit hours?|undergraduate|\bfall\b"],
             "code_regex": r"(?i)(CLHGR|GRCLH|CKHRSGR|GRCKHRS)",
+            "varname_regex": r"(?i)^ftegd$",
         },
         "e12_fte": {
             "target_var": "e12_fte",
@@ -2120,6 +2147,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^number of.*submitting sat scores$|^sat.*number submitting$"],
             "exclude_regex": [r"percent|percentage|avg|average"],
             "code_regex": r"(?i)^(SATNUM|SATSBNUM)$",
+            "varname_exact": "satnum",
             "varname_regex": r"(?i)^(SATNUM|SATSBNUM)$",
         },
         "adm_sat_submit_pct": {
@@ -2132,6 +2160,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^percent of.*submitting sat scores$|^sat.*percent submitting$"],
             "exclude_regex": [r"number|count|avg|average"],
             "code_regex": r"(?i)^(SATPCT|SATSBPCT)$",
+            "varname_exact": "satpct",
             "varname_regex": r"(?i)^(SATPCT|SATSBPCT)$",
         },
         "adm_act_submit_count": {
@@ -2144,6 +2173,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^number of.*submitting act scores$|^act.*number submitting$"],
             "exclude_regex": [r"percent|percentage|avg|average"],
             "code_regex": r"(?i)^(ACTNUM|ACTSBNUM)$",
+            "varname_exact": "actnum",
             "varname_regex": r"(?i)^(ACTNUM|ACTSBNUM)$",
         },
         "adm_act_submit_pct": {
@@ -2156,6 +2186,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^percent of.*submitting act scores$|^act.*percent submitting$"],
             "exclude_regex": [r"number|count|avg|average"],
             "code_regex": r"(?i)^(ACTPCT|ACTSBPCT)$",
+            "varname_exact": "actpct",
             "varname_regex": r"(?i)^(ACTPCT|ACTSBPCT)$",
         },
 
@@ -2299,14 +2330,15 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
 
         "adm_open_admissions": {
             "target_var": "adm_open_admissions",
-            "concept": "Open admission policy (Admissions component)",
-            "units": "code",
-            "survey": "Admissions",
-            "period_type": "AY",
-            "label_regex": [r"^open admission policy$|^open admissions?$"],
-            "exclude_regex": [],
-            "notes": "ADM responses are typically omitted for institutions with open admission.",
-        },
+        "concept": "Open admission policy (Admissions component)",
+        "units": "code",
+        "survey": "Admissions",
+        "period_type": "AY",
+        "label_regex": [r"^open admission policy$|^open admissions?$"],
+        "exclude_regex": [],
+        "notes": "ADM responses are typically omitted for institutions with open admission.",
+        "varname_exact": "openadmp",
+    },
 
         # -------------------------
         # SFA (AY)
@@ -2358,6 +2390,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["SFA"],
             "label_regex": [r"^number of.*federal grants?.*recipients?$|^students receiving federal grants?$"],
             "exclude_regex": [r"amount|dollars|\$|average|per[- ]?recipient|pell"],
+            "varname_exact": "fgrnt_n",
         },
         "sfa_state_local_grant_amount": {
             "target_var": "sfa_state_local_grant_amount",
@@ -2382,6 +2415,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^students receiving state (?:and )?local grants?$",
             ],
             "exclude_regex": [r"amount|dollars|\$|average|per[- ]?recipient"],
+            "varname_exact": "sgrnt_n",
         },
         "sfa_institutional_grant_amount": {
             "target_var": "sfa_institutional_grant_amount",
@@ -2409,6 +2443,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^students receiving institutional grants?$",
             ],
             "exclude_regex": [r"amount|dollars|\$|average|per[- ]?recipient"],
+            "varname_exact": "igrnt_n",
         },
         "sfa_direct_sub_loan_amount": {
             "target_var": "sfa_direct_sub_loan_amount",
@@ -2439,6 +2474,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^students receiving subsidized stafford$",
             ],
             "exclude_regex": [r"amount|dollars|\$|average|per[- ]?recipient"],
+            "varname_regex": r"(?i)^(floan_n|loan_n)$",
         },
         "sfa_direct_unsub_loan_amount": {
             "target_var": "sfa_direct_unsub_loan_amount",
@@ -2467,6 +2503,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^students receiving direct unsubsidized loans?$",
             ],
             "exclude_regex": [r"amount|dollars|\$|average|per[- ]?recipient"],
+            "varname_regex": r"(?i)^(floan_n|loan_n)$",
         },
         "sfa_parent_plus_amount": {
             "target_var": "sfa_parent_plus_amount",
@@ -2495,6 +2532,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^parents? receiving plus loans?$",
             ],
             "exclude_regex": [r"amount|dollars|\$|average|per[- ]?recipient|graduate plus"],
+            "varname_regex": r"(?i)^(loan_n|floan_n)$",
         },
         "sfa_private_loan_amount": {
             "target_var": "sfa_private_loan_amount",
@@ -2520,6 +2558,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^students receiving private loans?$",
             ],
             "exclude_regex": [r"amount|dollars|\$|average|per[- ]?recipient"],
+            "varname_exact": "oloan_n",
         },
         "sfa_veterans_benefits_amount": {
             "target_var": "sfa_veterans_benefits_amount",
@@ -2535,6 +2574,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "exclude_regex": [r"average|per[- ]?recipient|number|recipients?"],
             "notes": "Collected separately from Title IV aid; includes GI Bill and related military benefits.",
+            "varname_regex": r"(?i)(vetben|vetaid|vet).*(am|_a|_t)$",
         },
         "pell_recip_count": {
             "target_var": "pell_recip_count",
@@ -2553,7 +2593,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "notes": "Restrict to FTFT cohort; exclude dollar amounts.",
             "transform": "identity",
-            "varname_regex": r"(?i)^(PGRNT_N|PGRNT_P|FGRNT_A)$",
+            "varname_exact": "pgrnt_n",
         },
         "pell_amount": {
             "target_var": "pell_amount",
@@ -2599,6 +2639,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^students.*in[- ]state tuition rates$",
             ],
             "exclude_regex": [r"percent|percentage|amount|\$"],
+            "varname_exact": "scfa12n",
         },
         "sfa_ftft_out_state_count": {
             "target_var": "sfa_ftft_out_state_count",
@@ -2625,6 +2666,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^number of students in fall cohort whose residence/tuition rate status is unknown$",
             ],
             "exclude_regex": [r"percent|percentage|amount|\$"],
+            "varname_exact": "scfa14n",
         },
 
         # Net price (AY, Title IV cohort; SFA historically, CST in recent years)
@@ -2758,5 +2800,3 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
     }
 )
-
-
