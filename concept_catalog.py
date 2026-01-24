@@ -2511,7 +2511,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [r"average|per[- ]?recipient|number|recipients?"],
             "notes": "FFEL ended 2010; legacy forms may label subsidized Stafford. Regex tolerates both.",
             "code_regex": r"(?i)^(DLSUBAMT|SUBAMT)$",
-            "varname_exact": ["subamt", "FLOAN_A"], "varname_regex": r"(?i)^(SUBAMT|DLSUBAMT|FLOAN_A)$",
+            "varname_exact": ["subamt", "FLOAN_A"], "varname_regex": r"(?i)^(SUBAMT|DLSUBAMT|FLOAN_A)$", "year_bounds": [{"min_year": 2002, "max_year": 2023}, {"min_year": 2024}],
             "varname_regex": r"(?i)^(SUBAMT|DLSUBAMT)$",
         },
         "sfa_direct_sub_loan_recip_count": {
@@ -2543,7 +2543,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "exclude_regex": [r"average|per[- ]?recipient|number|recipients?"],
             "code_regex": r"(?i)^(DLUNSAMT|UNSUBAMT)$",
-            "varname_exact": ["unsubamt", "FLOAN_A"], "varname_regex": r"(?i)^(UNSUBAMT|DLUNSAMT|FLOAN_A)$",
+            "varname_exact": ["unsubamt", "FLOAN_A"], "varname_regex": r"(?i)^(UNSUBAMT|DLUNSAMT|FLOAN_A)$", "year_bounds": [{"min_year": 2002, "max_year": 2023}, {"min_year": 2024}],
             "varname_regex": r"(?i)^(UNSUBAMT|DLUNSAMT)$",
         },
         "sfa_direct_unsub_loan_recip_count": {
@@ -2574,7 +2574,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "exclude_regex": [r"average|per[- ]?recipient|number|recipients?|graduate plus"],
             "code_regex": r"(?i)^(PLUSAMT|PRPLUSAMT)$",
-            "varname_exact": ["plusamt", "FLOAN_A"], "varname_regex": r"(?i)^(PLUSAMT|PRPLUSAMT|FLOAN_A)$",
+            "varname_exact": ["plusamt", "FLOAN_A"], "varname_regex": r"(?i)^(PLUSAMT|PRPLUSAMT|FLOAN_A)$", "year_bounds": [{"min_year": 2002, "max_year": 2023}, {"min_year": 2024}],
             "varname_regex": r"(?i)^(PLUSAMT|PRPLUSAMT)$",
         },
         "sfa_parent_plus_recip_count": {
@@ -2602,7 +2602,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^private loans?.*(amount|dollars|\$|total)$"],
             "exclude_regex": [r"average|per[- ]?recipient|number|recipients?"],
             "code_regex": r"(?i)^(PRIVAMT|PRIVLOANAMT)$",
-            "varname_exact": ["privamt", "FLOAN_A"], "varname_regex": r"(?i)^(PRIVAMT|PRIVLOANAMT|FLOAN_A)$",
+            "varname_exact": ["privamt", "FLOAN_A"], "varname_regex": r"(?i)^(PRIVAMT|PRIVLOANAMT|FLOAN_A)$", "year_bounds": [{"min_year": 2002, "max_year": 2023}, {"min_year": 2024}],
             "varname_regex": r"(?i)^(PRIVAMT|PRIVLOANAMT)$",
         },
         "sfa_private_loan_recip_count": {
@@ -2633,7 +2633,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "exclude_regex": [r"average|per[- ]?recipient|number|recipients?"],
             "notes": "Collected separately from Title IV aid; includes GI Bill and related military benefits.",
-            "varname_regex": r"(?i)(vetben|vetaid|vet).*(am|_a|_t)$",
+            "varname_regex": r"(?i)(vetben|vetaid|vet).*(am|_a|_t)$", "expected_available": False,
         },
         "pell_recip_count": {
             "target_var": "pell_recip_count",
@@ -2685,7 +2685,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^students.*in[- ]district tuition rates$",
             ],
             "exclude_regex": [r"percent|percentage|amount|\$"],
-            "varname_exact": "scfa11n",
+            "varname_exact": "scfa11n", "expected_available": False,
         },
         "sfa_ftft_in_state_count": {
             "target_var": "sfa_ftft_in_state_count",
@@ -2699,7 +2699,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^students.*in[- ]state tuition rates$",
             ],
             "exclude_regex": [r"percent|percentage|amount|\$"],
-            "varname_exact": "scfa12n",
+            "varname_exact": "scfa12n", "expected_available": False,
         },
         "sfa_ftft_out_state_count": {
             "target_var": "sfa_ftft_out_state_count",
@@ -2713,7 +2713,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^students.*out[- ]of[- ]state tuition rates$",
             ],
             "exclude_regex": [r"percent|percentage|amount|\$"],
-            "varname_exact": "scfa13n",
+            "varname_exact": "scfa13n", "expected_available": False,
         },
         "sfa_ftft_unknown_rate_count": {
             "target_var": "sfa_ftft_unknown_rate_count",
@@ -2726,7 +2726,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^number of students in fall cohort whose residence/tuition rate status is unknown$",
             ],
             "exclude_regex": [r"percent|percentage|amount|\$"],
-            "varname_exact": "scfa14n",
+            "varname_exact": "scfa14n", "expected_available": False,
         },
 
         # Net price (AY, Title IV cohort; SFA historically, CST in recent years)
