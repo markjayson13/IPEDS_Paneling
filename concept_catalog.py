@@ -2414,7 +2414,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^total.*financial aid.*(amount|dollars|\$)$"],
             "exclude_regex": [r"average|per[- ]?recipient|number|recipients?"],
             "code_regex": r"(?i)^(ANYAID_A|ANYAIDAMT|XAIDAMT|AGRNT_T)$",
-            "varname_exact": ["anyaid_a", "agrnt_t"],
+            "varname_exact": ["ANYAID_A", "ANYAIDAMT", "XAIDAMT", "AGRNT_T"],
             "varname_regex": r"(?i)(ANYAID_A|ANYAIDAMT|XAIDAMT|AGRNT_T)$",
         },
         "sfa_federal_grant_amount": {
@@ -2498,6 +2498,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
         "sfa_direct_sub_loan_amount": {
             "target_var": "sfa_direct_sub_loan_amount",
+            "year_bounds": [{"min_year": 2002, "max_year": 2023}, {"min_year": 2024}],
             "concept": "Direct Subsidized Loans amount (undergraduates)",
             "units": "USD",
             "survey": "StudentFinancialAid",
@@ -2510,7 +2511,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [r"average|per[- ]?recipient|number|recipients?"],
             "notes": "FFEL ended 2010; legacy forms may label subsidized Stafford. Regex tolerates both.",
             "code_regex": r"(?i)^(DLSUBAMT|SUBAMT)$",
-            "varname_exact": "subamt",
+            "varname_exact": ["subamt", "FLOAN_A"], "varname_regex": r"(?i)^(SUBAMT|DLSUBAMT|FLOAN_A)$",
             "varname_regex": r"(?i)^(SUBAMT|DLSUBAMT)$",
         },
         "sfa_direct_sub_loan_recip_count": {
@@ -2530,6 +2531,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
         "sfa_direct_unsub_loan_amount": {
             "target_var": "sfa_direct_unsub_loan_amount",
+            "year_bounds": [{"min_year": 2002, "max_year": 2023}, {"min_year": 2024}],
             "concept": "Direct Unsubsidized Loans amount (undergraduates)",
             "units": "USD",
             "survey": "StudentFinancialAid",
@@ -2541,7 +2543,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "exclude_regex": [r"average|per[- ]?recipient|number|recipients?"],
             "code_regex": r"(?i)^(DLUNSAMT|UNSUBAMT)$",
-            "varname_exact": "unsubamt",
+            "varname_exact": ["unsubamt", "FLOAN_A"], "varname_regex": r"(?i)^(UNSUBAMT|DLUNSAMT|FLOAN_A)$",
             "varname_regex": r"(?i)^(UNSUBAMT|DLUNSAMT)$",
         },
         "sfa_direct_unsub_loan_recip_count": {
@@ -2560,6 +2562,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
         "sfa_parent_plus_amount": {
             "target_var": "sfa_parent_plus_amount",
+            "year_bounds": [{"min_year": 2002, "max_year": 2023}, {"min_year": 2024}],
             "concept": "Parent PLUS amount (parents of undergraduates)",
             "units": "USD",
             "survey": "StudentFinancialAid",
@@ -2571,7 +2574,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "exclude_regex": [r"average|per[- ]?recipient|number|recipients?|graduate plus"],
             "code_regex": r"(?i)^(PLUSAMT|PRPLUSAMT)$",
-            "varname_exact": "plusamt",
+            "varname_exact": ["plusamt", "FLOAN_A"], "varname_regex": r"(?i)^(PLUSAMT|PRPLUSAMT|FLOAN_A)$",
             "varname_regex": r"(?i)^(PLUSAMT|PRPLUSAMT)$",
         },
         "sfa_parent_plus_recip_count": {
@@ -2590,6 +2593,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
         "sfa_private_loan_amount": {
             "target_var": "sfa_private_loan_amount",
+            "year_bounds": [{"min_year": 2002, "max_year": 2023}, {"min_year": 2024}],
             "concept": "Private (non-federal) student loans amount (undergraduates)",
             "units": "USD",
             "survey": "StudentFinancialAid",
@@ -2598,7 +2602,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^private loans?.*(amount|dollars|\$|total)$"],
             "exclude_regex": [r"average|per[- ]?recipient|number|recipients?"],
             "code_regex": r"(?i)^(PRIVAMT|PRIVLOANAMT)$",
-            "varname_exact": "privamt",
+            "varname_exact": ["privamt", "FLOAN_A"], "varname_regex": r"(?i)^(PRIVAMT|PRIVLOANAMT|FLOAN_A)$",
             "varname_regex": r"(?i)^(PRIVAMT|PRIVLOANAMT)$",
         },
         "sfa_private_loan_recip_count": {
@@ -2666,7 +2670,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "notes": "Total Pell dollars; exclude counts and averages.",
             "transform": "identity",
             "code_regex": r"(?i)^(PELLA|PELLAMT|PGRNT_T)$",
-            "varname_exact": ["pella", "pgrnt_t"],
+            "varname_exact": ["pella", "PGRNT_T"],
             "varname_regex": r"(?i)^(PELLA|PELLAMT|PGRNT_T)$",
         },
         "sfa_ftft_in_district_count": {
