@@ -182,6 +182,22 @@ OUTPUT_COLUMNS = [
 
 # Optional columns (e.g., 'state' for long-family extractions) are appended dynamically in build_output_frame.
 
+def _configure_checks_dir(base: Path) -> None:
+    """Re-point all checks/report outputs to a new base directory."""
+    global CHECKS_OUTPUT_DIR, LABEL_CHECK_DIR, LABEL_MATCH_PATH
+    global VALIDATION_REPORT_PATH, FORM_CONFLICTS_PATH, COVERAGE_SUMMARY_PATH
+    global MATCH_STATS_PATH, MATCH_DETAILS_PATH, UNMATCHED_DETAILS_PATH
+
+    CHECKS_OUTPUT_DIR = base
+    LABEL_CHECK_DIR = CHECKS_OUTPUT_DIR / "Label_match"
+    LABEL_MATCH_PATH = LABEL_CHECK_DIR / "label_matches.csv"
+    VALIDATION_REPORT_PATH = CHECKS_OUTPUT_DIR / "validation_report.csv"
+    FORM_CONFLICTS_PATH = CHECKS_OUTPUT_DIR / "form_conflicts.csv"
+    COVERAGE_SUMMARY_PATH = CHECKS_OUTPUT_DIR / "coverage_summary.csv"
+    MATCH_STATS_PATH = CHECKS_OUTPUT_DIR / "match_stats.csv"
+    MATCH_DETAILS_PATH = CHECKS_OUTPUT_DIR / "match_details.csv"
+    UNMATCHED_DETAILS_PATH = CHECKS_OUTPUT_DIR / "unmatched_details.csv"
+
 _US_STATES_AND_JURIS = [
     "alabama",
     "alaska",
@@ -352,6 +368,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         type=Path,
         default=None,
         help="Destination directory for split-by-survey parquet files (default: same directory as --output).",
+    )
+    parser.add_argument(
+        "--checks-dir",
+        type=Path,
+        default=None,
+        help="Override Checks/ output directory (useful when running in chunks to avoid overwriting prior diagnostics).",
     )
     parser.add_argument("--rules", type=Path, default=Path("validation_rules.yaml"), help="Validation rules YAML path")
     parser.add_argument(
@@ -1524,6 +1546,8 @@ def apply_reporting_rules(frame: pd.DataFrame, survey: str, rpt_map: Optional[pd
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
+    if args.checks_dir:
+        _configure_checks_dir(args.checks_dir)
     configure_logging(args.log_level)
     years = parse_years(args.years)
     report_duplicate_modules()
