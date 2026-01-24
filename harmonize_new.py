@@ -531,13 +531,13 @@ def filter_candidates_by_forms(df: pd.DataFrame, forms: Optional[Sequence[str]])
     allowed = {f.upper() for f in forms}
 
     # Ensure the expected hint columns exist to avoid Series.get lookups on missing keys.
-    for col in ("survey", "survey_hint", "prefix_hint", "form"):
+    for col in ("survey", "survey_hint", "prefix_hint", "form", "form_norm"):
         if col not in df.columns:
             df[col] = ""
 
     def _candidate_tokens(row: pd.Series) -> set[str]:
         tokens: set[str] = set()
-        for col in ("survey", "survey_hint", "prefix_hint", "form"):
+        for col in ("survey", "survey_hint", "prefix_hint", "form", "form_norm"):
             val = str(row.get(col, "") or "").strip()
             if val and val.lower() not in {"nan", "none"}:
                 tokens.add(val.upper())
@@ -554,12 +554,25 @@ def expand_forms(concept: dict) -> list[str]:
     base = concept.get("forms") or []
     aliases = concept.get("form_aliases") or []
     combo = []
+    # form normalization helpers to capture common verbose or suffixed names
+    form_synonyms = {
+        "IC": ["INSTITUTIONALCHARACTERISTICS", "INSTITUTIONAL CHARACTERISTICS"],
+        "HD": ["ICHD"],
+        "COST": ["CST"],
+        "SFA": ["SFAV", "SFAUG"],
+        "ADM": ["IC", "INSTITUTIONALCHARACTERISTICS"],
+    }
     for item in list(base) + list(aliases):
         if not item:
             continue
         upper = str(item).upper()
         if upper not in combo:
             combo.append(upper)
+        # include synonyms when present
+        for syn in form_synonyms.get(upper, []):
+            syn_up = syn.upper()
+            if syn_up not in combo:
+                combo.append(syn_up)
         # Also add stripped finance form families like F1 from F1A to make matching more permissive.
         if upper.startswith("F") and len(upper) == 3 and upper.endswith("A"):
             short = upper[:2]
@@ -1554,6 +1567,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.scorecard_merge and not args.scorecard_crosswalk:
         raise SystemExit("Refusing to merge on OPEID without --scorecard-crosswalk. See README.")
     lake = load_dictionary_lake(args.lake)
+    # Prefer normalized form column if present
+    if "form_norm" in lake.columns:
+        lake["form"] = lake["form_norm"].where(lake["form"].notna(), lake.get("form", ""))
     rules = load_validation_rules(args.rules)
     reporting_map = load_reporting_map(args.reporting_map)
     allowed_surveys = parse_survey_list(args.survey_filter)

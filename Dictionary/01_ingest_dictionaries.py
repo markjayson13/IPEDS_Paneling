@@ -1235,6 +1235,27 @@ def main() -> None:
     lake["form"] = lake.get("subsurvey", "").fillna("")
     lake.loc[lake["form"].eq(""), "form"] = lake["survey"]
     lake["form"] = lake["form"].astype(str).str.upper()
+    # Normalized form (strip year suffixes and common aliases)
+    def _norm_form(raw: str) -> str:
+        if not raw:
+            return ""
+        up = str(raw).upper().strip()
+        # strip trailing year-like suffixes (e.g., SFAV2324 -> SFAV)
+        up = re.sub(r"(20\\d{2}|\\d{2}\\d{2})$", "", up)
+        # collapse double underscores/whitespace
+        up = re.sub(r"[_\\s]+", "_", up).strip("_")
+        aliases = {
+            "INSTITUTIONAL CHARACTERISTICS": "IC",
+            "INSTITUTIONALCHARACTERISTICS": "IC",
+            "ICHD": "HD",
+            "CST": "COST",
+            "COST": "COST",
+            "SFAV": "SFA",
+            "SFAUG": "SFA",
+        }
+        return aliases.get(up, up)
+
+    lake["form_norm"] = lake["form"].apply(_norm_form)
     lake["varname_short"] = lake["source_var"].astype(str).str.strip()
     lake["varname_long"] = lake.get("var_name", lake["source_var"])
     lake["normalized_label"] = lake["label_norm"]
