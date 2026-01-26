@@ -410,8 +410,10 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^graduate offering$"],
             "exclude_regex": [],
-            "varname_exact": "groffer",
+            "varname_exact": ["groffer", "UGOFFER"],
             "table_regex": r"\b(hd|ic)\b",
+            "forms": ["HD", "ICHD", "INSTITUTIONALCHARACTERISTICS"],
+            "year_bounds": [{"min_year": 2002, "max_year": 2023}, {"min_year": 2024}],
         },
         "ic_urbanicity": {
             "target_var": "ic_urbanicity",
@@ -483,6 +485,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [],
             "code_regex": r"(?i)^(RESPSTAT|ICRESPST)$",
             "varname_regex": r"(?i)^(RESPSTAT|ICRESPST)$",
+        
+            "expected_available": False
         },
         "ic_revision_status": {
             "target_var": "ic_revision_status",
@@ -511,6 +515,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^status of ic component when institution was migrated$"],
             "exclude_regex": [],
             "varname_regex": r"(?i)^(MIGSTAT|ICMIGST)$",
+        
+            "expected_available": False
         },
         "ic_imputation_method": {
             "target_var": "ic_imputation_method",
@@ -524,6 +530,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^type of imputation method.*institutional characteristics$|^imputation method.*institutional characteristics$"],
             "exclude_regex": [],
             "varname_regex": r"(?i)^(ICIMPUT|IMPMETH)$",
+        
+            "expected_available": False
         },
 
         # =====================================================
@@ -1300,6 +1308,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^offers distance education programs?$|^distance education programs?$"],
             "exclude_regex": [],
             "transform": "identity",
+        
+            "expected_available": False
         },
         "ic_parent_unitid": {
             "target_var": "ic_parent_unitid",
@@ -1314,6 +1324,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "code_regex": r"(?i)^(PARENT|PARENTID|PARUNITID)$",
             "notes": "Feeds parent/child handling in harmonizer.",
             "transform": "identity",
+        
+            "expected_available": False
         },
         "ic_hbcu_flag": {
             "target_var": "ic_hbcu_flag",
@@ -1803,6 +1815,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [r"graduate|by race|ethnicity|sex|gender|age|residence|major field"],
             "varname_exact": "efugt",
             "table_regex": r"\bef\b",
+        
+            "expected_available": False
         },
         "ef_grad_total": {
             "target_var": "ef_grad_total",
@@ -1814,6 +1828,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^graduate (?:and first[- ]?professional )?total$|^graduate total$"],
             "exclude_regex": [r"undergraduate|by race|ethnicity|sex|gender|age|residence|major field"],
             "varname_exact": "efgrad",
+        
+            "expected_available": False
         },
         "ef_ug_degseek_total": {
             "target_var": "ef_ug_degseek_total",
@@ -1825,6 +1841,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^undergraduate degree/?certificate[- ]seeking total$"],
             "exclude_regex": [r"by race|ethnicity|sex|gender|age|residence|major field"],
             "varname_regex": r"(?i)^efug(cnt|1st)$",
+        
+            "expected_available": False
         },
         "ef_ftft_ug_total": {
             "target_var": "ef_ftft_ug_total",
@@ -1839,6 +1857,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "exclude_regex": [r"transfer|part[- ]?time|by race|ethnicity|sex|gender|residence|major field"],
             "varname_exact": "efug1st",
+        
+            "expected_available": False
         },
         "ef_full_time_total": {
             "target_var": "ef_full_time_total",
@@ -1876,6 +1896,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [r"some but not all", r"location of student", r"state of residence", r"retention"],
             "varname_regex": r"efdeex",
             "table_regex": EF_TABLE_HINT,
+        
+            "expected_available": False
         },
         "ef_de_some": {
             "target_var": "ef_de_some",
@@ -1891,6 +1913,8 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [],
             "varname_regex": r"efdesome",
             "table_regex": r"\bdist|de\b",
+        
+            "expected_available": False
         },
         "ef_de_none": {
             "target_var": "ef_de_none",
@@ -1959,6 +1983,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "notes": "Emits one long row per state via family=state_residence. Counts first-time degree/cert seeking undergraduates by state of residence at application.",
             "varname_regex": r"(?i)^efres\\d{2}$",
+            "expected_available": False,
         },
 
         # =====================================================
@@ -1985,7 +2010,9 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         "label_regex": [r"^undergraduate.*unduplicated headcount$|^unduplicated.*undergraduate$"],
         "exclude_regex": [r"\bfall\b|graduate|residence|migration|race|ethnicity|sex|gender"],
         "varname_regex": r"(?i)^e12ug(ad)?(ft|pt|1st|cnt)?$",
-    },
+    
+            "expected_available": False
+        },
         "e12_gr_undup": {
             "target_var": "e12_gr_undup",
             "concept": "12-month unduplicated headcount — graduate/first-professional",
@@ -1997,7 +2024,9 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         "label_regex": [r"^graduate.*unduplicated headcount$|^unduplicated.*graduate$"],
         "exclude_regex": [r"\bfall\b|undergraduate|residence|migration|race|ethnicity|sex|gender"],
         "varname_regex": r"(?i)^e12grad(ft|pt)?$",
-    },
+    
+            "expected_available": False
+        },
         "e12_credit_hours_ug": {
             "target_var": "e12_credit_hours_ug",
             "concept": "Undergraduate credit hours during 12-month period",
