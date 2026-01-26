@@ -1930,6 +1930,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         .nunique()
         .reset_index(name="n_concepts")
     )
+    # Attach expected availability flag from catalog (default True)
+    expected_map = {
+        c.get("target_var"): c.get("expected_available", True)
+        for c in CONCEPTS.values()
+        if c.get("target_var")
+    }
+    audit_df["expected_available"] = audit_df["target_var"].map(expected_map)
+    audit_df["expected_available"] = audit_df["expected_available"].fillna(True).astype(
+        bool
+    )
+
     # Match statistics by year/survey: total concepts evaluated vs accepted
     total_per_group = (
         audit_df.groupby(["year", "survey"], dropna=False)["target_var"]
@@ -1942,14 +1953,46 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         .nunique()
         .rename("matched_concepts")
     )
+    expected_total = (
+        audit_df[audit_df["expected_available"] == True]  # noqa: E712
+        .groupby(["year", "survey"], dropna=False)["target_var"]
+        .nunique()
+        .rename("expected_total_concepts")
+    )
+    expected_matched = (
+        audit_df[
+            (audit_df["accepted"] == True)  # noqa: E712
+            & (audit_df["expected_available"] == True)
+        ]
+        .groupby(["year", "survey"], dropna=False)["target_var"]
+        .nunique()
+        .rename("expected_matched_concepts")
+    )
     stats = (
-        pd.concat([total_per_group, accepted_per_group], axis=1)
+        pd.concat(
+            [total_per_group, accepted_per_group, expected_total, expected_matched],
+            axis=1,
+        )
         .fillna(0)
         .reset_index()
     )
-    stats["matched_concepts"] = stats["matched_concepts"].astype(int)
-    stats["total_concepts"] = stats["total_concepts"].astype(int)
+    for col in [
+        "matched_concepts",
+        "total_concepts",
+        "expected_total_concepts",
+        "expected_matched_concepts",
+    ]:
+        stats[col] = stats[col].astype(int)
     stats["unmatched_concepts"] = stats["total_concepts"] - stats["matched_concepts"]
+    stats["expected_unmatched_concepts"] = (
+        stats["expected_total_concepts"] - stats["expected_matched_concepts"]
+    )
+    stats["match_rate_all"] = stats["matched_concepts"] / stats["total_concepts"].where(
+        stats["total_concepts"] != 0, 1
+    )
+    stats["match_rate_expected"] = stats["expected_matched_concepts"] / stats[
+        "expected_total_concepts"
+    ].where(stats["expected_total_concepts"] != 0, 1)
     stats.to_csv(MATCH_STATS_PATH, index=False)
     logging.info("Match stats by year/survey written to %s", MATCH_STATS_PATH)
 
@@ -1965,7 +2008,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     unmatched_details = (
         audit_df[audit_df["accepted"] == False]  # noqa: E712
-        .groupby(["year", "survey", "target_var"], dropna=False)
+        .groupby(
+            ["year", "survey", "target_var", "expected_available"], dropna=False
+        )
         .size()
         .reset_index(name="n_rows")
     )
