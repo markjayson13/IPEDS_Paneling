@@ -985,7 +985,22 @@ def locate_data_file(
             elif parent.startswith(preferred_dir):
                 dir_boost = 1
         prefix_hit = 1 if prefix.lower() in name else 0
-        return (prefix_hit * 3 + overlap + dir_boost, text_pref, p.stat().st_mtime)
+        unitid_flag = 0
+        try:
+            # Peek header for UNITID without loading full file
+            if p.suffix.lower() == ".parquet":
+                import pyarrow.parquet as pq  # type: ignore
+
+                cols = set(pq.ParquetFile(p).schema.names)
+                unitid_flag = 1 if "UNITID" in {c.upper() for c in cols} else 0
+            else:
+                with open(p, "r", encoding="latin1") as handle:
+                    first_line = handle.readline()
+                headers = {h.strip().upper() for h in re.split(r"[,\t|]", first_line) if h}
+                unitid_flag = 1 if "UNITID" in headers else 0
+        except Exception:
+            unitid_flag = 0
+        return (unitid_flag * 10 + prefix_hit * 3 + overlap + dir_boost, text_pref, p.stat().st_mtime)
 
     candidates.sort(key=rank, reverse=True)
     chosen = candidates[0]

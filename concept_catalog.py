@@ -339,8 +339,10 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "period_type": "static",
             "label_regex": [r"^level of institution$|^institution level$"],
             "exclude_regex": [],
-            "varname_exact": "iclevel",
+            "varname_exact": ["iclevel", "ICLEVEL"],
             "table_regex": r"\b(hd|ic)\b",
+            "forms": ["HD", "ICHD", "INSTITUTIONALCHARACTERISTICS"],
+            "year_bounds": [{"min_year": 2002, "max_year": 2023}, {"min_year": 2024}],
         },
         "ic_degree_granting": {
             "target_var": "ic_degree_granting",
@@ -362,8 +364,10 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^highest degree offered.*$"],
             "exclude_regex": [],
             "notes": "Label revised in 2009-10; regex tolerates both versions.",
-            "varname_exact": "hdegoffr1",
+            "varname_exact": ["hdegoffr1", "HLOFFER"],
             "table_regex": r"\b(hd|ic)\b",
+            "forms": ["HD", "ICHD", "INSTITUTIONALCHARACTERISTICS"],
+            "year_bounds": [{"min_year": 2002, "max_year": 2023}, {"min_year": 2024}],
         },
         "ic_institutional_category": {
             "target_var": "ic_institutional_category",
@@ -1081,6 +1085,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             r"^books.*supplies$",
         ],
         "exclude_regex": [],
+        "expected_available": False,
     },
     "cst_coa_food_housing_on_campus": {
         "target_var": "cst_coa_food_housing_on_campus",
@@ -1173,6 +1178,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             r"^off[- ]campus.*with family.*other expenses$",
         ],
         "exclude_regex": [],
+        "expected_available": False,
     },
 
         # =====================================================
