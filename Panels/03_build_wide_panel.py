@@ -146,7 +146,8 @@ def main() -> None:
     if args.write_single:
         writer = None
         for p in year_part_paths:
-            t = pq.read_table(p).cast(schema_wide, safe=False)
+            # Read each file directly (no dataset merge) to avoid dictionary/int conflicts
+            t = pq.ParquetFile(p).read().cast(schema_wide, safe=False)
             if writer is None:
                 writer = pq.ParquetWriter(args.write_single, schema_wide)
             writer.write_table(t)
