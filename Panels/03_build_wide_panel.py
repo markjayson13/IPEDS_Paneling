@@ -39,6 +39,14 @@ def ensure_all_target_cols(df: pd.DataFrame, targets: list[str]) -> pd.DataFrame
     return df[["year", "UNITID"] + targets]
 
 
+def coerce_types(df: pd.DataFrame, targets: list[str]) -> pd.DataFrame:
+    df["year"] = pd.to_numeric(df["year"], errors="coerce").astype("Int32")
+    df["UNITID"] = pd.to_numeric(df["UNITID"], errors="coerce").astype("Int64")
+    if targets:
+        df[targets] = df[targets].apply(pd.to_numeric, errors="coerce")
+    return df
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", required=True, help="Stitched LONG panel parquet")
@@ -80,8 +88,6 @@ def main() -> None:
             cols.append(accepted_col)
         tbl = dataset.to_table(columns=cols, filter=filt)
         df = rename_cols(tbl.to_pandas())
-        if args.accepted_only and "accepted" in df.columns:
-            df = df[df["accepted"] == True]  # noqa: E712
         targets.update(df["target_var"].dropna().unique().tolist())
 
     all_targets = sorted(targets)
@@ -109,6 +115,12 @@ def main() -> None:
         if args.accepted_only and "accepted" in concept.columns:
             concept = concept[concept["accepted"] == True]  # noqa: E712
         concept = concept.dropna(subset=["UNITID", "year", "target_var"])
+
+        # log duplicates if any, then keep first
+        dup_mask = concept.duplicated(subset=["UNITID", "year", "target_var"], keep=False)
+        if dup_mask.any():
+            dup_path = os.path.join(args.out_dir, f"dups_{y}.csv")
+            concept.loc[dup_mask].to_csv(dup_path, index=False)
         concept = concept.drop_duplicates(subset=["UNITID", "year", "target_var"], keep="first")
 
         if len(concept) > 0:
@@ -119,13 +131,14 @@ def main() -> None:
         # Merge to keep spine rows even if no concept values
         wide = spine.merge(wide, on=["year", "UNITID"], how="left")
         wide = ensure_all_target_cols(wide, all_targets)
+        wide = coerce_types(wide, all_targets)
 
         out_path = os.path.join(args.out_dir, f"year={y}", "part.parquet")
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         pq.write_table(pa.Table.from_pandas(wide, preserve_index=False), out_path)
         year_part_paths.append(out_path)
 
-    # Optional single-file write
+    # single-file write
     if args.write_single:
         writer = None
         for p in year_part_paths:
