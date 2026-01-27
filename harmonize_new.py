@@ -392,6 +392,18 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--reporting-map", type=Path, default=None, help="CSV crosswalk with UNITID->reporting_unitid actions")
     parser.add_argument("--scorecard-merge", action="store_true", help="Enable Scorecard merge guard (requires --scorecard-crosswalk)")
     parser.add_argument("--scorecard-crosswalk", type=Path, default=None, help="Approved UNITID/OPEID crosswalk for Scorecard merges")
+    parser.add_argument(
+        "--wide-output",
+        type=Path,
+        default=None,
+        help="Optional wide-format parquet path. If provided, a subset of columns will be pivoted by year.",
+    )
+    parser.add_argument(
+        "--wide-vars",
+        type=str,
+        default=None,
+        help="Comma-separated list of variable names to pivot wide (excluding UNITID/year). Only used with --wide-output.",
+    )
     return parser.parse_args(argv)
 
 
@@ -1887,6 +1899,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     output_df.to_parquet(args.output, index=False, compression="snappy")
     if args.split_by_survey:
         _write_split_surveys(output_df, args.output, args.split_output_dir)
+    if args.wide_output:
+        if not args.wide_vars:
+            logging.warning("Requested --wide-output but no --wide-vars provided; skipping wide export")
+        else:
+            # pivot a safe subset to wide
+            wide_cols = [c.strip() for c in args.wide_vars.split(",") if c.strip()]
+            missing = [c for c in wide_cols if c not in output_df.columns]
+            if missing:
+                logging.warning("Skipping missing wide vars: %s", ", ".join(missing))
+            value_vars = [c for c in wide_cols if c in output_df.columns]
+            if value_vars:
+                logging.info("Writing wide subset to %s", args.wide_output)
+                wide_df = output_df[["UNITID", "year"] + value_vars].pivot_table(
+                    index="UNITID", columns="year", values=value_vars
+                )
+                wide_df.columns = [f"{var}_{yr}" for var, yr in wide_df.columns]
+                wide_df = wide_df.reset_index()
+                args.wide_output.parent.mkdir(parents=True, exist_ok=True)
+                wide_df.to_parquet(args.wide_output, index=False, compression="snappy")
+            else:
+                logging.warning("No wide vars found in data; skipping wide export")
     logging.info("Writing label audit to label_matches.csv")
     audit_columns = [
         "year",
