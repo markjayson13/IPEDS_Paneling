@@ -2911,3 +2911,50 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
     }
 )
+
+# ---------------------------------------------------------------------------
+# Dynamic enrichment from Phase 1 IC mapping (multi-year varname_short)
+# ---------------------------------------------------------------------------
+import csv
+from pathlib import Path
+
+_PHASE1_MAP = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Mapping/Phase_1/ic_phase1_varname_short_multiyear.csv")
+if _PHASE1_MAP.exists():
+    with _PHASE1_MAP.open() as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            key = row["concept_key"]
+            varname = row["varname_short"]
+            min_year = row.get("min_year")
+            max_year = row.get("max_year")
+            forms = row.get("form_norm_all") or ""
+            forms_list = [s for s in forms.split(";") if s]
+            dtype = row.get("dtype") or "text"
+            notes = row.get("notes") or ""
+            if not varname:
+                continue
+            year_bounds = []
+            try:
+                y0 = int(min_year) if min_year else None
+                y1 = int(max_year) if max_year else None
+                year_bounds.append({"min_year": y0, "max_year": y1})
+            except Exception:
+                pass
+            entry = CONCEPTS.get(key, {})
+            entry.setdefault("target_var", key)
+            entry.setdefault("concept", key)
+            entry.setdefault("survey", "InstitutionalCharacteristics")
+            entry.setdefault("period_type", "AY")
+            # merge forms
+            if forms_list:
+                existing_forms = set([s.upper() for s in entry.get("forms", [])])
+                entry["forms"] = sorted(existing_forms.union([s.upper() for s in forms_list]))
+            entry["varname_exact"] = varname.lower()
+            if year_bounds:
+                entry["year_bounds"] = year_bounds
+            entry.setdefault("expected_available", True)
+            if dtype:
+                entry["dtype"] = dtype
+            if notes:
+                entry.setdefault("notes", notes)
+            CONCEPTS[key] = entry
