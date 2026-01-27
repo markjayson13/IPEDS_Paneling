@@ -35,13 +35,13 @@ DICT_PARQUET_PATH = BASE_ROOT / "Dictionary" / "dictionary_lake.parquet"
 INGEST_PROFILE_PATH = BASE_ROOT / "Dictionary" / "ingest_profile.csv"
 DICTIONARY_PROFILE_PATH = BASE_ROOT / "Dictionary" / "dictionary_profile.csv"
 DEFAULT_OUTPUT = DICT_PARQUET_PATH
-MIN_YEAR = 2002
+MIN_YEAR = 1987
 DICT_NAME_PATTERN = re.compile(
     r"(?:^|[/_-])(dict|dictionary|varlist|variables?|layout|codebook)(?:$|[_-])",
     re.IGNORECASE,
 )
 # Prefer structured files; HTML dictionaries are noisy and handled via header fallback.
-SUPPORTED_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt"}
+SUPPORTED_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt", ".html", ".htm"}
 DICTIONARY_VAR_COLS = {"varname", "variable", "var", "var_name", "name", "column"}
 DICTIONARY_LABEL_COLS = {
     "label",
@@ -727,17 +727,29 @@ def looks_like_dictionary_by_content(path: Path, max_rows: int = 50) -> bool:
             xls = pd.ExcelFile(path, engine=engine)
             sheet = xls.sheet_names[0]
             preview = xls.parse(sheet_name=sheet, nrows=max_rows, dtype=str)
+            previews = [preview]
         elif suffix in {".csv", ".txt"}:
             preview = pd.read_csv(path, nrows=max_rows, dtype=str, encoding_errors="ignore")
+            previews = [preview]
+        elif suffix in {".html", ".htm"}:
+            previews = []
+            try:
+                tables = pd.read_html(path, keep_default_na=False)
+                previews = [tbl.head(max_rows) for tbl in tables if not tbl.empty]
+            except Exception:
+                return False
         else:
             return False
     except Exception:  # noqa: BLE001
         return False
 
-    cols = {c.strip().lower() for c in preview.columns if isinstance(c, str)}
-    has_var = bool(cols & DICTIONARY_VAR_COLS)
-    has_label = bool(cols & DICTIONARY_LABEL_COLS)
-    return has_var and has_label
+    for preview in previews:
+        cols = {c.strip().lower() for c in preview.columns if isinstance(c, str)}
+        has_var = bool(cols & DICTIONARY_VAR_COLS)
+        has_label = bool(cols & DICTIONARY_LABEL_COLS)
+        if has_var and has_label:
+            return True
+    return False
 
 
 def iter_tablesdoc_workbooks(root: Path) -> list[Path]:
