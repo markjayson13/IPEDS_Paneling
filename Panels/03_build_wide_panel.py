@@ -33,10 +33,9 @@ def pick_col(schema: pa.Schema, candidates: Iterable[str]) -> str:
 
 
 def ensure_all_target_cols(df: pd.DataFrame, targets: list[str]) -> pd.DataFrame:
-    missing = [t for t in targets if t not in df.columns]
-    for t in missing:
-        df[t] = pd.NA
-    return df[["year", "UNITID"] + targets]
+    # Reindex instead of per-column insert to avoid fragmentation warnings
+    cols = ["year", "UNITID"] + targets
+    return df.reindex(columns=cols)
 
 
 def coerce_types(df: pd.DataFrame, targets: list[str]) -> pd.DataFrame:
@@ -79,7 +78,7 @@ def main() -> None:
             mapping[accepted_col] = "accepted"
         return df.rename(columns=mapping)
 
-    # Collect universe of target_vars across requested years (honoring accepted_only if set)
+    # Collect universe of target_vars across requested years (independent of accepted flag)
     targets = set()
     for y in years:
         filt = (ds.field(year_col) == y) & ds.field(target_col).is_valid()
@@ -91,6 +90,10 @@ def main() -> None:
         targets.update(df["target_var"].dropna().unique().tolist())
 
     all_targets = sorted(targets)
+    schema_wide = pa.schema(
+        [pa.field("year", pa.int32()), pa.field("UNITID", pa.int64())]
+        + [pa.field(t, pa.float64()) for t in all_targets]
+    )
     year_part_paths: list[str] = []
 
     for y in years:
@@ -135,19 +138,19 @@ def main() -> None:
 
         out_path = os.path.join(args.out_dir, f"year={y}", "part.parquet")
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        pq.write_table(pa.Table.from_pandas(wide, preserve_index=False), out_path)
+        tbl = pa.Table.from_pandas(wide, preserve_index=False).cast(schema_wide)
+        pq.write_table(tbl, out_path)
         year_part_paths.append(out_path)
 
     # single-file write
     if args.write_single:
         writer = None
         for p in year_part_paths:
-            t = pq.read_table(p)
+            t = pq.read_table(p).cast(schema_wide, safe=False)
             if writer is None:
-                writer = pq.ParquetWriter(args.write_single, t.schema)
+                writer = pq.ParquetWriter(args.write_single, schema_wide)
             writer.write_table(t)
-        if writer:
-            writer.close()
+        writer.close()
 
 
 if __name__ == "__main__":
