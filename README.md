@@ -1,5 +1,5 @@
-IPEDS Paneling Pipeline (1987–2024)
-===================================
+IPEDS Harmonized Panel Builder (1987–2024)
+===========================================
 
 This repo builds a harmonized, longitudinal IPEDS panel with short varnames, scored matching, and per‑chunk QC. It supports low‑RAM chunked runs and optional wide exports for selected variables.
 
