@@ -56,8 +56,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [r"contact|mission|website|alias|short name|athletic|library"],
             "varname_exact": "instnm",
             "code_regex": r"(?i)^INSTNM$",
-            "table_regex": r"\b(hd|ic)\b",
-        },
+            },
         "dir_city": {
             "target_var": "dir_city",
             "concept": "City",
@@ -69,8 +68,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [r"mailing|county|country"],
             "varname_exact": "city",
             "code_regex": r"(?i)^CITY$",
-            "table_regex": r"\b(hd|ic)\b",
-        },
+            },
         "dir_state_abbr": {
             "target_var": "dir_state_abbr",
             "concept": "State abbreviation",
@@ -82,8 +80,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [r"fips|county"],
             "varname_exact": "stabbr",
             "code_regex": r"(?i)^STABBR$",
-            "table_regex": r"\b(hd|ic)\b",
-        },
+            },
         "dir_zip": {
             "target_var": "dir_zip",
             "concept": "ZIP code",
@@ -95,8 +92,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [r"plus|mailing"],
             "varname_exact": "zip",
             "code_regex": r"(?i)^ZIP$",
-            "table_regex": r"\b(hd|ic)\b",
-        },
+            },
         "dir_ein": {
             "target_var": "dir_ein",
             "concept": "Employer Identification Number",
@@ -350,8 +346,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^sector of institution$|^sector$"],
             "exclude_regex": [],
             "varname_exact": "sector",
-            "table_regex": r"\b(hd|ic)\b",
-        },
+            },
         "ic_control": {
             "target_var": "ic_control",
             "concept": "Control of institution",
@@ -362,8 +357,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^control of institution$|^control$"],
             "exclude_regex": [],
             "varname_exact": "control",
-            "table_regex": r"\b(hd|ic)\b",
-        },
+            },
         "ic_level": {
             "target_var": "ic_level",
             "concept": "Level of institution",
@@ -373,7 +367,6 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^level of institution$|^institution level$"],
             "exclude_regex": [],
         "varname_exact": ["iclevel", "ICLEVEL"],
-        "table_regex": r"\b(hd|ic)\b",
         "forms": ["HD", "ICHD", "IC", "INSTITUTIONALCHARACTERISTICS","INSTITUTIONAL CHARACTERISTICS"],
         "year_bounds": [{"min_year": 2002, "max_year": 2023}, {"min_year": 2024}],
         "expected_available": False,
@@ -387,8 +380,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^degree[- ]granting status$"],
             "exclude_regex": [],
             "varname_exact": "deggrant",
-            "table_regex": r"\b(hd|ic)\b",
-        },
+            },
         "ic_highest_degree_offered": {
             "target_var": "ic_highest_degree_offered",
             "concept": "Highest degree offered",
@@ -399,7 +391,6 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "exclude_regex": [],
             "notes": "Label revised in 2009-10; regex tolerates both versions.",
         "varname_exact": ["hdegoffr1", "HLOFFER"],
-        "table_regex": r"\b(hd|ic)\b",
         "forms": ["HD", "ICHD", "IC", "INSTITUTIONALCHARACTERISTICS","INSTITUTIONAL CHARACTERISTICS"],
         "year_bounds": [{"min_year": 2002, "max_year": 2023}, {"min_year": 2024}],
         "expected_available": False,
@@ -413,8 +404,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^institutional category$"],
             "exclude_regex": [],
             "varname_exact": "instcat",
-            "table_regex": r"\b(hd|ic)\b",
-        },
+            },
         "ic_highest_level_offering": {
             "target_var": "ic_highest_level_offering",
             "concept": "Highest level of offering",
@@ -424,8 +414,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^highest level of offering$"],
             "exclude_regex": [],
             "varname_exact": "hloffer",
-            "table_regex": r"\b(hd|ic)\b",
-        },
+            },
         "ic_ug_offering": {
             "target_var": "ic_ug_offering",
             "concept": "Undergraduate offering",
@@ -435,8 +424,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^undergraduate offering$"],
             "exclude_regex": [],
             "varname_exact": "ugoffer",
-            "table_regex": r"\b(hd|ic)\b",
-        },
+            },
         "ic_gr_offering": {
             "target_var": "ic_gr_offering",
             "concept": "Graduate offering",
@@ -446,7 +434,6 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^graduate offering$"],
             "exclude_regex": [],
         "varname_exact": ["groffer", "UGOFFER"],
-        "table_regex": r"\b(hd|ic)\b",
         "forms": ["HD", "ICHD", "IC", "INSTITUTIONALCHARACTERISTICS","INSTITUTIONAL CHARACTERISTICS"],
         "year_bounds": [{"min_year": 2002, "max_year": 2023}, {"min_year": 2024}],
         "expected_available": False,
@@ -1876,8 +1863,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "notes": "Fall snapshot grand total only.",
             "varname_exact": "eftotlt",
-            "table_regex": r"\bef\b",
-        },
+            },
         "ef_ug_total": {
             "target_var": "ef_ug_total",
             "concept": "Undergraduate total (fall)",
@@ -1888,8 +1874,6 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^undergraduate total$|^total undergraduate students$"],
             "exclude_regex": [r"graduate|by race|ethnicity|sex|gender|age|residence|major field"],
             "varname_exact": "efugt",
-            "table_regex": r"\bef\b",
-        
             "expected_available": False
         },
         "ef_grad_total": {
@@ -1986,8 +1970,6 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "exclude_regex": [],
             "varname_regex": r"efdesome",
-            "table_regex": r"\bdist|de\b",
-        
             "expected_available": False
         },
         "ef_de_none": {
@@ -2003,8 +1985,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             ],
             "exclude_regex": [],
             "varname_exact": "efdenon",
-            "table_regex": r"\bdist|de\b",
-        },
+            },
         "ef_retention_ftft_full_time": {
             "target_var": "ef_retention_ftft_full_time",
             "concept": "First-time full-time undergraduate retention rate (next fall)",
