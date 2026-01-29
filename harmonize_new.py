@@ -953,11 +953,6 @@ def locate_data_file(
     if not year_dir.exists():
         logging.error("Year directory %s missing", year_dir)
         return None, None
-    # If we are looking for Institutional Characteristics/directory-like data, prefer the canonical HD file
-    if survey.lower().startswith("institutionalcharacteristics") or prefix.lower() in {"hd", "ic"}:
-        hd_glob = list(year_dir.glob(f"HD{year}/*.csv")) + list(year_dir.glob(f"HD{year}/*.parquet"))
-        if hd_glob:
-            return hd_glob[0], None
     candidates: list[Path] = []
     seen: set[Path] = set()
     prefix_lower = prefix.lower()
