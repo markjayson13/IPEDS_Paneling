@@ -934,6 +934,9 @@ def locate_data_file(
     manifest_cache: dict[int, Optional[pd.DataFrame]],
     dict_hint: Optional[str] = None,
 ) -> tuple[Optional[Path], Optional[str]]:
+    # For IC directory items the dictionary sometimes lacks a prefix; default to HD
+    if prefix is None and survey.lower().startswith("institutionalcharacteristics"):
+        prefix = "HD"
     if prefix is None:
         logging.warning("Cannot locate data file without prefix for year=%s survey=%s", year, survey)
         return None, None
