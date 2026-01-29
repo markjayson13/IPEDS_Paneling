@@ -47,6 +47,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         # =====================================================
         "dir_inst_name": {
             "target_var": "dir_inst_name",
+            "output_var": "inst_name",
             "concept": "Institution name",
             "units": "text",
             "survey": "InstitutionalCharacteristics",
@@ -59,6 +60,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             },
         "dir_city": {
             "target_var": "dir_city",
+            "output_var": "city",
             "concept": "City",
             "units": "text",
             "survey": "InstitutionalCharacteristics",
@@ -71,6 +73,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             },
         "dir_state_abbr": {
             "target_var": "dir_state_abbr",
+            "output_var": "state_abbr",
             "concept": "State abbreviation",
             "units": "text",
             "survey": "InstitutionalCharacteristics",
@@ -83,6 +86,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             },
         "dir_zip": {
             "target_var": "dir_zip",
+            "output_var": "zip",
             "concept": "ZIP code",
             "units": "text",
             "survey": "InstitutionalCharacteristics",
@@ -95,6 +99,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             },
         "dir_ein": {
             "target_var": "dir_ein",
+            "output_var": "ein",
             "concept": "Employer Identification Number",
             "units": "text",
             "survey": "InstitutionalCharacteristics",
@@ -107,6 +112,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
         "dir_opeflag": {
             "target_var": "dir_opeflag",
+            "output_var": "opeflag",
             "concept": "OPE Title IV eligibility indicator code",
             "units": "code",
             "survey": "InstitutionalCharacteristics",
@@ -119,6 +125,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
         "dir_opeid": {
             "target_var": "dir_opeid",
+            "output_var": "opeid",
             "concept": "Office of Postsecondary Education (OPE) ID number",
             "units": "id",
             "survey": "InstitutionalCharacteristics",
@@ -131,6 +138,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
         "dir_multi_campus_org": {
             "target_var": "dir_multi_campus_org",
+            "output_var": "multi_campus_org",
             "concept": "Multi-institution or multi-campus organization indicator",
             "units": "code",
             "survey": "InstitutionalCharacteristics",
@@ -143,6 +151,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
         "dir_multi_campus_id": {
             "target_var": "dir_multi_campus_id",
+            "output_var": "multi_campus_id",
             "concept": "ID of multi-institution or multi-campus organization",
             "units": "id",
             "survey": "InstitutionalCharacteristics",
@@ -155,6 +164,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
         "dir_county_fips": {
             "target_var": "dir_county_fips",
+            "output_var": "county_fips",
             "concept": "County FIPS code",
             "units": "code",
             "survey": "InstitutionalCharacteristics",
@@ -169,6 +179,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
         "dir_fips_county_code": {
             "target_var": "dir_fips_county_code",
+            "output_var": "county_fips",
             "concept": "County FIPS code (alias of dir_county_fips)",
             "units": "code",
             "survey": "InstitutionalCharacteristics",
@@ -185,6 +196,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
         "dir_county_name": {
             "target_var": "dir_county_name",
+            "output_var": "county_name",
             "concept": "County name",
             "units": "text",
             "survey": "InstitutionalCharacteristics",
@@ -199,6 +211,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
         "dir_congress_district": {
             "target_var": "dir_congress_district",
+            "output_var": "congress_district",
             "concept": "Congressional district code",
             "units": "code",
             "survey": "InstitutionalCharacteristics",
@@ -213,6 +226,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         },
         "dir_cbsa_code": {
             "target_var": "dir_cbsa_code",
+            "output_var": "cbsa_code",
             "concept": "Core Based Statistical Area (CBSA)",
             "units": "code",
             "survey": "InstitutionalCharacteristics",
@@ -227,6 +241,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
     },
         "dir_cbsa_type": {
             "target_var": "dir_cbsa_type",
+            "output_var": "cbsa_type",
             "concept": "CBSA type (metropolitan or micropolitan)",
             "units": "code",
             "survey": "InstitutionalCharacteristics",
@@ -241,6 +256,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
     },
         "dir_csa_code": {
             "target_var": "dir_csa_code",
+            "output_var": "csa_code",
             "concept": "Combined Statistical Area (CSA)",
             "units": "code",
             "survey": "InstitutionalCharacteristics",

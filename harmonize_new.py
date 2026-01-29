@@ -278,7 +278,7 @@ STATIC_LOCATIONAL_TARGETS = {
 }
 
 CONCEPT_BY_TARGET_VAR = {
-    str(concept.get("target_var")): concept for concept in CONCEPTS.values() if concept.get("target_var")
+    str(concept.get("output_var", concept.get("target_var"))): concept for concept in CONCEPTS.values() if concept.get("output_var", concept.get("target_var"))
 }
 
 
@@ -1676,7 +1676,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             record_kwargs = {
                 "concept_key": concept_key,
                 "year": year,
-                "target_var": str(concept.get("target_var")),
+                "target_var": str(concept.get("output_var", concept.get("target_var"))),
                 "score": None,
                 "n_candidates": 0,
                 "source_var": None,
@@ -1862,7 +1862,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                             "reporting_unitid": df[unitid_col],
                             "state": state_token,
                             "year": year,
-                            "target_var": concept.get("target_var"),
+                            "target_var": concept.get("output_var", concept.get("target_var")),
                             "value": vals,
                             "concept": concept.get("concept"),
                             "units": concept.get("units"),
@@ -1906,7 +1906,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "UNITID": df[unitid_col],
                     "reporting_unitid": df[unitid_col],
                     "year": year,
-                    "target_var": concept.get("target_var"),
+                    "target_var": concept.get("output_var", concept.get("target_var")),
                     "value": values,
                     "accepted": True,
                     "concept": concept.get("concept"),
