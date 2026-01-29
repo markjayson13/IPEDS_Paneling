@@ -949,6 +949,14 @@ def locate_data_file(
             if path.exists():
                 return path, str(release) if release is not None else None
         logging.warning("Manifest pointed to %s but file missing; falling back", filename)
+    # For Institutional Characteristics, prefer canonical HD file if present
+    if survey.lower().startswith("institutionalcharacteristics"):
+        hd_candidate = root / f"{year}" / f"HD{year}" / f"hd{year}.csv"
+        if hd_candidate.exists():
+            return hd_candidate, None
+        hd_parq = root / f"{year}" / f"HD{year}" / f"hd{year}.parquet"
+        if hd_parq.exists():
+            return hd_parq, None
     year_dir = root / str(year)
     if not year_dir.exists():
         logging.error("Year directory %s missing", year_dir)

@@ -54,7 +54,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         "forms": ["HD","ICHD","IC","INSTITUTIONALCHARACTERISTICS","INSTITUTIONAL CHARACTERISTICS"],
             "label_regex": [r"^institution.*name$|^name of institution$"],
             "exclude_regex": [r"contact|mission|website|alias|short name|athletic|library"],
-            "varname_exact": "instnm",
+            "varname_exact": ["instnm","INSTNM"],
             "code_regex": r"(?i)^INSTNM$",
             },
         "dir_city": {
@@ -66,7 +66,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         "forms": ["HD","ICHD","IC","INSTITUTIONALCHARACTERISTICS","INSTITUTIONAL CHARACTERISTICS"],
             "label_regex": [r"^city(?: location of institution)?$"],
             "exclude_regex": [r"mailing|county|country"],
-            "varname_exact": "city",
+            "varname_exact": ["city","CITY"],
             "code_regex": r"(?i)^CITY$",
             },
         "dir_state_abbr": {
@@ -165,7 +165,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         "label_regex": [r"^fips county code$|^county fips code$"],
         "exclude_regex": [],
         "varname_regex": r"(?i)^(CNTYFIPS|COUNTYFIPS?|COUNTYCD)$",
-        "varname_exact": "countycd",
+        "varname_exact": ["COUNTYCD","countycd"],
         },
         "dir_fips_county_code": {
             "target_var": "dir_fips_county_code",
@@ -195,7 +195,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         "label_regex": [r"^county name$"],
         "exclude_regex": [],
         "varname_regex": r"(?i)^COUNTY(NM|NAME)?$",
-        "varname_exact": "countynm",
+        "varname_exact": ["COUNTYNM","countynm"],
         },
         "dir_congress_district": {
             "target_var": "dir_congress_district",
@@ -209,7 +209,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         "label_regex": [r"^congressional district code$"],
         "exclude_regex": [],
         "varname_regex": r"(?i)^(CONGDIST|CD|CNGDSTCD)$",
-        "varname_exact": "cngdstcd",
+        "varname_exact": ["CNGDSTCD","cngdstcd"],
         },
         "dir_cbsa_code": {
             "target_var": "dir_cbsa_code",
@@ -221,7 +221,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         "form_aliases": [],
         "label_regex": [r"^core based statistical area.*$|^cbsa$"],
         "exclude_regex": [],
-        "varname_exact": "cbsa",
+        "varname_exact": ["CBSA","cbsa"],
         "varname_regex": r"(?i)^(P?CCBSA|CBSA)$",
         "code_regex": r"(?i)^CBSA$",
     },
@@ -235,7 +235,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         "form_aliases": [],
         "label_regex": [r"^cbsa type.*metropolitan or micropolitan$|^cbsa type$"],
         "exclude_regex": [],
-        "varname_exact": "cbsatype",
+        "varname_exact": ["cbsatype","CBSATYPE"],
         "varname_regex": r"(?i)^(P?CCBSATYPE|CBSATYPE)$",
         "code_regex": r"(?i)^CBSATYPE$",
     },
@@ -249,7 +249,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         "form_aliases": [],
         "label_regex": [r"^combined statistical area.*$|^csa$"],
         "exclude_regex": [],
-        "varname_exact": "csa",
+        "varname_exact": ["CSA","csa"],
         "varname_regex": r"(?i)^(P?CCSA|CSA)$",
         "code_regex": r"(?i)^CSA$",
     },
@@ -356,7 +356,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["IC","ICHD","HD","INSTITUTIONALCHARACTERISTICS","INSTITUTIONAL CHARACTERISTICS"],
             "label_regex": [r"^control of institution$|^control$"],
             "exclude_regex": [],
-            "varname_exact": "control",
+            "varname_exact": ["CONTROL","control"],
             },
         "ic_level": {
             "target_var": "ic_level",
@@ -461,7 +461,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "forms": ["IC","ICHD","HD","INSTITUTIONALCHARACTERISTICS","INSTITUTIONAL CHARACTERISTICS"],
             "label_regex": [r"^institutional control or affiliation$"],
             "exclude_regex": [],
-            "varname_exact": "cntlaffi",
+            "varname_exact": ["CNTLAFFI","cntlaffi"],
         },
         "ic_public_control_primary": {
             "target_var": "ic_public_control_primary",
@@ -702,7 +702,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
         "max_year": 2023,
         "label_regex": [r"^cost of attendance.*on[- ]campus$|^coa.*on[- ]campus$"],
         "exclude_regex": [],
-        "varname_exact": "cinson",
+        "varname_exact": ["cinson","CINSON"],
     },
         "ic_coa_off_campus_not_family": {
             "target_var": "ic_coa_off_campus_not_family",
@@ -718,7 +718,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             r"^coa.*off[- ]campus.*(not with family|without family|not living with parents?)$",
         ],
         "exclude_regex": [],
-        "varname_exact": "cinsoff",
+        "varname_exact": ["cinsoff","CINSOFF"],
     },
         "ic_coa_off_campus_with_family": {
             "target_var": "ic_coa_off_campus_with_family",
@@ -734,7 +734,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             r"^coa.*off[- ]campus.*(with family|living with parents?)$",
         ],
         "exclude_regex": [],
-        "varname_exact": "cinsfam",
+        "varname_exact": ["cinsfam","CINSFAM"],
     },
 
         # =====================================================
@@ -807,7 +807,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
                 r"^(room and board|housing and meals).*off[- ]campus.*(not with family|without family|not living with parents?)$",
             ],
             "exclude_regex": [],
-            "varname_exact": "rmbrdoff",
+            "varname_exact": ["rmbrdoff","RMBRDOFF"],
         },
         "ic_other_exp_on_campus": {
             "target_var": "ic_other_exp_on_campus",
@@ -820,7 +820,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "max_year": 2023,
             "label_regex": [r"^other expenses.*on[- ]campus$"],
             "exclude_regex": [],
-            "varname_exact": "chg6ay3",
+            "varname_exact": ["chg6ay3","CHG6AY3"],
         },
         "ic_other_exp_off_campus_not_family": {
             "target_var": "ic_other_exp_off_campus_not_family",
@@ -833,7 +833,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "max_year": 2023,
             "label_regex": [r"^other expenses.*off[- ]campus.*(not with family|without family|not living with parents?)$"],
             "exclude_regex": [],
-            "varname_exact": "chg8ay3",
+            "varname_exact": ["chg8ay3","CHG8AY3"],
         },
         "ic_other_exp_off_campus_with_family": {
             "target_var": "ic_other_exp_off_campus_with_family",
@@ -846,7 +846,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "max_year": 2023,
             "label_regex": [r"^other expenses.*off[- ]campus.*(with family|living with parents?)$"],
             "exclude_regex": [],
-            "varname_exact": "chg9ay3",
+            "varname_exact": ["chg9ay3","CHG9AY3"],
         },
     "ic_books_supplies": {
         "target_var": "ic_books_supplies",
@@ -1262,7 +1262,7 @@ CONCEPTS: "OrderedDict[str, dict[str, object]]" = OrderedDict(
             "label_regex": [r"^calendar system$"],
             "exclude_regex": [],
             "transform": "identity",
-            "varname_exact": "calsys",
+            "varname_exact": ["calsys","CALSYS"],
         },
         "ic_tuition_charge_varies": {
             "target_var": "ic_tuition_charge_varies",
