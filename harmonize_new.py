@@ -952,6 +952,15 @@ def locate_data_file(
             if path.exists():
                 return path, str(release) if release is not None else None
         logging.warning("Manifest pointed to %s but file missing; falling back", filename)
+    # If manifest miss and this is Institutional Characteristics with a C-prefix, prefer HD file
+    prefix_lower = prefix.lower()
+    if survey.lower().startswith("institutionalcharacteristics") and prefix_lower == "c":
+        hd_csv = root / f"{year}" / f"HD{year}" / f"hd{year}.csv"
+        hd_parq = root / f"{year}" / f"HD{year}" / f"hd{year}.parquet"
+        if hd_csv.exists():
+            return hd_csv, None
+        if hd_parq.exists():
+            return hd_parq, None
     # For Institutional Characteristics, prefer canonical HD file if present
     if survey.lower().startswith("institutionalcharacteristics"):
         hd_candidate = root / f"{year}" / f"HD{year}" / f"hd{year}.csv"
