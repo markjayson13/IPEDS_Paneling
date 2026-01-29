@@ -964,7 +964,14 @@ def locate_data_file(
             continue
         name_lower = file.name.lower()
         parent_lower = file.parent.name.lower()
-        if prefix_lower in name_lower or prefix_lower in parent_lower:
+        # ICAY alias: treat icay as ic for filename matching
+        if prefix_lower == "icay":
+            icay_hit = ("icay" in name_lower) or ("icay" in parent_lower)
+            ic_hit = ("ic" in name_lower) or ("ic" in parent_lower)
+            prefix_hit = icay_hit or ic_hit
+        else:
+            prefix_hit = prefix_lower in name_lower or prefix_lower in parent_lower
+        if prefix_hit:
             resolved = file.resolve()
             if resolved in seen:
                 continue
@@ -985,6 +992,10 @@ def locate_data_file(
         if parent_name:
             preferred_dir = re.sub(r"(?i)(?:[_-]?dict|dictionary)$", "", parent_name).upper()
 
+    target_forms = set()
+    if survey.lower().startswith("institutionalcharacteristics"):
+        target_forms = {"HD", "ICHD", "ICAY", "IC", "INSTITUTIONALCHARACTERISTICS"}
+
     def rank(p: Path) -> tuple[int, int, float]:
         name = p.name.upper()
         overlap = sum(1 for t in dict_tokens if t in name) if dict_tokens else 0
@@ -999,7 +1010,7 @@ def locate_data_file(
         prefix_hit = 1 if prefix.lower() in name else 0
         unitid_flag = 0
         try:
-            # Peek header for UNITID without loading full file
+            # Peek header for UNITID without loading full file; hard penalty if missing
             if p.suffix.lower() == ".parquet":
                 import pyarrow.parquet as pq  # type: ignore
 
@@ -1012,7 +1023,29 @@ def locate_data_file(
                 unitid_flag = 1 if "UNITID" in headers else 0
         except Exception:
             unitid_flag = 0
-        return (unitid_flag * 10 + prefix_hit * 3 + overlap + dir_boost, text_pref, p.stat().st_mtime)
+        ic_pref = 0
+        if target_forms:
+            name_upper = p.name.upper()
+            parent_upper = p.parent.name.upper()
+            if "FLAG" in name_upper or "FLAG" in parent_upper:
+                ic_pref -= 50
+            if any(tok in name_upper for tok in ("HD", "ICHD", "ICAY", "IC")):
+                ic_pref += 3
+            if any(tok in parent_upper for tok in ("HD", "ICHD", "ICAY", "IC")):
+                ic_pref += 2
+        # If UNITID is missing and we're targeting IC/HD forms, bury this file
+        if target_forms and unitid_flag == 0:
+            ic_pref -= 500
+        return (
+            unitid_flag * 10 + prefix_hit * 3 + overlap + dir_boost + ic_pref,
+            text_pref,
+            p.stat().st_mtime,
+        )
+
+    if target_forms:
+        candidates_with_unitid = [c for c in candidates if rank(c)[0] >= 10]  # unitid_flag contributed
+        if candidates_with_unitid:
+            candidates = candidates_with_unitid
 
     candidates.sort(key=rank, reverse=True)
     chosen = candidates[0]
