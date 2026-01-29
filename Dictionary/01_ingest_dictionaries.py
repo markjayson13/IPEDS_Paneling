@@ -263,7 +263,7 @@ def canonical_survey_from_tablename(table: str) -> str | None:
     return None
 
 
-def build_varlist_lake(root: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+def build_varlist_lake(root: Path, min_year: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Build a clean lake from the official per-component dictionaries by
     prioritizing the *Varlist* (sheet 2) and supplementing with:
@@ -288,21 +288,49 @@ def build_varlist_lake(root: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
         return None
 
     for year_dir in sorted(p for p in root.iterdir() if p.is_dir() and p.name.isdigit()):
+        if int(year_dir.name) < min_year:
+            continue
         year = int(year_dir.name)
-        for dict_path in year_dir.rglob("*dict*.xlsx"):
-            try:
-                xls = pd.ExcelFile(dict_path)
-            except Exception:
+        for dict_path in year_dir.rglob("*"):
+            if dict_path.suffix.lower() not in {".xlsx", ".xls", ".csv"}:
                 continue
+            name = dict_path.name.lower()
+            parent_name = dict_path.parent.name.lower()
+            if "_dict" not in name and "_dict" not in parent_name:
+                continue
+            try:
+                # For csv, treat the file itself as a candidate varlist table
+                if dict_path.suffix.lower() == ".csv":
+                    xls = None
+                    var_sheet = "__csv__"
+                    var_df_raw = pd.read_csv(dict_path, dtype=str, encoding_errors="ignore")
+                    sheet_names = []
+                else:
+                    xls = pd.ExcelFile(dict_path)
+                    sheet_names = xls.sheet_names
+                    var_sheet = next((s for s in sheet_names if s.lower() == "varlist"), None)
+                    if not var_sheet:
+                        var_sheet = next((s for s in sheet_names if "varlist" in s.lower()), None)
+                    # If still not found, scan sheets to find one with varname/varnumber/vartitle-like columns
+                    if not var_sheet:
+                        for candidate in sheet_names:
+                            try:
+                                preview = xls.parse(sheet_name=candidate, nrows=5, dtype=str)
+                                preview.columns = [str(c).strip().lower() for c in preview.columns]
+                                has_varname = _col(preview, "varname", "var_name", "name") is not None
+                                has_vartitle = _col(preview, "vartitle", "var_title", "var title", "title") is not None
+                                if has_varname and has_vartitle:
+                                    var_sheet = candidate
+                                    break
+                            except Exception:
+                                continue
+                    if not var_sheet:
+                        continue
+                    try:
+                        var_df_raw = xls.parse(sheet_name=var_sheet, dtype=str)
+                    except Exception:
+                        continue
 
-            # ---- Varlist (sheet 2) -------------------------------------------------
-            var_sheet = next((s for s in xls.sheet_names if s.lower() == "varlist"), None)
-            if not var_sheet:
-                var_sheet = next((s for s in xls.sheet_names if "varlist" in s.lower()), None)
-            if not var_sheet:
-                continue
-            try:
-                var_df_raw = xls.parse(sheet_name=var_sheet, dtype=str)
             except Exception:
                 continue
 
@@ -316,7 +344,7 @@ def build_varlist_lake(root: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
             )
             varname_col = _col(var_df_raw, "varname", "var_name", "name")
             vartitle_col = _col(var_df_raw, "vartitle", "var_title", "var title", "title")
-            dtype_col = _col(var_df_raw, "datatype", "data type")
+            dtype_col = _col(var_df_raw, "datatype", "data type", "data_type")
             format_col = _col(var_df_raw, "format")
             width_col = _col(var_df_raw, "fieldwidth", "field width", "field_width", "width")
             imp_col = _col(var_df_raw, "imputationvar", "imputation var", "impvar")
@@ -335,18 +363,20 @@ def build_varlist_lake(root: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
                     vn_num = _col(desc_df, "varnumber", "var_num", "number")
                     long_col = _col(desc_df, "longdescription", "long description", "description")
                     if long_col:
-                        desc_df["key"] = (
-                            desc_df[vn].fillna("").astype(str).str.lower().where(desc_df[vn].notna(), "")
-                        )
+                        keys = []
+                        if vn:
+                            keys.append(desc_df[vn].fillna("").astype(str).str.lower())
                         if vn_num:
-                            desc_df.loc[desc_df["key"].eq(""), "key"] = (
-                                desc_df[vn_num].fillna("").astype(str).str.lower()
+                            keys.append(desc_df[vn_num].fillna("").astype(str).str.lower())
+                        if keys:
+                            desc_df["key"] = keys[0]
+                            for k in keys[1:]:
+                                desc_df.loc[desc_df["key"].eq("") & k.notna(), "key"] = k
+                            desc_map = (
+                                desc_df.set_index("key")[long_col]
+                                .astype(str)
+                                .to_dict()
                             )
-                        desc_map = (
-                            desc_df.set_index("key")[long_col]
-                            .astype(str)
-                            .to_dict()
-                        )
                 except Exception:
                     desc_map = {}
 
@@ -362,13 +392,15 @@ def build_varlist_lake(root: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
                 varname = str(row.get(varname_col, "") or "").strip()
                 if not varname:
                     continue
-                varnum = str(row.get(varnum_col, "") or "").strip() if varnum_col else ""
+                varnum = normalize_varnumber(row.get(varnum_col, "") if varnum_col else "")
                 vartitle = str(row.get(vartitle_col, "") or "").strip()
-                longdesc = desc_map.get(varname.lower(), "")
+                longdesc = desc_map.get(varname.lower(), "") or desc_map.get(varnum.lower() if varnum else "", "")
                 datatype = str(row.get(dtype_col, "") or "").strip() if dtype_col else ""
                 fmt = str(row.get(format_col, "") or "").strip() if format_col else ""
                 width = str(row.get(width_col, "") or "").strip() if width_col else ""
                 impvar = str(row.get(imp_col, "") or "").strip() if imp_col else ""
+                if not impvar and varname:
+                    impvar = f"X{varname}"
 
                 varnorm = varname.lower()
                 label_norm = _norm_text(vartitle)
@@ -441,7 +473,7 @@ def build_varlist_lake(root: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
                             code_records.append(
                                 {
                                     "year": year,
-                                    "varnumber": str(r.get(vn_num, "") or "").strip() if vn_num else "",
+                                    "varnumber": normalize_varnumber(r.get(vn_num, "")) if vn_num else "",
                                     "varname": str(r.get(vn, "") or "").strip() if vn else "",
                                     "codevalue": str(r.get(code_col, "") or "").strip(),
                                     "valuelabel": str(r.get(label_col, "") or "").strip(),
@@ -751,6 +783,12 @@ def parse_args() -> argparse.Namespace:
         default=DICT_CODES_CSV_PATH,
         help="Optional CSV for value labels (default: dictionary_codes.csv)",
     )
+    parser.add_argument(
+        "--min-year",
+        type=int,
+        default=MIN_YEAR,
+        help=f"Skip directories earlier than this year (default: {MIN_YEAR})",
+    )
     return parser.parse_args()
 
 
@@ -920,6 +958,16 @@ def parse_tablesdoc_year(path: Path) -> int | None:
         return None
     start = int(match.group(1))
     return start
+
+
+def normalize_varnumber(value: object) -> str:
+    """Normalize varnumber: strip spaces; if numeric, zero-pad to 8 digits."""
+    if value is None:
+        return ""
+    txt = re.sub(r"\s+", "", str(value))
+    if txt.isdigit():
+        return txt.zfill(8)
+    return txt
 
 
 def load_tablesdoc_vartable(path: Path) -> pd.DataFrame:
@@ -1230,106 +1278,17 @@ def main() -> None:
 
     rows: list[pd.DataFrame] = []
     # Prefer the authoritative Varlist sheets (varNumber/varName/varTitle) if present.
-    varlist_df, codes_df = build_varlist_lake(root)
+    varlist_df, codes_df = build_varlist_lake(root, args.min_year)
     use_varlist_only = False
     if not varlist_df.empty:
         rows.append(varlist_df)
-        use_varlist_only = True
+        use_varlist_only = True  # Only use Varlist/Description/Frequencies to keep ingest fast
         print(f"Loaded {len(varlist_df):,} rows from Varlist sheets.")
-    if not use_varlist_only:
-        for year_dir in sorted(p for p in root.iterdir() if p.is_dir() and p.name.isdigit()):
-            default_year = int(year_dir.name)
-            for path in iter_dictionary_files(year_dir):
-                try:
-                    frame_list = load_dictionary_frames(path)
-                except Exception as exc:  # noqa: BLE001
-                    print(f"SKIP {path} ({exc})")
-                    continue
-
-                meta = parse_file_meta(path) or {}
-                for df in frame_list:
-                    df = df.dropna(how="all", subset=["source_var", "source_label"])
-                    if df.empty:
-                        continue
-
-                    sheet_value = str(df.get("sheet_name", pd.Series([path.stem])).iloc[0])
-                    table_title = str(df.get("table_title", pd.Series([""])).iloc[0])
-                    survey_from_content = _infer_survey_from_content(df, path.name, sheet_value, table_title)
-                    subsurvey = _infer_subsurvey(sheet_value, table_title, path.name)
-                    inferred_year = (
-                        meta.get("year")
-                        or _infer_year_from_any(table_title)
-                        or _infer_year_from_any(sheet_value)
-                        or default_year
-                    )
-
-                    df = df.copy()
-                    df["sheet_name"] = sheet_value
-                    df["table_title"] = table_title
-                    df["year"] = inferred_year
-                    df["dict_file"] = str(path)
-                    df["dict_filename"] = path.name
-                    df["filename"] = path.name
-                    for col in ("table_name", "data_filename"):
-                        if col not in df.columns:
-                            df[col] = pd.NA
-                    df["source_var"] = df["source_var"].astype(str).str.strip()
-                    df["var_name"] = df["source_var"]
-                    df["source_label"] = df["source_label"].where(
-                        df["source_label"].notna() & df["source_label"].astype(str).str.strip().ne(""),
-                        df["source_var"],
-                    )
-                    df["source_label"] = df["source_label"].astype(str)
-                    df["var_name_norm"] = df["var_name"].map(_norm_text)
-                    df["source_label_norm"] = df["source_label"].map(_norm_text)
-                    df["search_text"] = (
-                        df["source_label_norm"].fillna("") + " || " + df["var_name_norm"].fillna("")
-                    ).str.strip()
-                    df["source_var_norm"] = df["source_var"].str.lower()
-                    df["code_norm"] = df["source_var"].str.upper()
-                    df["table_name"] = df["table_name"].astype(str)
-                    df["table_name_norm"] = df["table_name"].str.strip().str.lower()
-                    df["data_filename"] = df["data_filename"].astype(str)
-                    df["prefix_hint"] = (
-                        df["source_var"]
-                        .astype(str)
-                        .str.extract(VAR_PREFIX_RE, expand=False)
-                        .str.upper()
-                        .fillna("")
-                    )
-                    meta_prefix = meta.get("prefix_token", "")
-                    if meta_prefix:
-                        df.loc[df["prefix_hint"].eq(""), "prefix_hint"] = meta_prefix.upper()
-                    fallback = derive_prefix(path)
-                    if fallback:
-                        df.loc[df["prefix_hint"].eq(""), "prefix_hint"] = fallback
-                    df["prefix_token"] = df["prefix_hint"]
-                    df["release"] = derive_release(path.name)
-                    path_hint = re.findall(r"/([A-Z]{1,8})[_-]", "/" + path.stem.upper() + "_")
-                    fallback_hint_token = meta.get("survey_hint") or (path_hint[0] if path_hint else "")
-                    fallback_mapped = map_survey_hint(fallback_hint_token, fallback_hint_token)
-                    df["survey_hint"] = df["prefix_hint"].apply(lambda p: map_survey_hint(p, fallback_mapped))
-                    if survey_from_content:
-                        df["survey_hint"] = map_survey_hint(survey_from_content, survey_from_content)
-                    df["survey_hint"] = df["survey_hint"].fillna(fallback_mapped).apply(standardize_survey_hint)
-                    df["survey"] = df["survey_hint"].apply(canonicalize_survey)
-                    df["subsurvey"] = subsurvey
-                    df["varname"] = df["source_var"]
-                    df["label"] = df["source_label"]
-                    df["label_norm"] = df["source_label_norm"]
-                    df["dict_row_sha256"] = (
-                        df["source_var_norm"].fillna("")
-                        + "|"
-                        + df["source_label_norm"].fillna("")
-                        + "|"
-                        + df["table_name_norm"].fillna("")
-                    ).map(lambda s: hashlib.sha256(s.encode("utf-8")).hexdigest())
-                    rows.append(df)
-
-            # Fallback: seed varNames from data headers when dictionaries are missing/unparseable
-            header_df = fallback_headers_from_data(year_dir, default_year)
-            if not header_df.empty:
-                rows.append(header_df)
+    else:
+        sys.exit(
+            f"No Varlist sheets found at {root} for years >= {args.min_year}. "
+            "Confirm dictionaries are downloaded and min-year is not excluding them."
+        )
 
     if not rows:
         sys.exit("No dictionary files found. Did you run the downloader?")
@@ -1347,17 +1306,8 @@ def main() -> None:
         if col not in lake_xsec.columns:
             lake_xsec[col] = ""
 
-    tablesdoc_lake = build_tablesdoc_lake(TABLESDOC_ROOT)
-    if not tablesdoc_lake.empty:
-        for col in ["survey_hint", "survey", "varlab", "table_name", "long_description", "source"]:
-            if col not in lake_xsec.columns:
-                lake_xsec[col] = ""
-        missing_cols = set(lake_xsec.columns) - set(tablesdoc_lake.columns)
-        for col in missing_cols:
-            tablesdoc_lake[col] = None
-        lake = pd.concat([lake_xsec, tablesdoc_lake[lake_xsec.columns]], ignore_index=True)
-    else:
-        lake = lake_xsec
+    # Skip TablesDoc merge to keep ingest lightweight
+    lake = lake_xsec
     if "source" not in lake.columns:
         lake["source"] = "cross_sectional"
     else:
@@ -1527,6 +1477,22 @@ def main() -> None:
         collision_path = parquet_path.with_name("dictionary_key_collisions.csv")
         collisions.to_csv(collision_path, index=False)
         print(f"Key collisions (year, form, varname_short) written to {collision_path}")
+
+    # Ensure key metadata columns exist for all rows
+    key_cols_defaults = {
+        "varnumber": "",
+        "varname": lake.get("source_var", ""),
+        "varTitle": lake.get("label", ""),
+        "longDescription": "",
+        "DataType": "",
+        "format": "",
+        "Fieldwidth": "",
+        "imputationvar": "",
+    }
+    for col, default in key_cols_defaults.items():
+        if col not in lake.columns:
+            lake[col] = default
+        lake[col] = lake[col].fillna("")
 
     # Reorder columns to user-preferred front fields
     desired_front = [
