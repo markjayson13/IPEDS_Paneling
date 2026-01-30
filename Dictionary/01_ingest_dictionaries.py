@@ -95,12 +95,19 @@ def parse_html_dict(dict_path: Path, year: int) -> Tuple[list[dict], list[dict]]
     for ln in lines:
         m = re.match(r"^([A-Z0-9_]+)\s*[-–]\s*(.+)$", ln)
         if m:
+            token = m.group(1).strip()
+            # Require at least one letter to avoid code value rows (e.g., "0 - ...")
+            if not re.search(r"[A-Z]", token):
+                continue
+            # Guard against accidental long tokens
+            if len(token) > 30:
+                continue
             if current:
                 records.append(current)
             current = {
                 "year": year,
                 "varnumber": "",
-                "varname": m.group(1).strip(),
+                "varname": token.upper(),
                 "varTitle": m.group(2).strip(),
                 "longDescription": "",
                 "DataType": "",
@@ -194,7 +201,7 @@ def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
                     pass
 
         for _, row in var_df_raw.iterrows():
-            varname = str(row.get(varname_col, "") or "").strip() if varname_col else ""
+            varname = str(row.get(varname_col, "") or "").strip().upper() if varname_col else ""
             if not varname:
                 continue
             varnum = normalize_varnumber(row.get(varnum_col, "") if varnum_col else "")
@@ -203,7 +210,7 @@ def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
             datatype = str(row.get(dtype_col, "") or "").strip() if dtype_col else ""
             fmt = str(row.get(format_col, "") or "").strip() if format_col else ""
             width = str(row.get(width_col, "") or "").strip() if width_col else ""
-            impvar = str(row.get(imp_col, "") or "").strip() if imp_col else ""
+            impvar = str(row.get(imp_col, "") or "").strip().upper() if imp_col else ""
             if not impvar and varname:
                 impvar = f"X{varname}"
             records.append(
@@ -219,6 +226,23 @@ def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
                     "imputationvar": impvar,
                 }
             )
+            # Also expose the imputation variable itself as a synthetic varname so it can appear in the final panel.
+            # Keep varnumber untouched (no X-prefix); only the varname is synthetic.
+            if impvar and impvar != varname:
+                if impvar:  # guard against blank synthetic names
+                    records.append(
+                        {
+                            "year": year,
+                            "varnumber": varnum,
+                            "varname": impvar.upper(),
+                            "varTitle": f"Imputation flag for {varname}" if vartitle else f"Imputation flag for {varname}",
+                            "longDescription": longdesc,
+                            "DataType": "",
+                            "format": "",
+                            "Fieldwidth": "",
+                            "imputationvar": "",
+                        }
+                    )
 
         # Frequencies / Imputation labels
         if xls:
@@ -241,7 +265,7 @@ def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
                                 {
                                     "year": year,
                                     "varnumber": normalize_varnumber(r.get(fn_num, "")) if fn_num else "",
-                                    "varname": str(r.get(fn, "") or "").strip() if fn else "",
+                                    "varname": str(r.get(fn, "") or "").strip().upper() if fn else "",
                                     "codevalue": str(r.get(code_col, "") or "").strip(),
                                     "valuelabel": str(r.get(label_col, "") or "").strip(),
                                     "dict_file": str(dict_path),
