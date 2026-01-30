@@ -30,6 +30,7 @@ Stitch per-year longs  →  Panels/2004-2024/panel_long_varnum_2004_2024.parquet
         ▼
 Wide panel build (Panels/03_build_wide_panel.py)
   ├─ Panels/wide_2004_2024/year=YYYY/part.parquet
+  └─ Optional stitched wide: Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet
   └─ QC: Checks/disc_qc + Checks/wide_qc
 ```
 
@@ -79,6 +80,8 @@ What You Get
 
 - **Wide panel (optional)**  
   One row per `(UNITID, year)` and one column per `varname`, with optional disc collapse.
+  The stitched wide file (if created) is:
+  `Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet`
 
 Quick Start (Recommended)
 -------------------------

@@ -21,7 +21,7 @@ DEFAULT_STITCH = BASE / "Panels" / "2004-2024" / "panel_long_varnum_2004_2024.pa
 DEFAULT_WIDE_OUT = BASE / "Panels" / "wide_2004_2024"
 DEFAULT_DISC_QC = BASE / "Checks" / "disc_qc"
 DEFAULT_WIDE_QC = BASE / "Checks" / "wide_qc"
-DEFAULT_WIDE_STITCH = BASE / "Panels" / "panel_wide_2004_2024.parquet"
+DEFAULT_WIDE_STITCH = BASE / "Panels" / "2004_2024_IPEDS_Raw_Panel_DS.parquet"
 
 
 def parse_years(spec: str) -> list[int]:
