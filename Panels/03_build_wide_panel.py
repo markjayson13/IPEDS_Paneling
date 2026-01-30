@@ -106,7 +106,11 @@ def build_disc_groups(dict_path: str) -> tuple[dict[str, tuple[str, str]], dict[
     return var_to_group, group_to_vars
 
 
-def resolve_disc_names(group_to_vars: dict[str, list[str]], existing: set[str]) -> dict[str, str]:
+def resolve_disc_names(
+    group_to_vars: dict[str, list[str]],
+    existing: set[str],
+    suffix: str = "_CAT",
+) -> dict[str, str]:
     """
     For each disc group base, pick a unique output name.
     If base already exists as an independent var, append a numeric suffix (base1, base2, ...).
@@ -118,9 +122,14 @@ def resolve_disc_names(group_to_vars: dict[str, list[str]], existing: set[str]) 
             mapping[base] = base
             taken.add(base)
             continue
+        base_suffix = f"{base}{suffix}"
+        if base_suffix not in taken:
+            mapping[base] = base_suffix
+            taken.add(base_suffix)
+            continue
         i = 1
         while True:
-            cand = f"{base}{i}"
+            cand = f"{base}{suffix}{i}"
             if cand not in taken:
                 mapping[base] = cand
                 taken.add(cand)
@@ -139,8 +148,11 @@ def main() -> None:
     ap.add_argument("--collapse-disc", action="store_true", help="Collapse discrete (disc) groups into a base var")
     ap.add_argument("--drop-disc-components", action="store_true", help="Drop component vars after collapse")
     ap.add_argument("--disc-qc-dir", default=None, help="Optional dir to write disc conflict reports")
+    ap.add_argument("--disc-exclude", default=None, help="Comma-separated base names to skip collapsing (e.g., LEVEL,ADMCON)")
+    ap.add_argument("--disc-suffix", default="_CAT", help="Suffix used when base name collides with an existing variable")
     ap.add_argument("--dups-qc-dir", default=None, help="Optional dir to write duplicate key samples")
     ap.add_argument("--dups-max-rows", type=int, default=100000, help="Max rows to write for duplicate samples")
+    ap.add_argument("--qc-dir", default=None, help="Optional dir to write QC summary CSV")
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -148,6 +160,11 @@ def main() -> None:
     var_to_group, group_to_vars = ({}, {})
     if args.collapse_disc:
         var_to_group, group_to_vars = build_disc_groups(args.dictionary)
+        if args.disc_exclude:
+            excludes = {x.strip().upper() for x in args.disc_exclude.split(",") if x.strip()}
+            if excludes:
+                group_to_vars = {k: v for k, v in group_to_vars.items() if k.upper() not in excludes}
+                var_to_group = {v: grp for v, grp in var_to_group.items() if grp[0].upper() not in excludes}
         if args.disc_qc_dir:
             os.makedirs(args.disc_qc_dir, exist_ok=True)
 
@@ -179,7 +196,7 @@ def main() -> None:
     all_targets = order_targets(targets)
     disc_name_map = {}
     if args.collapse_disc and group_to_vars:
-        disc_name_map = resolve_disc_names(group_to_vars, set(all_targets))
+        disc_name_map = resolve_disc_names(group_to_vars, set(all_targets), suffix=args.disc_suffix)
         for base, new_name in disc_name_map.items():
             if new_name not in all_targets:
                 all_targets.append(new_name)
@@ -192,6 +209,7 @@ def main() -> None:
         + [pa.field(t, pa.string()) for t in all_targets]
     )
     year_part_paths: list[str] = []
+    qc_rows: list[dict] = []
 
     for y in years:
         # Observed spine (UNITID-year rows present in long data)
@@ -240,6 +258,7 @@ def main() -> None:
 
         # log duplicates if any, then keep first
         dup_mask = concept.duplicated(subset=["UNITID", "year", "varname"], keep=False)
+        dup_count = int(dup_mask.sum())
         if dup_mask.any() and args.dups_qc_dir:
             os.makedirs(args.dups_qc_dir, exist_ok=True)
             dup_path = os.path.join(args.dups_qc_dir, f"dups_{y}.csv")
@@ -263,6 +282,24 @@ def main() -> None:
         pq.write_table(tbl, out_path)
         year_part_paths.append(out_path)
 
+        if args.qc_dir:
+            os.makedirs(args.qc_dir, exist_ok=True)
+            n_spine = int(len(spine))
+            n_vars = int(len(all_targets))
+            non_empty = int(((concept["value"].notna()) & (concept["value"] != "")).sum())
+            possible = n_spine * n_vars if n_spine and n_vars else 0
+            fill_rate = (non_empty / possible) if possible else 0.0
+            qc_rows.append(
+                {
+                    "year": y,
+                    "rows": n_spine,
+                    "vars": n_vars,
+                    "non_empty_values": non_empty,
+                    "fill_rate": fill_rate,
+                    "dup_rows": dup_count,
+                }
+            )
+
     # single-file write
     if args.write_single:
         writer = None
@@ -273,6 +310,10 @@ def main() -> None:
                 writer = pq.ParquetWriter(args.write_single, schema_wide)
             writer.write_table(t)
         writer.close()
+
+    if args.qc_dir and qc_rows:
+        qc_path = os.path.join(args.qc_dir, "wide_panel_qc_summary.csv")
+        pd.DataFrame(qc_rows).to_csv(qc_path, index=False)
 
 
 if __name__ == "__main__":
