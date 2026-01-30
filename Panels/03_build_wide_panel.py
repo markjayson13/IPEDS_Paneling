@@ -152,7 +152,8 @@ def main() -> None:
     ap.add_argument("--disc-exclude", default=None, help="Comma-separated base names to skip collapsing (e.g., LEVEL,ADMCON)")
     ap.add_argument("--disc-suffix", default="_CAT", help="Suffix used when base name collides with an existing variable")
     ap.add_argument("--dups-qc-dir", default=None, help="Optional dir to write duplicate key samples")
-    ap.add_argument("--dups-max-rows", type=int, default=100000, help="Max rows to write for duplicate samples")
+    ap.add_argument("--dups-max-rows", type=int, default=10000, help="Max rows to write for duplicate samples (0 disables)")
+    ap.add_argument("--dups-qc-gzip", action="store_true", help="Write dup samples as .csv.gz")
     ap.add_argument("--qc-dir", default=None, help="Optional dir to write QC summary CSV")
     args = ap.parse_args()
 
@@ -212,7 +213,11 @@ def main() -> None:
     year_part_paths: list[str] = []
     qc_rows: list[dict] = []
 
+    print(f"[info] years: {years[0]}–{years[-1]} ({len(years)} total)")
+    print(f"[info] wide columns (varname): {len(all_targets)}")
+
     for y in years:
+        print(f"[info] building wide for year={y}")
         # Observed spine (UNITID-year rows present in long data)
         spine_tbl = dataset.to_table(
             columns=[unitid_col, year_col],
@@ -220,6 +225,7 @@ def main() -> None:
         )
         spine = rename_cols(spine_tbl.to_pandas()).dropna(subset=["UNITID", "year"])
         spine = spine.drop_duplicates(subset=["UNITID", "year"])
+        print(f"[info] year={y} spine rows: {len(spine)}")
 
         # Concept rows for pivot
         concept_cols = [unitid_col, year_col, target_col, value_col]
@@ -229,6 +235,7 @@ def main() -> None:
         )
         concept = rename_cols(concept_tbl.to_pandas())
         concept = concept.dropna(subset=["UNITID", "year", "varname"])
+        print(f"[info] year={y} concept rows: {len(concept)}")
 
         # Collapse discrete groups into a single base variable (optional)
         if args.collapse_disc and var_to_group:
@@ -260,9 +267,10 @@ def main() -> None:
         # log duplicates if any, then keep first
         dup_mask = concept.duplicated(subset=["UNITID", "year", "varname"], keep=False)
         dup_count = int(dup_mask.sum())
-        if dup_mask.any() and args.dups_qc_dir:
+        if dup_mask.any() and args.dups_qc_dir and args.dups_max_rows > 0:
             os.makedirs(args.dups_qc_dir, exist_ok=True)
-            dup_path = os.path.join(args.dups_qc_dir, f"dups_{y}.csv")
+            ext = ".csv.gz" if args.dups_qc_gzip else ".csv"
+            dup_path = os.path.join(args.dups_qc_dir, f"dups_{y}{ext}")
             dup_sample = concept.loc[dup_mask].head(args.dups_max_rows)
             dup_sample.to_csv(dup_path, index=False)
         concept = concept.drop_duplicates(subset=["UNITID", "year", "varname"], keep="first")
@@ -282,6 +290,7 @@ def main() -> None:
         tbl = pa.Table.from_pandas(wide, preserve_index=False).cast(schema_wide)
         pq.write_table(tbl, out_path)
         year_part_paths.append(out_path)
+        print(f"[info] wrote {out_path}")
 
         if args.qc_dir:
             os.makedirs(args.qc_dir, exist_ok=True)
