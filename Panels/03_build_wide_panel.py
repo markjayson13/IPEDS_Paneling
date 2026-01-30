@@ -4,15 +4,15 @@ Build a wide institution–year panel from the stitched long panel.
 
 Design choices:
 - Observed spine: only UNITID–year pairs present in the long data are included.
-- Accepted-only optional filter to keep “winning” matches.
 - Year-by-year processing to stay RAM‑friendly.
+- Columns: varname becomes the wide columns; values remain as strings (no type casting).
 """
 
 from __future__ import annotations
 
 import argparse
 import os
-from typing import Iterable
+from typing import Iterable, List
 
 import pandas as pd
 import pyarrow as pa
@@ -51,7 +51,6 @@ def main() -> None:
     ap.add_argument("--input", required=True, help="Stitched LONG panel parquet")
     ap.add_argument("--out_dir", required=True, help="Output dir for year-partitioned wide parquet")
     ap.add_argument("--years", required=True, help='Year span, e.g. "1987:2024"')
-    ap.add_argument("--accepted_only", action="store_true", help="Use only accepted rows if column exists")
     ap.add_argument("--write_single", default=None, help="Optional single wide parquet path")
     args = ap.parse_args()
 
@@ -63,36 +62,30 @@ def main() -> None:
 
     unitid_col = pick_col(schema, ["UNITID", "unitid"])
     year_col = pick_col(schema, ["year", "academicyear"])
-    target_col = pick_col(schema, ["target_var", "concept", "target"])
+    target_col = pick_col(schema, ["varname", "target_var", "concept", "target"])
     value_col = pick_col(schema, ["value", "val"])
-    accepted_col = "accepted" if "accepted" in schema.names else None
 
     def rename_cols(df: pd.DataFrame) -> pd.DataFrame:
         mapping = {
             unitid_col: "UNITID",
             year_col: "year",
-            target_col: "target_var",
+            target_col: "varname",
             value_col: "value",
         }
-        if accepted_col:
-            mapping[accepted_col] = "accepted"
         return df.rename(columns=mapping)
 
-    # Collect universe of target_vars across requested years (independent of accepted flag)
+    # Collect universe of varnames across requested years
     targets = set()
     for y in years:
         filt = (ds.field(year_col) == y) & ds.field(target_col).is_valid()
-        cols = [target_col]
-        if accepted_col:
-            cols.append(accepted_col)
-        tbl = dataset.to_table(columns=cols, filter=filt)
+        tbl = dataset.to_table(columns=[target_col], filter=filt)
         df = rename_cols(tbl.to_pandas())
-        targets.update(df["target_var"].dropna().unique().tolist())
+        targets.update(df["varname"].dropna().unique().tolist())
 
     all_targets = sorted(targets)
     schema_wide = pa.schema(
         [pa.field("year", pa.int32()), pa.field("UNITID", pa.int64())]
-        + [pa.field(t, pa.float64()) for t in all_targets]
+        + [pa.field(t, pa.string()) for t in all_targets]
     )
     year_part_paths: list[str] = []
 
@@ -107,27 +100,22 @@ def main() -> None:
 
         # Concept rows for pivot
         concept_cols = [unitid_col, year_col, target_col, value_col]
-        if accepted_col:
-            concept_cols.append(accepted_col)
-
         concept_tbl = dataset.to_table(
             columns=concept_cols,
             filter=(ds.field(year_col) == y) & ds.field(target_col).is_valid(),
         )
         concept = rename_cols(concept_tbl.to_pandas())
-        if args.accepted_only and "accepted" in concept.columns:
-            concept = concept[concept["accepted"] == True]  # noqa: E712
-        concept = concept.dropna(subset=["UNITID", "year", "target_var"])
+        concept = concept.dropna(subset=["UNITID", "year", "varname"])
 
         # log duplicates if any, then keep first
-        dup_mask = concept.duplicated(subset=["UNITID", "year", "target_var"], keep=False)
+        dup_mask = concept.duplicated(subset=["UNITID", "year", "varname"], keep=False)
         if dup_mask.any():
             dup_path = os.path.join(args.out_dir, f"dups_{y}.csv")
             concept.loc[dup_mask].to_csv(dup_path, index=False)
-        concept = concept.drop_duplicates(subset=["UNITID", "year", "target_var"], keep="first")
+        concept = concept.drop_duplicates(subset=["UNITID", "year", "varname"], keep="first")
 
         if len(concept) > 0:
-            wide = concept.pivot(index=["year", "UNITID"], columns="target_var", values="value").reset_index()
+            wide = concept.pivot(index=["year", "UNITID"], columns="varname", values="value").reset_index()
         else:
             wide = spine.copy()
 
