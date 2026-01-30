@@ -19,7 +19,7 @@ Behavior
     year, UNITID, varnumber, varname, value,
     varTitle, longDescription, DataType, format, Fieldwidth, imputationvar, source_file
 """
-
+import duckdb
 import argparse
 import pathlib
 from typing import Iterable, List
