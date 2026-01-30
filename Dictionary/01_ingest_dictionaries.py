@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Tuple
 
 import pandas as pd
+from bs4 import BeautifulSoup
 
 BASE_ROOT = Path("/Users/markjaysonfarol13/IPEDS_Paneling")
 ROOT = BASE_ROOT / "Raw_Cross_Section_Data"
@@ -70,6 +71,58 @@ def col(df: pd.DataFrame, *names: str) -> str | None:
     return None
 
 
+def parse_html_dict(dict_path: Path, year: int) -> Tuple[list[dict], list[dict]]:
+    """
+    Minimal parser for 1987-2003 HTML dictionaries.
+    Extracts varname, varTitle, DataType, Fieldwidth, format (when present).
+    Code labels are not reliably structured; we skip them here.
+    """
+    records: list[dict] = []
+    codes: list[dict] = []
+    try:
+        html = dict_path.read_text(encoding="latin1", errors="ignore")
+    except Exception:
+        return records, codes
+
+    # replace <br> with newlines for easier line parsing
+    soup = BeautifulSoup(html, "html.parser")
+    for br in soup.find_all("br"):
+        br.replace_with("\n")
+    text = soup.get_text("\n")
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+    current = None
+    for ln in lines:
+        m = re.match(r"^([A-Z0-9_]+)\s*[-–]\s*(.+)$", ln)
+        if m:
+            if current:
+                records.append(current)
+            current = {
+                "year": year,
+                "varnumber": "",
+                "varname": m.group(1).strip(),
+                "varTitle": m.group(2).strip(),
+                "longDescription": "",
+                "DataType": "",
+                "format": "",
+                "Fieldwidth": "",
+                "imputationvar": "",
+                "dict_file": dict_path.name,
+            }
+            continue
+        if current:
+            if ln.lower().startswith("data type"):
+                current["DataType"] = ln.split("-", 1)[-1].strip()
+            elif ln.lower().startswith("field width"):
+                current["Fieldwidth"] = ln.split("-", 1)[-1].strip()
+            elif ln.lower().startswith("format"):
+                current["format"] = ln.split("-", 1)[-1].strip()
+
+    if current:
+        records.append(current)
+    return records, codes
+
+
 def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
     records = []
     codes = []
@@ -78,11 +131,18 @@ def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
         return records, codes
 
     for dict_path in year_dir.rglob("*"):
-        if dict_path.suffix.lower() not in {".xlsx", ".xls", ".csv"}:
+        if dict_path.suffix.lower() not in {".xlsx", ".xls", ".csv", ".html", ".htm"}:
             continue
         name = dict_path.name.lower()
         parent = dict_path.parent.name.lower()
         if "_dict" not in name and "_dict" not in parent:
+            continue
+
+        # HTML era (1987-2003)
+        if dict_path.suffix.lower() in {".html", ".htm"}:
+            recs, codes_html = parse_html_dict(dict_path, year)
+            records.extend(recs)
+            codes.extend(codes_html)
             continue
 
         try:
