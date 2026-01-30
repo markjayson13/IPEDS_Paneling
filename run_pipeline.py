@@ -21,6 +21,7 @@ DEFAULT_STITCH = BASE / "Panels" / "2004-2024" / "panel_long_varnum_2004_2024.pa
 DEFAULT_WIDE_OUT = BASE / "Panels" / "wide_2004_2024"
 DEFAULT_DISC_QC = BASE / "Checks" / "disc_qc"
 DEFAULT_WIDE_QC = BASE / "Checks" / "wide_qc"
+DEFAULT_WIDE_STITCH = BASE / "Panels" / "panel_wide_2004_2024.parquet"
 
 
 def parse_years(spec: str) -> list[int]:
@@ -77,6 +78,25 @@ def stitch_years(
             print(y, reason)
 
 
+def stitch_wide_partitioned(in_dir: Path, out_path: Path) -> None:
+    import pyarrow.dataset as ds
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    dataset = ds.dataset(str(in_dir), format="parquet", partitioning="hive")
+    writer = None
+    for i, batch in enumerate(dataset.to_batches(), start=1):
+        if writer is None:
+            writer = pq.ParquetWriter(out_path, batch.schema)
+        writer.write_batch(batch)
+        if i % 100 == 0:
+            print(f"[wide-stitch] wrote {i} batches...")
+    if writer:
+        writer.close()
+        print(f"Wrote {out_path}")
+    else:
+        print(f"[warn] no batches found in {in_dir}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=str(DEFAULT_ROOT), help="Raw_Cross_Section_Data root")
@@ -92,6 +112,8 @@ def main() -> None:
     ap.add_argument("--wide-out-dir", default=str(DEFAULT_WIDE_OUT), help="Output dir for wide panel (partitioned)")
     ap.add_argument("--wide-years", default=None, help="Years for wide build (default: --years)")
     ap.add_argument("--wide-write-single", default=None, help="Optional single wide parquet path")
+    ap.add_argument("--stitch-wide", action=argparse.BooleanOptionalAction, default=False, help="Stitch partitioned wide output into a single file")
+    ap.add_argument("--stitch-wide-out", default=str(DEFAULT_WIDE_STITCH), help="Output path for stitched wide panel")
     ap.add_argument("--collapse-disc", action=argparse.BooleanOptionalAction, default=True, help="Collapse discrete groups in wide builder")
     ap.add_argument("--drop-disc-components", action=argparse.BooleanOptionalAction, default=True, help="Drop component vars after collapse")
     ap.add_argument("--disc-qc-dir", default=str(DEFAULT_DISC_QC), help="QC dir for disc conflicts")
@@ -174,6 +196,15 @@ def main() -> None:
         if args.wide_write_single:
             cmd += ["--write_single", args.wide_write_single]
         run(cmd, args.dry_run)
+
+    # Step 4: stitch wide partitions (optional)
+    if args.stitch_wide:
+        wide_out_dir = Path(args.wide_out_dir)
+        stitch_out = Path(args.stitch_wide_out)
+        if not args.dry_run:
+            stitch_wide_partitioned(wide_out_dir, stitch_out)
+        else:
+            print(f"+ stitch wide {wide_out_dir} -> {stitch_out}")
 
 
 if __name__ == "__main__":
