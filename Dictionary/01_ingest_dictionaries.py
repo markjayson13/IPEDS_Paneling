@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Tuple
 
 import pandas as pd
-from bs4 import BeautifulSoup
 
 BASE_ROOT = Path("/Users/markjaysonfarol13/IPEDS_Paneling")
 ROOT = BASE_ROOT / "Raw_Cross_Section_Data"
@@ -26,7 +25,7 @@ DICT_CODES_CSV_PATH = BASE_ROOT / "Dictionary" / "dictionary_codes.csv"
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--root", type=Path, default=ROOT)
-    p.add_argument("--min-year", type=int, default=1987)
+    p.add_argument("--min-year", type=int, default=2004)
     p.add_argument("--output", type=Path, default=DICT_PARQUET_PATH)
     p.add_argument("--codes-output", type=Path, default=DICT_CODES_PARQUET_PATH)
     p.add_argument("--codes-output-csv", type=Path, default=DICT_CODES_CSV_PATH)
@@ -71,65 +70,6 @@ def col(df: pd.DataFrame, *names: str) -> str | None:
     return None
 
 
-def parse_html_dict(dict_path: Path, year: int) -> Tuple[list[dict], list[dict]]:
-    """
-    Minimal parser for 1987-2003 HTML dictionaries.
-    Extracts varname, varTitle, DataType, Fieldwidth, format (when present).
-    Code labels are not reliably structured; we skip them here.
-    """
-    records: list[dict] = []
-    codes: list[dict] = []
-    try:
-        html = dict_path.read_text(encoding="latin1", errors="ignore")
-    except Exception:
-        return records, codes
-
-    # replace <br> with newlines for easier line parsing
-    soup = BeautifulSoup(html, "html.parser")
-    for br in soup.find_all("br"):
-        br.replace_with("\n")
-    text = soup.get_text("\n")
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-
-    current = None
-    for ln in lines:
-        m = re.match(r"^([A-Z0-9_]+)\s*[-–]\s*(.+)$", ln)
-        if m:
-            token = m.group(1).strip()
-            # Require at least one letter to avoid code value rows (e.g., "0 - ...")
-            if not re.search(r"[A-Z]", token):
-                continue
-            # Guard against accidental long tokens
-            if len(token) > 30:
-                continue
-            if current:
-                records.append(current)
-            current = {
-                "year": year,
-                "varnumber": "",
-                "varname": token.upper(),
-                "varTitle": m.group(2).strip(),
-                "longDescription": "",
-                "DataType": "",
-                "format": "",
-                "Fieldwidth": "",
-                "imputationvar": "",
-                "dict_file": dict_path.name,
-            }
-            continue
-        if current:
-            if ln.lower().startswith("data type"):
-                current["DataType"] = ln.split("-", 1)[-1].strip()
-            elif ln.lower().startswith("field width"):
-                current["Fieldwidth"] = ln.split("-", 1)[-1].strip()
-            elif ln.lower().startswith("format"):
-                current["format"] = ln.split("-", 1)[-1].strip()
-
-    if current:
-        records.append(current)
-    return records, codes
-
-
 def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
     records = []
     codes = []
@@ -138,18 +78,11 @@ def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
         return records, codes
 
     for dict_path in year_dir.rglob("*"):
-        if dict_path.suffix.lower() not in {".xlsx", ".xls", ".csv", ".html", ".htm"}:
+        if dict_path.suffix.lower() not in {".xlsx", ".xls", ".csv"}:
             continue
         name = dict_path.name.lower()
         parent = dict_path.parent.name.lower()
         if "_dict" not in name and "_dict" not in parent:
-            continue
-
-        # HTML era (1987-2003)
-        if dict_path.suffix.lower() in {".html", ".htm"}:
-            recs, codes_html = parse_html_dict(dict_path, year)
-            records.extend(recs)
-            codes.extend(codes_html)
             continue
 
         try:
