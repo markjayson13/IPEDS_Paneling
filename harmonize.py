@@ -22,6 +22,7 @@ Behavior
 import duckdb
 import argparse
 import pathlib
+import csv
 from typing import Iterable, List
 
 import pandas as pd
@@ -56,9 +57,20 @@ def read_table_iter(fp: pathlib.Path, chunksize: int = 200000):
     # Try UTF-8 first, then fall back to latin1 and skipping bad lines if needed.
     attempts = (
         dict(dtype=str, sep=sep, compression=compression, low_memory=False, chunksize=chunksize),
-        dict(dtype=str, sep=sep, compression=compression, engine="python", chunksize=chunksize),
-        dict(dtype=str, sep=sep, compression=compression, engine="python", encoding="latin1", chunksize=chunksize),
+        dict(dtype=str, sep=sep, compression=compression, engine="python", on_bad_lines="skip", chunksize=chunksize),
         dict(dtype=str, sep=sep, compression=compression, engine="python", encoding="latin1", on_bad_lines="skip", chunksize=chunksize),
+        # Last-resort: treat quotes as regular characters
+        dict(
+            dtype=str,
+            sep=sep,
+            compression=compression,
+            engine="python",
+            encoding="latin1",
+            on_bad_lines="skip",
+            quoting=csv.QUOTE_NONE,
+            escapechar="\\",
+            chunksize=chunksize,
+        ),
     )
     last_err = None
     for kwargs in attempts:
@@ -129,12 +141,47 @@ def write_parquet_stream(out_path: pathlib.Path, frames: Iterable[pd.DataFrame])
         tmp_path.replace(out_path)
 
 
+def write_parquet_parts(out_path: pathlib.Path, frames: Iterable[pd.DataFrame], parts_dir: pathlib.Path) -> None:
+    """
+    Write each chunk to its own parquet part, then stitch to final output.
+    This avoids long-lived single-writer runs that can be killed mid-write.
+    """
+    parts_dir.mkdir(parents=True, exist_ok=True)
+    idx = 0
+    for chunk in frames:
+        if chunk.empty:
+            continue
+        table = pa.Table.from_pandas(chunk, preserve_index=False)
+        part_path = parts_dir / f"part_{idx:05d}.parquet"
+        pq.write_table(table, part_path, compression="snappy")
+        idx += 1
+
+    if idx == 0:
+        return
+
+    tmp_out = out_path.with_suffix(out_path.suffix + ".tmp")
+    if tmp_out.exists():
+        tmp_out.unlink()
+
+    writer = None
+    for part in sorted(parts_dir.glob("part_*.parquet")):
+        pf = pq.ParquetFile(part)
+        for batch in pf.iter_batches():
+            if writer is None:
+                writer = pq.ParquetWriter(tmp_out, batch.schema, compression="snappy")
+            writer.write_batch(batch)
+    if writer:
+        writer.close()
+        tmp_out.replace(out_path)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", required=True)
     ap.add_argument("--lake", required=True)
     ap.add_argument("--years", required=True)
     ap.add_argument("--output", required=True)
+    ap.add_argument("--parts-dir", default=None, help="Optional directory to write parquet parts before stitching")
     args = ap.parse_args()
 
     years = parse_years(args.years)
@@ -157,7 +204,11 @@ def main():
                     if not chunk.empty:
                         yield chunk
 
-    write_parquet_stream(out_path, iter_chunks())
+    if args.parts_dir:
+        parts_dir = pathlib.Path(args.parts_dir)
+        write_parquet_parts(out_path, iter_chunks(), parts_dir)
+    else:
+        write_parquet_stream(out_path, iter_chunks())
     print(f"[info] wrote {out_path}")
 
 
