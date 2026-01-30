@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 from typing import Iterable, List
 
 import pandas as pd
@@ -46,16 +47,109 @@ def coerce_types(df: pd.DataFrame, targets: list[str]) -> pd.DataFrame:
     return df
 
 
+def order_targets(targets: Iterable[str]) -> list[str]:
+    """
+    Order columns so each imputation variable (X<var>) follows its base var.
+    Remaining vars are appended alphabetically.
+    """
+    target_set = set(targets)
+    non_x = sorted([t for t in target_set if not t.startswith("X")])
+    ordered: list[str] = []
+    for base in non_x:
+        ordered.append(base)
+        xvar = f"X{base}"
+        if xvar in target_set:
+            ordered.append(xvar)
+    remaining = sorted([t for t in target_set if t not in ordered])
+    ordered.extend(remaining)
+    return ordered
+
+
+def build_disc_groups(dict_path: str) -> tuple[dict[str, tuple[str, str]], dict[str, list[str]]]:
+    """
+    Build discrete var groups using dictionary metadata.
+    Groups are based on a shared base name with trailing digits, e.g. LEVEL1..LEVEL9 -> LEVEL.
+    Returns:
+      - var_to_group: varname -> (base, suffix)
+      - group_to_vars: base -> [varnames...]
+    """
+    if not dict_path:
+        return {}, {}
+    ddf = pd.read_parquet(dict_path)
+    ddf.columns = [c.strip() for c in ddf.columns]
+    name_col = "varname" if "varname" in ddf.columns else None
+    dtype_col = "DataType" if "DataType" in ddf.columns else None
+    fmt_col = "format" if "format" in ddf.columns else None
+    if not name_col:
+        return {}, {}
+
+    def is_disc(row) -> bool:
+        dt = str(row.get(dtype_col, "") or "").strip().lower() if dtype_col else ""
+        fmt = str(row.get(fmt_col, "") or "").strip().lower() if fmt_col else ""
+        return dt == "disc" or fmt == "disc"
+
+    disc_names = ddf[ddf.apply(is_disc, axis=1)][name_col].dropna().astype(str).str.upper().unique()
+    var_to_group: dict[str, tuple[str, str]] = {}
+    group_to_vars: dict[str, list[str]] = {}
+    for v in disc_names:
+        m = re.match(r"^(.*?)(\d+)$", v)
+        if not m:
+            continue
+        base, suffix = m.group(1), m.group(2)
+        if not base:
+            continue
+        var_to_group[v] = (base, suffix)
+        group_to_vars.setdefault(base, []).append(v)
+    # only keep groups with 2+ vars
+    group_to_vars = {k: sorted(vs) for k, vs in group_to_vars.items() if len(vs) >= 2}
+    var_to_group = {v: grp for v, grp in var_to_group.items() if grp[0] in group_to_vars}
+    return var_to_group, group_to_vars
+
+
+def resolve_disc_names(group_to_vars: dict[str, list[str]], existing: set[str]) -> dict[str, str]:
+    """
+    For each disc group base, pick a unique output name.
+    If base already exists as an independent var, append a numeric suffix (base1, base2, ...).
+    """
+    mapping: dict[str, str] = {}
+    taken = set(existing)
+    for base in sorted(group_to_vars):
+        if base not in taken:
+            mapping[base] = base
+            taken.add(base)
+            continue
+        i = 1
+        while True:
+            cand = f"{base}{i}"
+            if cand not in taken:
+                mapping[base] = cand
+                taken.add(cand)
+                break
+            i += 1
+    return mapping
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", required=True, help="Stitched LONG panel parquet")
     ap.add_argument("--out_dir", required=True, help="Output dir for year-partitioned wide parquet")
     ap.add_argument("--years", required=True, help='Year span, e.g. "1987:2024"')
     ap.add_argument("--write_single", default=None, help="Optional single wide parquet path")
+    ap.add_argument("--dictionary", default=None, help="Optional dictionary_lake.parquet for disc grouping")
+    ap.add_argument("--collapse-disc", action="store_true", help="Collapse discrete (disc) groups into a base var")
+    ap.add_argument("--drop-disc-components", action="store_true", help="Drop component vars after collapse")
+    ap.add_argument("--disc-qc-dir", default=None, help="Optional dir to write disc conflict reports")
+    ap.add_argument("--dups-qc-dir", default=None, help="Optional dir to write duplicate key samples")
+    ap.add_argument("--dups-max-rows", type=int, default=100000, help="Max rows to write for duplicate samples")
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
     years = parse_years(args.years)
+    var_to_group, group_to_vars = ({}, {})
+    if args.collapse_disc:
+        var_to_group, group_to_vars = build_disc_groups(args.dictionary)
+        if args.disc_qc_dir:
+            os.makedirs(args.disc_qc_dir, exist_ok=True)
 
     dataset = ds.dataset(args.input, format="parquet")
     schema = dataset.schema
@@ -82,7 +176,17 @@ def main() -> None:
         df = rename_cols(tbl.to_pandas())
         targets.update(df["varname"].dropna().unique().tolist())
 
-    all_targets = sorted(targets)
+    all_targets = order_targets(targets)
+    disc_name_map = {}
+    if args.collapse_disc and group_to_vars:
+        disc_name_map = resolve_disc_names(group_to_vars, set(all_targets))
+        for base, new_name in disc_name_map.items():
+            if new_name not in all_targets:
+                all_targets.append(new_name)
+        if args.drop_disc_components:
+            # remove component vars from output columns
+            components = {v for vs in group_to_vars.values() for v in vs}
+            all_targets = [t for t in all_targets if t not in components]
     schema_wide = pa.schema(
         [pa.field("year", pa.int32()), pa.field("UNITID", pa.int64())]
         + [pa.field(t, pa.string()) for t in all_targets]
@@ -107,11 +211,40 @@ def main() -> None:
         concept = rename_cols(concept_tbl.to_pandas())
         concept = concept.dropna(subset=["UNITID", "year", "varname"])
 
+        # Collapse discrete groups into a single base variable (optional)
+        if args.collapse_disc and var_to_group:
+            disc_rows = concept[concept["varname"].isin(var_to_group)]
+            if not disc_rows.empty:
+                disc_rows = disc_rows.copy()
+                disc_rows["base"] = disc_rows["varname"].map(lambda v: var_to_group.get(v, ("", ""))[0])
+                disc_rows["suffix"] = disc_rows["varname"].map(lambda v: var_to_group.get(v, ("", ""))[1])
+                # only keep rows with a value
+                disc_rows = disc_rows[disc_rows["value"].notna() & (disc_rows["value"] != "")]
+                # detect conflicts (more than one active per group)
+                counts = disc_rows.groupby(["UNITID", "year", "base"]).size().reset_index(name="n")
+                conflict_bases = set(counts.loc[counts["n"] > 1, "base"])
+                if conflict_bases and args.disc_qc_dir:
+                    conflict_rows = disc_rows[disc_rows["base"].isin(conflict_bases)]
+                    conflict_rows.to_csv(os.path.join(args.disc_qc_dir, f"disc_conflicts_{y}.csv"), index=False)
+                # keep only non-conflicting groups
+                ok = disc_rows[~disc_rows["base"].isin(conflict_bases)]
+                if not ok.empty:
+                    combined = ok.groupby(["UNITID", "year", "base"], as_index=False).first()
+                    combined["varname"] = combined["base"].map(lambda b: disc_name_map.get(b, b))
+                    # store the suffix code (e.g., LEVEL1 -> 1)
+                    combined["value"] = combined["suffix"]
+                    combined = combined[["UNITID", "year", "varname", "value"]]
+                    if args.drop_disc_components:
+                        concept = concept[~concept["varname"].isin(ok["varname"].unique())]
+                    concept = pd.concat([concept, combined], ignore_index=True)
+
         # log duplicates if any, then keep first
         dup_mask = concept.duplicated(subset=["UNITID", "year", "varname"], keep=False)
-        if dup_mask.any():
-            dup_path = os.path.join(args.out_dir, f"dups_{y}.csv")
-            concept.loc[dup_mask].to_csv(dup_path, index=False)
+        if dup_mask.any() and args.dups_qc_dir:
+            os.makedirs(args.dups_qc_dir, exist_ok=True)
+            dup_path = os.path.join(args.dups_qc_dir, f"dups_{y}.csv")
+            dup_sample = concept.loc[dup_mask].head(args.dups_max_rows)
+            dup_sample.to_csv(dup_path, index=False)
         concept = concept.drop_duplicates(subset=["UNITID", "year", "varname"], keep="first")
 
         if len(concept) > 0:
