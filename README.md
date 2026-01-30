@@ -18,8 +18,8 @@ Raw IPEDS files (Raw_Cross_Section_Data/)
         │
         ▼
 Dictionary ingest (Dictionary/01_ingest_dictionaries.py)
-  - dictionary_lake.parquet (core metadata)
-  - dictionary_codes.parquet (value labels)
+  ├─ dictionary_lake.parquet  (core metadata)
+  └─ dictionary_codes.parquet (value labels)
         │
         ▼
 Harmonize (harmonize.py)  →  Cross_sections/panel_long_varnum_<year>.parquet
@@ -29,7 +29,38 @@ Stitch per-year longs  →  Panels/2004-2024/panel_long_varnum_2004_2024.parquet
         │
         ▼
 Wide panel build (Panels/03_build_wide_panel.py)
-  - optional discrete-category collapse + QC
+  ├─ Panels/wide_2004_2024/year=YYYY/part.parquet
+  └─ QC: Checks/disc_qc + Checks/wide_qc
+```
+
+Data Shape (Long vs Wide)
+-------------------------
+```
+LONG (authoritative)
+┌────────┬────────┬────────┬──────────┬────────┬───────────┬──────────────┐
+│ year   │ UNITID │ varname│ varnumber│ value  │ varTitle  │ DataType      │
+├────────┼────────┼────────┼──────────┼────────┼───────────┼──────────────┤
+│ 2018   │ 100654 │ LEVEL1 │ 00000123 │ 1      │ Award...  │ disc          │
+│ 2018   │ 100654 │ LEVEL2 │ 00000124 │        │ Award...  │ disc          │
+└────────┴────────┴────────┴──────────┴────────┴───────────┴──────────────┘
+
+WIDE (optional)
+┌────────┬────────┬──────────┬───────────┬──────────┐
+│ year   │ UNITID │ LEVEL    │ LEVEL_CAT │ TUITION2 │
+├────────┼────────┼──────────┼───────────┼──────────┤
+│ 2018   │ 100654 │ 2        │ 1         │ 10234    │
+└────────┴────────┴──────────┴───────────┴──────────┘
+```
+
+Discrete Collapse (visual)
+--------------------------
+```
+Indicators (disc)
+LEVEL1  LEVEL2  LEVEL3  ...  LEVEL19
+  1       .       .          .
+
+Collapsed category
+LEVEL_CAT = 1
 ```
 
 What You Get
