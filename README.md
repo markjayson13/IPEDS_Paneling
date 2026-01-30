@@ -8,7 +8,7 @@ Highlights
 ----------
 - **Dictionary lake** with core metadata (year, varnumber, varname, varTitle, longDescription, DataType, format, Fieldwidth, imputationvar)
 - **Long panel** output keyed by `(UNITID, year, varname)` with `varnumber` for cross‑year robustness
-- **Wide panel** builder with optional **discrete-category collapse** (e.g., LEVEL1‑LEVEL19 → LEVEL_CAT)
+- **Wide panel** builder with optional **discrete-category collapse** (e.g., program-level indicator groups → *_CAT)
 - **QC outputs** (duplicate samples, discrete conflicts, wide summary stats)
 
 Pipeline Overview
@@ -40,15 +40,15 @@ LONG (authoritative)
 ┌────────┬────────┬────────┬──────────┬────────┬───────────┬──────────────┐
 │ year   │ UNITID │ varname│ varnumber│ value  │ varTitle  │ DataType      │
 ├────────┼────────┼────────┼──────────┼────────┼───────────┼──────────────┤
-│ 2018   │ 100654 │ LEVEL1 │ 00000123 │ 1      │ Award...  │ disc          │
-│ 2018   │ 100654 │ LEVEL2 │ 00000124 │        │ Award...  │ disc          │
+│ 2018   │ 100654 │ INSTNM │ 00000002 │ Univ…  │ Institution name │ char     │
+│ 2018   │ 100654 │ SECTOR │ 00000010 │ 4      │ Sector of institution │ disc │
 └────────┴────────┴────────┴──────────┴────────┴───────────┴──────────────┘
 
 WIDE (optional)
 ┌────────┬────────┬──────────┬───────────┬──────────┐
-│ year   │ UNITID │ LEVEL    │ LEVEL_CAT │ TUITION2 │
+│ year   │ UNITID │ INSTNM   │ SECTOR    │ CONTROL  │
 ├────────┼────────┼──────────┼───────────┼──────────┤
-│ 2018   │ 100654 │ 2        │ 1         │ 10234    │
+│ 2018   │ 100654 │ Univ…    │ 4         │ 1        │
 └────────┴────────┴──────────┴───────────┴──────────┘
 ```
 
@@ -56,11 +56,11 @@ Discrete Collapse (visual)
 --------------------------
 ```
 Indicators (disc)
-LEVEL1  LEVEL2  LEVEL3  ...  LEVEL19
+NONCRDT1  NONCRDT2  NONCRDT3  ...  NONCRDT9
   1       .       .          .
 
 Collapsed category
-LEVEL_CAT = 1
+NONCRDT_CAT = 1
 ```
 
 What You Get
