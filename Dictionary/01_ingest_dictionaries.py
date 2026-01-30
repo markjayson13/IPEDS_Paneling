@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
-Build a lean IPEDS dictionary lake that keeps only the core fields:
-year, varnumber, varname, varTitle, longDescription, DataType, format, Fieldwidth, imputationvar.
-Also emits value labels (codevalue/valuelabel) from Frequencies/FrequenciesRV/Imputation values sheets.
+Build a lean IPEDS dictionary lake (2004–2024) with core metadata only.
+
+Outputs:
+- dictionary_lake.parquet: year, varnumber, varname, varTitle, longDescription,
+  DataType, format, Fieldwidth, imputationvar
+- dictionary_codes.parquet/csv: value labels from Frequencies/FrequenciesRV/Imputation sheets
 """
 
 from __future__ import annotations

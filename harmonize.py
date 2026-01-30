@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
 """
-Harmonizer that builds a long panel keyed by (year, UNITID, varnumber).
+Harmonizer that builds a LONG panel keyed by (UNITID, year, varname) with varnumber metadata.
 
-Inputs
-------
-- root:   /path/to/Raw_Cross_Section_Data
-- lake:   dictionary_lake.parquet produced by 01_ingest_dictionaries.py
-- years:  "YYYY:YYYY" or comma list "2018,2019,2020"
-- output: destination parquet (long format)
+Inputs:
+  - root:   /path/to/Raw_Cross_Section_Data
+  - lake:   dictionary_lake.parquet from 01_ingest_dictionaries.py
+  - years:  "YYYY:YYYY" or comma list "2018,2019,2020"
+  - output: destination parquet (long format)
 
-Behavior
---------
-- Scans all data files under root/<year> recursively with extensions .csv/.tsv/.txt/.gz.
-- Skips obvious dictionary folders (name contains "_dict" case-insensitive).
-- Reads each file as text (dtype=str), requires UNITID column.
-- Melts to long, merges with dictionary on (year, varname) to obtain varnumber + metadata.
-- Writes a single parquet with columns:
-    year, UNITID, varnumber, varname, value,
-    varTitle, longDescription, DataType, format, Fieldwidth, imputationvar, source_file
+Behavior:
+  - Scans all data files under root/<year> recursively (.csv/.tsv/.txt/.gz)
+  - Skips dictionary folders (name contains "_dict" case‑insensitive)
+  - Reads in chunks (low RAM), requires UNITID
+  - Melts to long, merges with dictionary on (year, varname)
+  - Writes a parquet with columns:
+      year, UNITID, varname, varnumber, value,
+      varTitle, longDescription, DataType, format, Fieldwidth, imputationvar, source_file
 """
 import duckdb
 import argparse

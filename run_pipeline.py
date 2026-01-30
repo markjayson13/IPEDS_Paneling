@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Wrapper to run harmonize.py per-year, stitch outputs, and optionally build a wide panel.
-Keeps the core steps separate but provides a single command entrypoint.
+Defaults are baked in for 2004–2024 and the standard repo layout.
 """
 from __future__ import annotations
 

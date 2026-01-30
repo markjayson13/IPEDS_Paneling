@@ -1,150 +1,149 @@
-IPEDS Harmonized Panel Builder (1987–2024)
-===========================================
+IPEDS Panel Builder (2004–2024)
+================================
 
-This repo builds a harmonized, longitudinal IPEDS panel with short varnames, scored matching, and per‑chunk QC. It supports low‑RAM chunked runs and optional wide exports for selected variables.
+This repo builds a **longitudinal IPEDS panel** from raw cross‑section files (2004–2024).  
+It is designed for **data science users** who want a reproducible, transparent pipeline and for **IPEDS users** who want consistent metadata across years.
 
-Why this exists (problem → solution)
-------------------------------------
-IPEDS is rich but messy for longitudinal work: survey forms change, short varnames repeat across components, and dictionaries are inconsistent by year. Researchers often spend days just downloading, unzipping, and guessing which column maps to which concept. This pipeline solves that by:
-- Automating downloads back to 1987 (with early coverage via DCP for pre‑2002).
-- Building a normalized “dictionary lake” keyed by (year, form, varname).
-- Scored matching from a concept catalog to the correct short varnames, with per‑chunk QC so you see match rates and conflicts.
-- Chunked, low‑RAM harmonization to produce a ready‑to‑analyze long panel Parquet, plus an optional wide subset for selected variables.
-The result: a transparent, reproducible IPEDS panel that makes schema drift explicit and measurable, not a hidden source of error.
+Highlights
+----------
+- **Dictionary lake** with core metadata (year, varnumber, varname, varTitle, longDescription, DataType, format, Fieldwidth, imputationvar)
+- **Long panel** output keyed by `(UNITID, year, varname)` with `varnumber` for cross‑year robustness
+- **Wide panel** builder with optional **discrete-category collapse** (e.g., LEVEL1‑LEVEL19 → LEVEL_CAT)
+- **QC outputs** (duplicate samples, discrete conflicts, wide summary stats)
 
-Pipeline at a glance
---------------------
+Pipeline Overview
+-----------------
 ```
-Raw downloads (download_ipeds.py)
-      │
-      ▼
-Dictionary ingest (01_ingest_dictionaries.py)
-  - builds dictionary_lake.parquet keyed by (year, form, varname)
-      │
-      ▼
-Harmonize (harmonize_new.py, chunked)
-  - matches concepts → short varnames
-  - outputs panel_long_*.parquet + Checks/*
-  - optional wide subset (selected vars pivoted by year)
-      │
-      ▼
-Stitch chunks (optional)
-  - panel_long_1987_2024.parquet (master long panel)
+Raw IPEDS files (Raw_Cross_Section_Data/)
+        │
+        ▼
+Dictionary ingest (Dictionary/01_ingest_dictionaries.py)
+  - dictionary_lake.parquet (core metadata)
+  - dictionary_codes.parquet (value labels)
+        │
+        ▼
+Harmonize (harmonize.py)  →  Cross_sections/panel_long_varnum_<year>.parquet
+        │
+        ▼
+Stitch per-year longs  →  Panels/2004-2024/panel_long_varnum_2004_2024.parquet
+        │
+        ▼
+Wide panel build (Panels/03_build_wide_panel.py)
+  - optional discrete-category collapse + QC
 ```
 
-What you get
-- Long panel Parquet: one row per UNITID × year, all survey items (`Panels/panel_long_….parquet`).
-- Chunked diagnostics: `Checks/<chunk>/match_stats.csv`, `unmatched_details.csv`, etc.
-- Optional wide subset Parquet (selected vars pivoted by year).
-- Dictionary lake keyed by (year, form, varname_short): `Dictionary/dictionary_lake.parquet`.
+What You Get
+------------
+- **Long panel (authoritative)**  
+  One row per `(UNITID, year, varname)`:
+  ```
+  year, UNITID, varname, varnumber, value, varTitle, longDescription, DataType, format, Fieldwidth, imputationvar, source_file
+  ```
 
-Prereqs
-- Python 3.10+ with `pip install -r requirements.txt`
-- Disk space: raw IPEDS downloads are large; keep Parquet, avoid full CSV/DTA unless necessary.
+- **Dictionary lake**  
+  `/Dictionary/dictionary_lake.parquet` with consistent metadata across years.
 
-Quick start (full span, RAM-friendly)
-1) Download raw IPEDS (1987–2024):
+- **Value labels**  
+  `/Dictionary/dictionary_codes.parquet` from Frequencies/FrequenciesRV/Imputation sheets.
+
+- **Wide panel (optional)**  
+  One row per `(UNITID, year)` and one column per `varname`, with optional disc collapse.
+
+Quick Start (Recommended)
+-------------------------
+Use the wrapper script with defaults baked in:
+
 ```bash
-python3 "Download Scripts/download_ipeds.py" \
-  --out-root "/Users/markjaysonfarol13/IPEDS_Paneling/Raw_Cross_Section_Data" \
-  --years 1987:2024 \
-  --extract-varnames
+python3 run_pipeline.py
 ```
-2) Build dictionary lake:
+
+This will:
+1) Harmonize 2004–2024 into per‑year long files  
+2) Stitch them into one master long panel  
+3) Build the wide panel with discrete collapse + QC outputs
+
+Manual Commands (Advanced)
+--------------------------
+
+1) Build dictionary lake:
 ```bash
 python3 Dictionary/01_ingest_dictionaries.py \
   --root "/Users/markjaysonfarol13/IPEDS_Paneling/Raw_Cross_Section_Data" \
-  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet"
+  --min-year 2004 \
+  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
+  --codes-output "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_codes.parquet" \
+  --codes-output-csv "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_codes.csv"
 ```
-3) Harmonize in chunks (low RAM):
+
+2) Harmonize per‑year (streaming, low‑RAM):
 ```bash
-# 1987–2001
-python3 harmonize_new.py --root "/Users/markjaysonfarol13/IPEDS_Paneling/Raw_Cross_Section_Data" \
+python3 harmonize.py \
+  --root "/Users/markjaysonfarol13/IPEDS_Paneling/Raw_Cross_Section_Data" \
   --lake "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
-  --years 1987:2001 \
-  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/panel_long_1987_2001.parquet" \
-  --checks-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/1987_2001" \
-  --strict-release --strict-coverage
-
-# 2002–2010
-python3 harmonize_new.py --root "/Users/markjaysonfarol13/IPEDS_Paneling/Raw_Cross_Section_Data" \
-  --lake "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
-  --years 2002:2010 \
-  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/panel_long_2002_2010.parquet" \
-  --checks-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/2002_2010" \
-  --strict-release --strict-coverage
-
-# 2011–2017
-python3 harmonize_new.py --root "/Users/markjaysonfarol13/IPEDS_Paneling/Raw_Cross_Section_Data" \
-  --lake "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
-  --years 2011:2017 \
-  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/panel_long_2011_2017.parquet" \
-  --checks-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/2011_2017" \
-  --strict-release --strict-coverage
-
-# 2018–2024 (with optional wide subset)
-python3 harmonize_new.py --root "/Users/markjaysonfarol13/IPEDS_Paneling/Raw_Cross_Section_Data" \
-  --lake "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
-  --years 2018:2024 \
-  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/panel_long_2018_2024.parquet" \
-  --checks-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/2018_2024" \
-  --strict-release --strict-coverage \
-  --wide-output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/panel_wide_subset.parquet" \
-  --wide-vars "tuition01,net_student_tuition,applcn,admssn,enrlt"
+  --years 2018:2018 \
+  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Cross_sections/panel_long_varnum_2018.parquet"
 ```
-4) Stitch chunks to one Parquet:
+
+3) Stitch per‑year long files:
 ```bash
 python3 - <<'PY'
-import pyarrow.parquet as pq
 from pathlib import Path
-parts=[
-    Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/panel_long_1987_2001.parquet"),
-    Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/panel_long_2002_2010.parquet"),
-    Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/panel_long_2011_2017.parquet"),
-    Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/panel_long_2018_2024.parquet"),
-]
-out=Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/panel_long_1987_2024.parquet")
-w=None
-for p in parts:
-    pf=pq.ParquetFile(p)
-    for b in pf.iter_batches():
-        if w is None:
-            w=pq.ParquetWriter(out,b.schema)
-        w.write_batch(b)
-if w: w.close()
+import pyarrow.parquet as pq
+
+base = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Cross_sections")
+out = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004-2024/panel_long_varnum_2004_2024.parquet")
+out.parent.mkdir(parents=True, exist_ok=True)
+
+writer = None
+for y in range(2004, 2025):
+    p = base / f"panel_long_varnum_{y}.parquet"
+    if not p.exists():
+        continue
+    pf = pq.ParquetFile(p)
+    for batch in pf.iter_batches():
+        if writer is None:
+            writer = pq.ParquetWriter(out, batch.schema)
+        writer.write_batch(batch)
+if writer:
+    writer.close()
 print("Wrote", out)
 PY
 ```
 
-Using the data (examples)
-- DuckDB (recommended for large/filter):
-```python
-import duckdb
-duckdb.sql(\"\"\"\nSELECT UNITID, year, tuition01\nFROM parquet_scan('Panels/panel_long_1987_2024.parquet')\nWHERE year BETWEEN 2010 AND 2020\n\"\"\").df()
+4) Build wide panel with discrete collapse:
+```bash
+python3 Panels/03_build_wide_panel.py \
+  --input "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004-2024/panel_long_varnum_2004_2024.parquet" \
+  --out_dir "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/wide_2004_2024" \
+  --years "2004:2024" \
+  --dictionary "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
+  --collapse-disc \
+  --drop-disc-components \
+  --disc-qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/disc_qc" \
+  --qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/wide_qc"
 ```
-- Pandas (small slices):
-```python
-import pandas as pd
-df = pd.read_parquet("Panels/panel_long_1987_2024.parquet", columns=["UNITID","year","tuition01","applcn"])
-```
 
-Wide output (optional)
-- Use `--wide-output` and `--wide-vars` on the harmonize command to pivot only selected columns (keeps memory small). The long Parquet remains the authoritative format.
+Discrete Category Collapse (Disc → *_CAT)
+-----------------------------------------
+Some IPEDS variables are stored as **mutually exclusive indicators** (e.g., LEVEL1…LEVEL19).  
+The wide builder can collapse them into a single categorical variable:
+- `LEVEL1…LEVEL19` → `LEVEL_CAT`
+- Conflicts (more than one active category) are logged to `Checks/disc_qc/`.
+- If the base name already exists independently (e.g., `LEVEL`), the collapsed variable uses `_CAT` to avoid overwriting.
 
-Storage tips
-- Keep Parquet as the master. Full CSV/DTA exports get very large; if needed, export subsets only.
-- Regenerable outputs you can delete safely: `Panels/csv/`, `Panels/dta/`, ad-hoc wide subset files.
+Storage Notes
+-------------
+- Long panels are very large (billions of rows).  
+- Keep Parquet as the canonical format. Export CSV only for small subsets.
 
-Repo structure (recommended to keep)
-- Raw_Cross_Section_Data/ (downloads)
-- Dictionary/ (dictionary lake)
-- Panels/ (Parquet panels)
-- Checks/ (per-chunk diagnostics)
-- Scripts: Download Scripts/, Dictionary/, harmonize_new.py, concept_catalog.py, dcp_ingest.py
+Repo Layout
+-----------
+- `Raw_Cross_Section_Data/` raw IPEDS downloads  
+- `Dictionary/` dictionary lake + value labels  
+- `Cross_sections/` per‑year long panels  
+- `Panels/` stitched long + wide outputs  
+- `Checks/` QC output (disc conflicts, wide summary)
 
-Notes
-- Download script default years now cover 1987–2024; adjust `--years` as desired.
-- Chunked harmonize commands are low-RAM; use them for reliability.
-
-License/Attribution
-- IPEDS data © NCES; cite IPEDS. Delta Cost Project (where used) per DCP terms.
+Attribution
+-----------
+IPEDS data © NCES. Please cite IPEDS per NCES guidance.

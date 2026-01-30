@@ -5,7 +5,8 @@ Build a wide institution–year panel from the stitched long panel.
 Design choices:
 - Observed spine: only UNITID–year pairs present in the long data are included.
 - Year-by-year processing to stay RAM‑friendly.
-- Columns: varname becomes the wide columns; values remain as strings (no type casting).
+- Columns: varname becomes the wide columns; values are kept as strings.
+- Optional discrete-category collapse (LEVEL1..LEVELn -> LEVEL_CAT) with QC outputs.
 """
 
 from __future__ import annotations
