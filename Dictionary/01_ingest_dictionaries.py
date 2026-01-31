@@ -30,6 +30,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--root", type=Path, default=ROOT)
     p.add_argument("--min-year", type=int, default=2004)
     p.add_argument("--output", type=Path, default=DICT_PARQUET_PATH)
+    p.add_argument("--output-csv", type=Path, default=BASE_ROOT / "Dictionary" / "dictionary_lake.csv")
     p.add_argument("--codes-output", type=Path, default=DICT_CODES_PARQUET_PATH)
     p.add_argument("--codes-output-csv", type=Path, default=DICT_CODES_CSV_PATH)
     return p.parse_args()
@@ -41,6 +42,62 @@ def normalize_varnumber(val: object) -> str:
     txt = re.sub(r"\s+", "", str(val))
     if txt.isdigit():
         return txt.zfill(8)
+    return txt
+
+
+def normalize_source_file(path: Path) -> str:
+    """Normalize source filename for dictionary rows.
+    - Strip years and digits from names (except GR200).
+    - Return uppercase underscore-separated token.
+    """
+    stem = path.stem.upper()
+    # Collapse separators to underscore
+    stem = re.sub(r"[^A-Z0-9]+", "_", stem)
+    # Keep GR200 as-is (only allowed numeric token)
+    if "GR200" in stem:
+        return "GR200"
+    # Remove all digits
+    stem = re.sub(r"\d+", "", stem)
+    # Collapse multiple underscores and trim
+    stem = re.sub(r"_+", "_", stem).strip("_")
+    return stem
+
+
+def extract_source_label(xls: pd.ExcelFile | None) -> str:
+    """Extract a human-readable source label from the Introduction sheet (row 1)."""
+    if xls is None:
+        return ""
+    intro_sheet = next((s for s in xls.sheet_names if s.strip().lower() == "introduction"), None)
+    if not intro_sheet:
+        intro_sheet = xls.sheet_names[0] if xls.sheet_names else None
+    if not intro_sheet:
+        return ""
+    try:
+        intro_df = xls.parse(sheet_name=intro_sheet, header=None, nrows=1)
+        if intro_df.empty:
+            return ""
+        for val in intro_df.iloc[0].tolist():
+            if val is None:
+                continue
+            txt = str(val).strip()
+            if txt:
+                return clean_source_label(txt)
+    except Exception:
+        return ""
+    return ""
+
+
+def clean_source_label(label: str) -> str:
+    """Normalize source labels by removing years and boilerplate phrases."""
+    if not label:
+        return ""
+    txt = str(label)
+    # remove boilerplate "File Documentation for (the) "
+    txt = re.sub(r"(?i)\bfile documentation for (the )?\b", "", txt)
+    # remove year spans like 2014-15 or 2023-24
+    txt = re.sub(r"\b20\d{2}\s*[-/]\s*\d{2}\b", "", txt)
+    # collapse whitespace/punctuation
+    txt = re.sub(r"\s+", " ", txt).strip(" ,")
     return txt
 
 
@@ -136,6 +193,24 @@ def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
                 except Exception:
                     pass
 
+        source_file = normalize_source_file(dict_path)
+        source_file_label = extract_source_label(xls)
+        # build quick lookup for varTitle by varname/varnumber
+        title_by_varname: dict[str, str] = {}
+        title_by_varnumber: dict[str, str] = {}
+        if varname_col and vartitle_col:
+            for _, r in var_df_raw.iterrows():
+                vn = str(r.get(varname_col, "") or "").strip().upper()
+                vt = str(r.get(vartitle_col, "") or "").strip()
+                if vn and vt:
+                    title_by_varname[vn] = vt
+        if varnum_col and vartitle_col:
+            for _, r in var_df_raw.iterrows():
+                vnum = normalize_varnumber(r.get(varnum_col, "") if varnum_col else "")
+                vt = str(r.get(vartitle_col, "") or "").strip()
+                if vnum and vt:
+                    title_by_varnumber[vnum] = vt
+
         for _, row in var_df_raw.iterrows():
             varname = str(row.get(varname_col, "") or "").strip().upper() if varname_col else ""
             if not varname:
@@ -160,6 +235,8 @@ def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
                     "format": fmt,
                     "Fieldwidth": width,
                     "imputationvar": impvar,
+                    "source_file": source_file,
+                    "source_file_label": source_file_label,
                 }
             )
             # Also expose the imputation variable itself as a synthetic varname so it can appear in the final panel.
@@ -177,6 +254,8 @@ def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
                             "format": "",
                             "Fieldwidth": "",
                             "imputationvar": "",
+                            "source_file": source_file,
+                            "source_file_label": source_file_label,
                         }
                     )
 
@@ -197,6 +276,11 @@ def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
                     label_col = col(fdf, "valuelabel", "value label", "label")
                     if code_col and label_col:
                         for _, r in fdf.iterrows():
+                            vt = ""
+                            if fn:
+                                vt = title_by_varname.get(str(r.get(fn, "") or "").strip().upper(), "")
+                            if not vt and fn_num:
+                                vt = title_by_varnumber.get(normalize_varnumber(r.get(fn_num, "")), "")
                             codes.append(
                                 {
                                     "year": year,
@@ -204,6 +288,9 @@ def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
                                     "varname": str(r.get(fn, "") or "").strip().upper() if fn else "",
                                     "codevalue": str(r.get(code_col, "") or "").strip(),
                                     "valuelabel": str(r.get(label_col, "") or "").strip(),
+                                    "varTitle": vt,
+                                    "source_file": source_file,
+                                    "source_file_label": source_file_label,
                                     "dict_file": str(dict_path),
                                     "sheet_name": freq_sheet,
                                     "source": "frequencies",
@@ -230,6 +317,8 @@ def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
                                     "varname": "",
                                     "codevalue": str(r.get(code_col, "") or "").strip(),
                                     "valuelabel": str(r.get(label_col, "") or "").strip(),
+                                    "source_file": source_file,
+                                    "source_file_label": source_file_label,
                                     "dict_file": str(dict_path),
                                     "sheet_name": imp_sheet,
                                     "source": "imputation_values",
@@ -266,14 +355,42 @@ def main() -> None:
     lake["varnumber"] = lake["varnumber"].map(normalize_varnumber)
     lake["year"] = pd.to_numeric(lake["year"], errors="coerce").astype("Int64")
     lake = lake.drop_duplicates(subset=["year", "varnumber", "varname"]).reset_index(drop=True)
+    # enforce column order
+    desired_cols = [
+        "year",
+        "varnumber",
+        "varname",
+        "varTitle",
+        "longDescription",
+        "DataType",
+        "format",
+        "Fieldwidth",
+        "imputationvar",
+        "source_file",
+        "source_file_label",
+    ]
+    for c in desired_cols:
+        if c not in lake.columns:
+            lake[c] = ""
+    lake = lake[desired_cols]
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     lake.to_parquet(args.output, index=False, compression="snappy")
     print(f"Wrote {len(lake):,} rows to {args.output}")
 
+    # Always regenerate CSV for inspection
+    if args.output_csv:
+        args.output_csv.parent.mkdir(parents=True, exist_ok=True)
+        lake.to_csv(args.output_csv, index=False)
+        print(f"Wrote {len(lake):,} rows to {args.output_csv}")
+
     if all_codes:
         codes_df = pd.DataFrame(all_codes)
         codes_df["year"] = pd.to_numeric(codes_df["year"], errors="coerce").astype("Int64")
+        if "varTitle" not in codes_df.columns:
+            codes_df["varTitle"] = ""
+        if "source_file_label" not in codes_df.columns:
+            codes_df["source_file_label"] = ""
         # Ensure flag columns exist
         if "is_imputation_label" not in codes_df.columns:
             codes_df["is_imputation_label"] = False
