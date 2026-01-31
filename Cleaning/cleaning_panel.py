@@ -9,12 +9,15 @@ Safest policy (Option A):
 from __future__ import annotations
 
 import argparse
+import sys
+import time
 from pathlib import Path
 from typing import Callable
 
 import pandas as pd
 import pyarrow as pa
 import pyarrow.dataset as ds
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 
@@ -25,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--dictionary", required=True, help="dictionary_lake.parquet")
     p.add_argument("--qc-dir", default=None, help="Write QC summaries here")
     p.add_argument("--batch-rows", type=int, default=100_000, help="Batch size for streaming")
+    p.add_argument("--log-every", type=int, default=50, help="Log progress every N batches")
     return p.parse_args()
 
 
@@ -52,6 +56,24 @@ def main() -> None:
     var_to_source = build_var_source_map(Path(args.dictionary))
 
     dataset = ds.dataset(str(in_path), format="parquet")
+    if "year" not in dataset.schema.names:
+        raise SystemExit("Input must contain a 'year' column for PRCH cleaning.")
+
+    # Guard: refuse to run if only a single year is detected
+    years: set[int] = set()
+    for batch in dataset.to_batches(columns=["year"], batch_size=min(args.batch_rows, 200_000)):
+        uniq = pc.unique(batch.column(0)).to_pylist()
+        for v in uniq:
+            if v is None:
+                continue
+            years.add(int(v))
+    if len(years) == 1:
+        yr = next(iter(years))
+        raise SystemExit(
+            f"Refusing to run: input appears to contain only one year ({yr}). "
+            "Provide the full stitched panel to avoid a single-year cleaned output."
+        )
+    years_sorted = sorted(years)
     all_cols = dataset.schema.names
     prch_flags = [c for c in all_cols if c.upper().startswith("PRCH")]
 
@@ -103,32 +125,63 @@ def main() -> None:
     qc_counts: dict[tuple[int, str], int] = {}
 
     writer = None
-    batches = dataset.to_batches(batch_size=args.batch_rows)
-    for batch in batches:
-        df = batch.to_pandas()
-        for flag, cols in flag_cols.items():
-            if flag not in df.columns:
-                continue
-            # child logic
-            flag_num = pd.to_numeric(df[flag], errors="coerce")
-            if flag == "PRCH_F":
-                child_mask = flag_num.isin([2, 3, 5])
-            else:
-                child_mask = flag_num.isin([2])
-            if not child_mask.any():
-                continue
-            df.loc[child_mask, cols] = pd.NA
-            # QC counts by year
-            if "year" in df.columns:
+    batch_idx = 0
+    rows_processed = 0
+    years_seen: set[int] = set()
+    last_log = time.time()
+    target_schema = dataset.schema
+    for y in years_sorted:
+        print(f"[year] start {y}")
+        year_rows = 0
+        scanner = dataset.scanner(filter=ds.field("year") == y, batch_size=args.batch_rows)
+        for batch in scanner.to_batches():
+            df = batch.to_pandas()
+            batch_idx += 1
+            rows_processed += len(df)
+            year_rows += len(df)
+            for flag, cols in flag_cols.items():
+                if flag not in df.columns:
+                    continue
+                # child logic
+                flag_num = pd.to_numeric(df[flag], errors="coerce")
+                if flag == "PRCH_F":
+                    child_mask = flag_num.isin([2, 3, 5])
+                else:
+                    child_mask = flag_num.isin([2])
+                if not child_mask.any():
+                    continue
+                df.loc[child_mask, cols] = pd.NA
+                # QC counts by year
                 counts = df.loc[child_mask, "year"].value_counts()
-                for y, cnt in counts.items():
-                    key = (int(y), flag)
+                for yy, cnt in counts.items():
+                    key = (int(yy), flag)
                     qc_counts[key] = qc_counts.get(key, 0) + int(cnt)
 
-        table = pa.Table.from_pandas(df, preserve_index=False)
-        if writer is None:
-            writer = pq.ParquetWriter(out_path, table.schema, compression="snappy")
-        writer.write_table(table)
+            table = pa.Table.from_pandas(df, preserve_index=False)
+            # Align schema to avoid mismatches across years/batches
+            for field in target_schema:
+                if field.name not in table.column_names:
+                    table = table.append_column(field.name, pa.nulls(table.num_rows, type=field.type))
+            table = table.select([f.name for f in target_schema])
+            try:
+                table = table.cast(target_schema, safe=False)
+            except Exception:
+                # If casting fails, still write aligned columns; Parquet will store as-is.
+                pass
+            if writer is None:
+                writer = pq.ParquetWriter(out_path, target_schema, compression="snappy")
+            writer.write_table(table)
+
+            if args.log_every and batch_idx % args.log_every == 0:
+                now = time.time()
+                if now - last_log >= 1:
+                    print(
+                        f"[progress] batches={batch_idx} rows={rows_processed:,} "
+                        f"current_year={y} year_rows={year_rows:,}"
+                    )
+                    sys.stdout.flush()
+                    last_log = now
+        print(f"[year] done {y} rows={year_rows:,}")
 
     if writer:
         writer.close()
