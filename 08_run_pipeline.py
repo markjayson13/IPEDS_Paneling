@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Wrapper to run harmonize.py per-year, stitch outputs, and optionally build a wide panel.
+Wrapper to run 03_harmonize.py per-year, stitch outputs, and optionally build a wide panel.
 Defaults are baked in for 2004–2024 and the standard repo layout.
 """
 from __future__ import annotations
@@ -22,6 +22,10 @@ DEFAULT_WIDE_OUT = BASE / "Panels" / "wide_2004_2024"
 DEFAULT_DISC_QC = BASE / "Checks" / "disc_qc"
 DEFAULT_WIDE_QC = BASE / "Checks" / "wide_qc"
 DEFAULT_WIDE_STITCH = BASE / "Panels" / "2004_2024_IPEDS_Raw_Panel_DS.parquet"
+DEFAULT_CLEAN_PANEL = BASE / "Panels" / "2004_2024_IPEDS_clean_Panel_DS.parquet"
+DEFAULT_CUSTOM_OUT = BASE / "Panels" / "custom_panel.parquet"
+DEFAULT_PRCH_CLEAN = BASE / "Panels" / "2004_2024_IPEDS_PRCHclean_Panel_DS.parquet"
+DEFAULT_PRCH_QC = BASE / "Checks" / "prch_qc"
 
 
 def parse_years(spec: str) -> list[int]:
@@ -121,6 +125,22 @@ def main() -> None:
     ap.add_argument("--disc-suffix", default=None, help="Suffix for collapsed disc vars (default in script)")
     ap.add_argument("--qc-dir", default=str(DEFAULT_WIDE_QC), help="QC dir for wide summary")
     ap.add_argument("--dry-run", action="store_true", help="Print commands without executing")
+    ap.add_argument("--release-allow", default="revised,final", help="Comma list of allowed release statuses")
+    ap.add_argument("--release-strict", action=argparse.BooleanOptionalAction, default=True, help="Fail if manifest is missing or not revised/final")
+    ap.add_argument("--release-qc-dir", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc", help="QC dir for release validation")
+    ap.add_argument("--build-custom", action=argparse.BooleanOptionalAction, default=False, help="Build a custom wide panel from the cleaned panel")
+    ap.add_argument("--custom-input", default=str(DEFAULT_CLEAN_PANEL), help="Input wide panel for custom extraction")
+    ap.add_argument("--custom-out", default=str(DEFAULT_CUSTOM_OUT), help="Output path for custom panel")
+    ap.add_argument("--custom-vars", default=None, help="Comma-separated vars for custom panel")
+    ap.add_argument("--custom-vars-file", default=None, help="File of vars for custom panel")
+    ap.add_argument("--custom-years", default=None, help="Optional year filter for custom panel")
+    ap.add_argument("--custom-format", choices=["parquet", "csv"], default="parquet", help="Custom panel output format")
+    ap.add_argument("--custom-batch-rows", type=int, default=100_000, help="Batch size for custom panel export")
+    ap.add_argument("--run-cleaning", action=argparse.BooleanOptionalAction, default=False, help="Run PRCH cleaning after wide stitch")
+    ap.add_argument("--prch-clean-out", default=str(DEFAULT_PRCH_CLEAN), help="Output path for PRCH cleaned panel")
+    ap.add_argument("--clean-out", default=str(DEFAULT_CLEAN_PANEL), help="Output path for research-ready clean panel")
+    ap.add_argument("--prch-qc-dir", default=str(DEFAULT_PRCH_QC), help="QC dir for PRCH cleaning")
+    ap.add_argument("--drop-imputation-flags", action=argparse.BooleanOptionalAction, default=False, help="Drop X* imputation flags in clean output")
     args = ap.parse_args()
 
     years = parse_years(args.years)
@@ -135,7 +155,7 @@ def main() -> None:
             continue
         cmd = [
             sys.executable,
-            "harmonize.py",
+            "03_harmonize.py",
             "--root",
             args.root,
             "--lake",
@@ -145,6 +165,11 @@ def main() -> None:
             "--output",
             str(out),
         ]
+        if args.release_allow:
+            cmd += ["--release-allow", args.release_allow]
+        cmd += ["--release-strict" if args.release_strict else "--no-release-strict"]
+        if args.release_qc_dir:
+            cmd += ["--release-qc-dir", args.release_qc_dir]
         if args.parts_dir_base:
             parts_dir = Path(args.parts_dir_base) / f"parts_{y}"
             cmd += ["--parts-dir", str(parts_dir)]
@@ -171,7 +196,7 @@ def main() -> None:
         wide_years = args.wide_years if args.wide_years else args.years
         cmd = [
             sys.executable,
-            "Panels/03_build_wide_panel.py",
+            "Panels/04_build_wide_panel.py",
             "--input",
             str(wide_input),
             "--out_dir",
@@ -205,6 +230,67 @@ def main() -> None:
             stitch_wide_partitioned(wide_out_dir, stitch_out)
         else:
             print(f"+ stitch wide {wide_out_dir} -> {stitch_out}")
+
+    # Step 4.5: PRCH clean + research-ready clean (optional)
+    if args.run_cleaning:
+        raw_wide = Path(args.stitch_wide_out if args.stitch_wide else args.stitch_wide_out)
+        if not raw_wide.exists() and not args.dry_run:
+            raise SystemExit(f"Raw wide not found: {raw_wide}")
+        # PRCH clean
+        cmd = [
+            sys.executable,
+            "Cleaning/05_cleaning_panel.py",
+            "--input",
+            str(raw_wide),
+            "--output",
+            args.prch_clean_out,
+            "--dictionary",
+            args.lake,
+        ]
+        if args.prch_qc_dir:
+            cmd += ["--qc-dir", args.prch_qc_dir]
+        run(cmd, args.dry_run)
+
+        # Research-ready clean (optionally drop X* flags)
+        cmd = [
+            sys.executable,
+            "Cleaning/05_cleaning_panel.py",
+            "--input",
+            str(raw_wide),
+            "--output",
+            args.clean_out,
+            "--dictionary",
+            args.lake,
+        ]
+        if args.prch_qc_dir:
+            cmd += ["--qc-dir", args.prch_qc_dir]
+        if args.drop_imputation_flags:
+            cmd.append("--drop-imputation-flags")
+        run(cmd, args.dry_run)
+
+    # Step 6: build a custom panel (optional)
+    if args.build_custom:
+        if not args.custom_vars and not args.custom_vars_file:
+            raise SystemExit("Custom build requires --custom-vars or --custom-vars-file.")
+        cmd = [
+            sys.executable,
+            "Panels/06_build_custom_panel.py",
+            "--input",
+            args.custom_input,
+            "--output",
+            args.custom_out,
+            "--format",
+            args.custom_format,
+            "--batch-rows",
+            str(args.custom_batch_rows),
+        ]
+        if args.custom_vars:
+            cmd += ["--vars", args.custom_vars]
+        if args.custom_vars_file:
+            cmd += ["--vars-file", args.custom_vars_file]
+        if args.custom_years:
+            cmd += ["--years", args.custom_years]
+        run(cmd, args.dry_run)
 
 
 if __name__ == "__main__":

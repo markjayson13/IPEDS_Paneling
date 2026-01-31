@@ -29,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--qc-dir", default=None, help="Write QC summaries here")
     p.add_argument("--batch-rows", type=int, default=100_000, help="Batch size for streaming")
     p.add_argument("--log-every", type=int, default=50, help="Log progress every N batches")
+    p.add_argument("--drop-imputation-flags", action=argparse.BooleanOptionalAction, default=False, help="Drop X* imputation columns")
     return p.parse_args()
 
 
@@ -168,8 +169,13 @@ def main() -> None:
             except Exception:
                 # If casting fails, still write aligned columns; Parquet will store as-is.
                 pass
+            if args.drop_imputation_flags:
+                drop_cols = [c for c in table.column_names if c.upper().startswith("X")]
+                if drop_cols:
+                    table = table.drop(drop_cols)
             if writer is None:
-                writer = pq.ParquetWriter(out_path, target_schema, compression="snappy")
+                schema_to_write = table.schema if args.drop_imputation_flags else target_schema
+                writer = pq.ParquetWriter(out_path, schema_to_write, compression="snappy")
             writer.write_table(table)
 
             if args.log_every and batch_idx % args.log_every == 0:

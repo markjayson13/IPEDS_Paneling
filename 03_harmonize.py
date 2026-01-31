@@ -22,6 +22,7 @@ import argparse
 import pathlib
 import csv
 from typing import Iterable, List
+import os
 
 import pandas as pd
 import pyarrow as pa
@@ -46,6 +47,77 @@ def discover_files(year_root: pathlib.Path) -> Iterable[pathlib.Path]:
         if any("_dict" in part.lower() for part in fp.parts):
             continue
         yield fp
+
+
+def check_release_manifest(
+    year_root: pathlib.Path,
+    year: int,
+    allowlist: set[str],
+    strict: bool,
+    qc_dir: pathlib.Path | None,
+) -> None:
+    """
+    Validate that the year's manifest indicates Revised/Final release only.
+    Writes QC summary + details if qc_dir is provided.
+    """
+    manifest_path = year_root / f"{year}_manifest.csv"
+    if qc_dir:
+        qc_dir.mkdir(parents=True, exist_ok=True)
+    if not manifest_path.exists():
+        msg = f"[release] missing manifest: {manifest_path}"
+        if qc_dir:
+            (qc_dir / f"release_summary_{year}.csv").write_text("status,count\nmissing_manifest,1\n")
+        if strict:
+            raise SystemExit(msg)
+        print(msg)
+        return
+
+    df = pd.read_csv(manifest_path, dtype=str).fillna("")
+    if "release" not in df.columns:
+        msg = f"[release] manifest missing 'release' column: {manifest_path}"
+        if qc_dir:
+            (qc_dir / f"release_summary_{year}.csv").write_text("status,count\nmissing_release_column,1\n")
+        if strict:
+            raise SystemExit(msg)
+        print(msg)
+        return
+
+    df["release_norm"] = df["release"].str.strip().str.lower()
+    if "is_revision" in df.columns:
+        df["is_revision_norm"] = df["is_revision"].str.strip().str.lower().isin(["1", "true", "yes", "y"])
+    else:
+        df["is_revision_norm"] = False
+    df["status"] = df["release_norm"]
+    df.loc[df["is_revision_norm"], "status"] = "revised"
+    # Some manifests use blank release for surveys without revised/final labeling.
+    # Treat blank as allowed to avoid blocking those files, but still log in QC.
+    df["allowed"] = df["status"].isin(allowlist) | (df["status"] == "")
+    has_revised = (df["status"] == "revised").any()
+
+    if qc_dir:
+        details_path = qc_dir / f"release_details_{year}.csv"
+        df.to_csv(details_path, index=False)
+        summary = (
+            df.groupby("status", dropna=False)
+              .size()
+              .reset_index(name="count")
+        )
+        summary_path = qc_dir / f"release_summary_{year}.csv"
+        summary.to_csv(summary_path, index=False)
+
+    # Enforce only when revised is an option AND user asked for revised
+    enforce_revised = strict and ("revised" in allowlist) and has_revised
+    if strict and ("revised" in allowlist) and not has_revised:
+        print(f"[release] no revised entries in manifest for {year}; strict enforcement skipped.")
+
+    # Any unknown/empty status is not allowed when strict+revised
+    if enforce_revised:
+        bad = df[~df["allowed"]]
+        if not bad.empty:
+            raise SystemExit(
+                f"[release] non‑revised/final entries found in {manifest_path} "
+                f"(count={len(bad)})."
+            )
 
 
 def read_table_iter(fp: pathlib.Path, chunksize: int = 200000):
@@ -97,9 +169,13 @@ def melt_file(fp: pathlib.Path, year: int, dict_year: pd.DataFrame) -> Iterable[
             continue
         long = df.melt(id_vars=id_cols, value_vars=value_cols, var_name="varname", value_name="value")
         long["year"] = year
-        long["source_file"] = fp.name
         merged = long.merge(dict_year, on=["year", "varname"], how="left")
         merged = merged.dropna(subset=["varnumber"])
+        # Ensure source_file exists (from dictionary); fall back to data filename if missing.
+        if "source_file" not in merged.columns:
+            merged["source_file"] = fp.name
+        else:
+            merged["source_file"] = merged["source_file"].fillna(fp.name)
         # Return full long rows; we'll pivot to wide in a separate step
         cols = [
             "year",
@@ -180,6 +256,9 @@ def main():
     ap.add_argument("--years", required=True)
     ap.add_argument("--output", required=True)
     ap.add_argument("--parts-dir", default=None, help="Optional directory to write parquet parts before stitching")
+    ap.add_argument("--release-allow", default="revised,final", help="Comma list of allowed release statuses")
+    ap.add_argument("--release-strict", action=argparse.BooleanOptionalAction, default=True, help="Fail if manifest is missing or not revised/final")
+    ap.add_argument("--release-qc-dir", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc", help="QC dir for release validation")
     args = ap.parse_args()
 
     years = parse_years(args.years)
@@ -192,11 +271,15 @@ def main():
     # Ensure intermediate per-year directory exists when writing year-by-year runs
     # (useful if caller passes outputs like .../Cross_sections/panel_long_varnum_<year>.parquet)
 
+    allowlist = {s.strip().lower() for s in args.release_allow.split(",") if s.strip()}
+    qc_dir = pathlib.Path(args.release_qc_dir) if args.release_qc_dir else None
+
     def iter_chunks():
         for year in years:
             print(f"[info] processing year {year}")
-            dict_year = dict_df[dict_df["year"] == year]
             year_root = pathlib.Path(args.root) / str(year)
+            check_release_manifest(year_root, year, allowlist, args.release_strict, qc_dir)
+            dict_year = dict_df[dict_df["year"] == year]
             for fp in discover_files(year_root):
                 for chunk in melt_file(fp, year, dict_year):
                     if not chunk.empty:

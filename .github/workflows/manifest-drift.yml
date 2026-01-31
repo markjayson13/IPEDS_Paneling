@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main, master]
     paths:
-      - "download_ipeds.py"
+      - "Download Scripts/00_download_ipeds.py"
       - "scripts/**"
       - "manifests/**"
       - ".github/workflows/manifest-drift.yml"
