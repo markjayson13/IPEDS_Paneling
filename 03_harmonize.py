@@ -256,6 +256,7 @@ def main():
     ap.add_argument("--years", required=True)
     ap.add_argument("--output", required=True)
     ap.add_argument("--parts-dir", default=None, help="Optional directory to write parquet parts before stitching")
+    ap.add_argument("--reuse-parts", action=argparse.BooleanOptionalAction, default=True, help="Reuse existing parts_YYYY directory if present")
     ap.add_argument("--release-allow", default="revised,final", help="Comma list of allowed release statuses")
     ap.add_argument("--release-strict", action=argparse.BooleanOptionalAction, default=True, help="Fail if manifest is missing or not revised/final")
     ap.add_argument("--release-qc-dir", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc", help="QC dir for release validation")
@@ -274,22 +275,41 @@ def main():
     allowlist = {s.strip().lower() for s in args.release_allow.split(",") if s.strip()}
     qc_dir = pathlib.Path(args.release_qc_dir) if args.release_qc_dir else None
 
-    def iter_chunks():
-        for year in years:
-            print(f"[info] processing year {year}")
-            year_root = pathlib.Path(args.root) / str(year)
-            check_release_manifest(year_root, year, allowlist, args.release_strict, qc_dir)
-            dict_year = dict_df[dict_df["year"] == year]
-            for fp in discover_files(year_root):
-                for chunk in melt_file(fp, year, dict_year):
-                    if not chunk.empty:
-                        yield chunk
+    def iter_chunks_for_year(year: int):
+        print(f"[info] processing year {year}")
+        year_root = pathlib.Path(args.root) / str(year)
+        check_release_manifest(year_root, year, allowlist, args.release_strict, qc_dir)
+        dict_year = dict_df[dict_df["year"] == year]
+        for fp in discover_files(year_root):
+            for chunk in melt_file(fp, year, dict_year):
+                if not chunk.empty:
+                    yield chunk
 
     if args.parts_dir:
         parts_dir = pathlib.Path(args.parts_dir)
-        write_parquet_parts(out_path, iter_chunks(), parts_dir)
+        # If a parts dir already exists and reuse is allowed, stitch without reprocessing
+        if args.reuse_parts and parts_dir.exists():
+            part_files = sorted(parts_dir.glob("part_*.parquet"))
+            if part_files:
+                tmp_out = out_path.with_suffix(out_path.suffix + ".tmp")
+                if tmp_out.exists():
+                    tmp_out.unlink()
+                writer = None
+                for part in part_files:
+                    pf = pq.ParquetFile(part)
+                    for batch in pf.iter_batches():
+                        if writer is None:
+                            writer = pq.ParquetWriter(tmp_out, batch.schema, compression="snappy")
+                        writer.write_batch(batch)
+                if writer:
+                    writer.close()
+                    tmp_out.replace(out_path)
+                    print(f"[info] stitched from existing parts: {out_path}")
+                    return
+        # Otherwise, process and write parts
+        write_parquet_parts(out_path, iter_chunks_for_year(years[0]) if len(years) == 1 else (chunk for y in years for chunk in iter_chunks_for_year(y)), parts_dir)
     else:
-        write_parquet_stream(out_path, iter_chunks())
+        write_parquet_stream(out_path, (chunk for y in years for chunk in iter_chunks_for_year(y)))
     print(f"[info] wrote {out_path}")
 
 
