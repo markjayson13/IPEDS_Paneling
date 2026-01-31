@@ -257,6 +257,7 @@ def main():
     ap.add_argument("--output", required=True)
     ap.add_argument("--parts-dir", default=None, help="Optional directory to write parquet parts before stitching")
     ap.add_argument("--reuse-parts", action=argparse.BooleanOptionalAction, default=True, help="Reuse existing parts_YYYY directory if present")
+    ap.add_argument("--cleanup-parts", action=argparse.BooleanOptionalAction, default=True, help="Remove parts directory after successful stitch")
     ap.add_argument("--release-allow", default="revised,final", help="Comma list of allowed release statuses")
     ap.add_argument("--release-strict", action=argparse.BooleanOptionalAction, default=True, help="Fail if manifest is missing or not revised/final")
     ap.add_argument("--release-qc-dir", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc", help="QC dir for release validation")
@@ -305,9 +306,23 @@ def main():
                     writer.close()
                     tmp_out.replace(out_path)
                     print(f"[info] stitched from existing parts: {out_path}")
+                    if args.cleanup_parts:
+                        try:
+                            import shutil
+                            shutil.rmtree(parts_dir)
+                            print(f"[info] removed parts dir: {parts_dir}")
+                        except Exception as e:
+                            print(f"[warn] failed to remove parts dir {parts_dir}: {e}")
                     return
         # Otherwise, process and write parts
         write_parquet_parts(out_path, iter_chunks_for_year(years[0]) if len(years) == 1 else (chunk for y in years for chunk in iter_chunks_for_year(y)), parts_dir)
+        if args.cleanup_parts:
+            try:
+                import shutil
+                shutil.rmtree(parts_dir)
+                print(f"[info] removed parts dir: {parts_dir}")
+            except Exception as e:
+                print(f"[warn] failed to remove parts dir {parts_dir}: {e}")
     else:
         write_parquet_stream(out_path, (chunk for y in years for chunk in iter_chunks_for_year(y)))
     print(f"[info] wrote {out_path}")
