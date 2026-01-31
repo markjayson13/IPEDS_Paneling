@@ -120,7 +120,7 @@ def check_release_manifest(
             )
 
 
-def read_table_iter(fp: pathlib.Path, chunksize: int = 200000):
+def read_table_iter(fp: pathlib.Path, chunksize: int = 50000):
     suffix = fp.suffix.lower()
     sep = "\t" if suffix == ".tsv" else ","
     compression = "gzip" if suffix == ".gz" else None
@@ -156,42 +156,63 @@ def read_table_iter(fp: pathlib.Path, chunksize: int = 200000):
     return
 
 
-def melt_file(fp: pathlib.Path, year: int, dict_year: pd.DataFrame) -> Iterable[pd.DataFrame]:
-    for df in read_table_iter(fp):
+def _chunk_cols(cols: list[str], size: int) -> Iterable[list[str]]:
+    for i in range(0, len(cols), size):
+        yield cols[i : i + size]
+
+
+def melt_file(
+    fp: pathlib.Path,
+    year: int,
+    dict_year: pd.DataFrame,
+    dict_vars: set[str],
+    value_cols_per_chunk: int,
+    chunksize: int,
+    log_prefix: str = "",
+) -> Iterable[pd.DataFrame]:
+    logged = False
+    for df in read_table_iter(fp, chunksize=chunksize):
         if df.empty:
             continue
+        # Normalize header case/spacing
+        df.columns = [str(c).strip().upper() for c in df.columns]
         if "UNITID" not in df.columns:
             continue
         df["UNITID"] = pd.to_numeric(df["UNITID"], errors="coerce").astype("Int64")
         id_cols = ["UNITID"]
-        value_cols = [c for c in df.columns if c not in id_cols]
+        # Keep only vars we can match in the dictionary for this year
+        value_cols = [c for c in df.columns if c not in id_cols and c in dict_vars]
         if not value_cols:
             continue
-        long = df.melt(id_vars=id_cols, value_vars=value_cols, var_name="varname", value_name="value")
-        long["year"] = year
-        merged = long.merge(dict_year, on=["year", "varname"], how="left")
-        merged = merged.dropna(subset=["varnumber"])
-        # Ensure source_file exists (from dictionary); fall back to data filename if missing.
-        if "source_file" not in merged.columns:
-            merged["source_file"] = fp.name
-        else:
-            merged["source_file"] = merged["source_file"].fillna(fp.name)
-        # Return full long rows; we'll pivot to wide in a separate step
-        cols = [
-            "year",
-            "UNITID",
-            "varname",
-            "varnumber",
-            "value",
-            "varTitle",
-            "longDescription",
-            "DataType",
-            "format",
-            "Fieldwidth",
-            "imputationvar",
-            "source_file",
-        ]
-        yield merged[cols]
+        if not logged:
+            print(f"{log_prefix}[file] {fp.name} matched_cols={len(value_cols)}")
+            logged = True
+        for col_chunk in _chunk_cols(value_cols, value_cols_per_chunk):
+            long = df.melt(id_vars=id_cols, value_vars=col_chunk, var_name="varname", value_name="value")
+            long["year"] = year
+            merged = long.merge(dict_year, on=["year", "varname"], how="left")
+            merged = merged.dropna(subset=["varnumber"])
+            # Ensure source_file exists (from dictionary); fall back to data filename if missing.
+            if "source_file" not in merged.columns:
+                merged["source_file"] = fp.name
+            else:
+                merged["source_file"] = merged["source_file"].fillna(fp.name)
+            # Return full long rows; we'll pivot to wide in a separate step
+            cols = [
+                "year",
+                "UNITID",
+                "varname",
+                "varnumber",
+                "value",
+                "varTitle",
+                "longDescription",
+                "DataType",
+                "format",
+                "Fieldwidth",
+                "imputationvar",
+                "source_file",
+            ]
+            yield merged[cols]
 
 
 def write_parquet_stream(out_path: pathlib.Path, frames: Iterable[pd.DataFrame]) -> None:
@@ -258,6 +279,8 @@ def main():
     ap.add_argument("--parts-dir", default=None, help="Optional directory to write parquet parts before stitching")
     ap.add_argument("--reuse-parts", action=argparse.BooleanOptionalAction, default=True, help="Reuse existing parts_YYYY directory if present")
     ap.add_argument("--cleanup-parts", action=argparse.BooleanOptionalAction, default=True, help="Remove parts directory after successful stitch")
+    ap.add_argument("--chunksize", type=int, default=50000, help="Row chunksize for CSV reading (lower uses less RAM)")
+    ap.add_argument("--value-cols-per-chunk", type=int, default=250, help="Max number of value columns to melt per chunk")
     ap.add_argument("--release-allow", default="revised,final", help="Comma list of allowed release statuses")
     ap.add_argument("--release-strict", action=argparse.BooleanOptionalAction, default=True, help="Fail if manifest is missing or not revised/final")
     ap.add_argument("--release-qc-dir", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc", help="QC dir for release validation")
@@ -266,6 +289,21 @@ def main():
     years = parse_years(args.years)
     dict_df = pd.read_parquet(args.lake)
     dict_df["varnumber"] = dict_df["varnumber"].astype(str).str.zfill(8)
+    dict_df["varname"] = dict_df["varname"].astype(str).str.upper()
+    dict_df = dict_df[
+        [
+            "year",
+            "varname",
+            "varnumber",
+            "varTitle",
+            "longDescription",
+            "DataType",
+            "format",
+            "Fieldwidth",
+            "imputationvar",
+            "source_file",
+        ]
+    ]
 
     out_path = pathlib.Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -281,8 +319,17 @@ def main():
         year_root = pathlib.Path(args.root) / str(year)
         check_release_manifest(year_root, year, allowlist, args.release_strict, qc_dir)
         dict_year = dict_df[dict_df["year"] == year]
+        dict_vars = set(dict_year["varname"].dropna().unique())
         for fp in discover_files(year_root):
-            for chunk in melt_file(fp, year, dict_year):
+            for chunk in melt_file(
+                fp,
+                year,
+                dict_year,
+                dict_vars,
+                args.value_cols_per_chunk,
+                args.chunksize,
+                log_prefix=f"[year {year}] ",
+            ):
                 if not chunk.empty:
                     yield chunk
 

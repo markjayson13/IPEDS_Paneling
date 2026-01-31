@@ -128,6 +128,8 @@ def main() -> None:
     ap.add_argument("--release-allow", default="revised,final", help="Comma list of allowed release statuses")
     ap.add_argument("--release-strict", action=argparse.BooleanOptionalAction, default=True, help="Fail if manifest is missing or not revised/final")
     ap.add_argument("--release-qc-dir", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc", help="QC dir for release validation")
+    ap.add_argument("--harmonize-chunksize", type=int, default=50_000, help="Row chunksize for 03_harmonize (lower uses less RAM)")
+    ap.add_argument("--harmonize-value-cols-per-chunk", type=int, default=250, help="Max value columns per melt chunk in 03_harmonize")
     ap.add_argument("--build-custom", action=argparse.BooleanOptionalAction, default=False, help="Build a custom wide panel from the cleaned panel")
     ap.add_argument("--custom-input", default=str(DEFAULT_CLEAN_PANEL), help="Input wide panel for custom extraction")
     ap.add_argument("--custom-out", default=str(DEFAULT_CUSTOM_OUT), help="Output path for custom panel")
@@ -165,6 +167,8 @@ def main() -> None:
             "--output",
             str(out),
         ]
+        cmd += ["--chunksize", str(args.harmonize_chunksize)]
+        cmd += ["--value-cols-per-chunk", str(args.harmonize_value_cols_per_chunk)]
         if args.release_allow:
             cmd += ["--release-allow", args.release_allow]
         cmd += ["--release-strict" if args.release_strict else "--no-release-strict"]
