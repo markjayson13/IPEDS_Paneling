@@ -120,12 +120,12 @@ def long_key_integrity(long_panel: Path, years: list[int], out_csv: Path) -> tup
     years_list = ",".join(str(y) for y in years)
     q = f"""
         SELECT
-+         COUNT(*) AS rows,
-+         COUNT(*) - COUNT(DISTINCT (UNITID, year, varname)) AS dup_rows,
-+         SUM(CASE WHEN UNITID IS NULL OR year IS NULL OR varname IS NULL THEN 1 ELSE 0 END) AS missing_keys
-+       FROM read_parquet('{long_panel}')
-+       WHERE year IN ({years_list})
-+    """
+          COUNT(*) AS rows,
+          COUNT(*) - COUNT(DISTINCT (UNITID, year, varname)) AS dup_rows,
+          SUM(CASE WHEN UNITID IS NULL OR year IS NULL OR varname IS NULL THEN 1 ELSE 0 END) AS missing_keys
+        FROM read_parquet('{long_panel}')
+        WHERE year IN ({years_list})
+    """
     rows, dup_rows, missing_keys = con.execute(q).fetchone()
     pd.DataFrame([
         {"rows": rows, "duplicate_key_rows": dup_rows, "missing_key_rows": missing_keys}
@@ -144,12 +144,12 @@ def wide_integrity(wide_panel: Path, years: list[int], out_csv: Path) -> tuple[i
     years_list = ",".join(str(y) for y in years)
     q = f"""
         SELECT
-+         COUNT(*) AS rows,
-+         COUNT(*) - COUNT(DISTINCT (UNITID, year)) AS dup_rows,
-+         SUM(CASE WHEN UNITID IS NULL OR year IS NULL THEN 1 ELSE 0 END) AS missing_keys
-+       FROM read_parquet('{wide_panel}')
-+       WHERE year IN ({years_list})
-+    """
+          COUNT(*) AS rows,
+          COUNT(*) - COUNT(DISTINCT (UNITID, year)) AS dup_rows,
+          SUM(CASE WHEN UNITID IS NULL OR year IS NULL THEN 1 ELSE 0 END) AS missing_keys
+        FROM read_parquet('{wide_panel}')
+        WHERE year IN ({years_list})
+    """
     rows, dup_rows, missing_keys = con.execute(q).fetchone()
     pf = pq.ParquetFile(wide_panel)
     cols = len(pf.schema.names)
@@ -370,20 +370,14 @@ def main() -> None:
                     safe_copy(fp, dst / fp.name, missing)
 
     # 07_spot_checks + 08_performance placeholders
-    (out_dir / "07_spot_checks" / "spotcheck_plan.md").write_text("Planned.
-")
-    (out_dir / "07_spot_checks" / "spotcheck_results.csv").write_text("varname,year,unitid,raw_value,panel_value,match
-")
-    (out_dir / "07_spot_checks" / "spotcheck_mismatches.md").write_text("Planned.
-")
-    (out_dir / "08_performance" / "output_sizes.csv").write_text("filename,size_bytes
-")
+    (out_dir / "07_spot_checks" / "spotcheck_plan.md").write_text("Planned.\n")
+    (out_dir / "07_spot_checks" / "spotcheck_results.csv").write_text("varname,year,unitid,raw_value,panel_value,match\n")
+    (out_dir / "07_spot_checks" / "spotcheck_mismatches.md").write_text("Planned.\n")
+    (out_dir / "08_performance" / "output_sizes.csv").write_text("filename,size_bytes\n")
 
     # 99_appendix placeholders
-    (out_dir / "99_appendix" / "planned_checks.md").write_text("Planned checks not yet computed.
-")
-    (out_dir / "99_appendix" / "planned_figures.md").write_text("Planned figures not yet generated.
-")
+    (out_dir / "99_appendix" / "planned_checks.md").write_text("Planned checks not yet computed.\n")
+    (out_dir / "99_appendix" / "planned_figures.md").write_text("Planned figures not yet generated.\n")
 
     # checks index
     build_checks_index(qc_dir, out_dir / "checks_index.md")
@@ -406,8 +400,7 @@ def main() -> None:
         shutil.make_archive(str(out_dir), "zip", root_dir=out_dir)
 
     if missing:
-        (out_dir / "00_run" / "missing_artifacts.txt").write_text("
-".join(missing))
+        (out_dir / "00_run" / "missing_artifacts.txt").write_text("\n".join(missing))
 
     print(f"Audit pack written to {out_dir}")
 

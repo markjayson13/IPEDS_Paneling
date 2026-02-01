@@ -166,6 +166,7 @@ def melt_file(
     year: int,
     dict_year: pd.DataFrame,
     dict_vars: set[str],
+    pref_df: pd.DataFrame | None,
     value_cols_per_chunk: int,
     chunksize: int,
     log_prefix: str = "",
@@ -197,6 +198,11 @@ def melt_file(
                 merged["source_file"] = fp.name
             else:
                 merged["source_file"] = merged["source_file"].fillna(fp.name)
+            # Deterministic de-duplication by preferred source per (year, varname)
+            if pref_df is not None and not pref_df.empty:
+                merged = merged.merge(pref_df, on=["year", "varname"], how="left")
+                merged = merged[(merged["preferred_source"].isna()) | (merged["source_file"] == merged["preferred_source"])]
+                merged = merged.drop(columns=["preferred_source"])
             # Return full long rows; we'll pivot to wide in a separate step
             cols = [
                 "year",
@@ -270,6 +276,57 @@ def write_parquet_parts(out_path: pathlib.Path, frames: Iterable[pd.DataFrame], 
         tmp_out.replace(out_path)
 
 
+def dedupe_long_panel(out_path: pathlib.Path, priority_list: list[str], temp_dir: pathlib.Path | None = None) -> None:
+    """
+    Deterministically drop duplicate (UNITID, year, varname) rows by source_file priority.
+    Uses DuckDB to avoid loading the full parquet into memory.
+    """
+    if not out_path.exists():
+        return
+    # Build CASE expression for priority ranking
+    case = "CASE"
+    for i, src in enumerate(priority_list):
+        src_esc = src.replace("'", "''")
+        case += f" WHEN source_file = '{src_esc}' THEN {i}"
+    case += " ELSE 999 END"
+
+    tmp_out = out_path.with_suffix(out_path.suffix + ".dedupe.tmp")
+    if tmp_out.exists():
+        tmp_out.unlink()
+
+    con = duckdb.connect()
+    if temp_dir is not None:
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        safe_temp = str(temp_dir).replace("'", "''")
+        con.execute(f"PRAGMA temp_directory='{safe_temp}'")
+    # If source_file column is missing, fall back to arbitrary deterministic order.
+    cols = pq.ParquetFile(out_path).schema.names
+    if "source_file" not in cols:
+        order_expr = "varname"
+        case_expr = "0"
+    else:
+        order_expr = f"{case}, source_file"
+        case_expr = case
+
+    q = f"""
+        COPY (
+            SELECT * EXCLUDE(_src_rank, _rn)
+            FROM (
+                SELECT *,
+                       {case_expr} AS _src_rank,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY UNITID, year, varname
+                           ORDER BY {order_expr}
+                       ) AS _rn
+                FROM read_parquet('{out_path}')
+            )
+            WHERE _rn = 1
+        ) TO '{tmp_out}' (FORMAT PARQUET);
+    """
+    con.execute(q)
+    tmp_out.replace(out_path)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", required=True)
@@ -281,6 +338,10 @@ def main():
     ap.add_argument("--cleanup-parts", action=argparse.BooleanOptionalAction, default=True, help="Remove parts directory after successful stitch")
     ap.add_argument("--chunksize", type=int, default=50000, help="Row chunksize for CSV reading (lower uses less RAM)")
     ap.add_argument("--value-cols-per-chunk", type=int, default=250, help="Max number of value columns to melt per chunk")
+    ap.add_argument("--dedupe", action=argparse.BooleanOptionalAction, default=True, help="Deterministically drop duplicate (UNITID, year, varname) by preferred source_file")
+    ap.add_argument("--dedupe-priority", default="HD,IC,IC_AY,IC_PY,ADM,AL,C_A,C_B,C_C,CDEP,COST,EAP,EFA,EFA_DIST,EFB,EFC,EFCP,EFFY,EFFY_DIST,EFIA,FLAGS,F_F,F_FA,F_FA_F,F_FA_G,GR,GR200,GR_PELL_SSL,OM,SAL_A,SAL_A_LT,SAL_B,SAL_FACULTY,SAL_IS,S_ABD,S_CN,S_F,S_G,S_IS,S_NH,S_OC,S_SIS,SFA,SFAV", help="Comma-separated source_file priority list for dedupe")
+    ap.add_argument("--final-dedupe", action=argparse.BooleanOptionalAction, default=True, help="Apply a final deterministic de-duplication on the output parquet")
+    ap.add_argument("--duckdb-temp-dir", default=None, help="Optional temp directory for DuckDB (used during final dedupe)")
     ap.add_argument("--release-allow", default="revised,final", help="Comma list of allowed release statuses")
     ap.add_argument("--release-strict", action=argparse.BooleanOptionalAction, default=True, help="Fail if manifest is missing or not revised/final")
     ap.add_argument("--release-qc-dir", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc", help="QC dir for release validation")
@@ -320,18 +381,35 @@ def main():
         check_release_manifest(year_root, year, allowlist, args.release_strict, qc_dir)
         dict_year = dict_df[dict_df["year"] == year]
         dict_vars = set(dict_year["varname"].dropna().unique())
+        pref_df = None
+        if args.dedupe:
+            prio = {k.strip(): i for i, k in enumerate(args.dedupe_priority.split(","))}
+            pref = dict_year[["year", "varname", "source_file"]].dropna().copy()
+            if not pref.empty:
+                pref["rank"] = pref["source_file"].map(prio).fillna(999).astype(int)
+                pref = pref.sort_values(["year", "varname", "rank", "source_file"]).drop_duplicates(["year", "varname"], keep="first")
+                pref_df = pref[["year", "varname", "source_file"]].rename(columns={"source_file": "preferred_source"})
         for fp in discover_files(year_root):
             for chunk in melt_file(
                 fp,
                 year,
                 dict_year,
                 dict_vars,
+                pref_df,
                 args.value_cols_per_chunk,
                 args.chunksize,
                 log_prefix=f"[year {year}] ",
             ):
                 if not chunk.empty:
                     yield chunk
+
+    temp_dir = None
+    if args.duckdb_temp_dir:
+        temp_dir = pathlib.Path(args.duckdb_temp_dir)
+    elif os.environ.get("DUCKDB_TEMP_DIRECTORY"):
+        temp_dir = pathlib.Path(os.environ["DUCKDB_TEMP_DIRECTORY"])
+    else:
+        temp_dir = out_path.parent / ".duckdb_tmp"
 
     if args.parts_dir:
         parts_dir = pathlib.Path(args.parts_dir)
@@ -353,6 +431,9 @@ def main():
                     writer.close()
                     tmp_out.replace(out_path)
                     print(f"[info] stitched from existing parts: {out_path}")
+                    if args.dedupe and args.final_dedupe:
+                        prio_list = [k.strip() for k in args.dedupe_priority.split(",") if k.strip()]
+                        dedupe_long_panel(out_path, prio_list, temp_dir)
                     if args.cleanup_parts:
                         try:
                             import shutil
@@ -363,6 +444,9 @@ def main():
                     return
         # Otherwise, process and write parts
         write_parquet_parts(out_path, iter_chunks_for_year(years[0]) if len(years) == 1 else (chunk for y in years for chunk in iter_chunks_for_year(y)), parts_dir)
+        if args.dedupe and args.final_dedupe:
+            prio_list = [k.strip() for k in args.dedupe_priority.split(",") if k.strip()]
+            dedupe_long_panel(out_path, prio_list, temp_dir)
         if args.cleanup_parts:
             try:
                 import shutil
@@ -372,6 +456,9 @@ def main():
                 print(f"[warn] failed to remove parts dir {parts_dir}: {e}")
     else:
         write_parquet_stream(out_path, (chunk for y in years for chunk in iter_chunks_for_year(y)))
+        if args.dedupe and args.final_dedupe:
+            prio_list = [k.strip() for k in args.dedupe_priority.split(",") if k.strip()]
+            dedupe_long_panel(out_path, prio_list, temp_dir)
     print(f"[info] wrote {out_path}")
 
 

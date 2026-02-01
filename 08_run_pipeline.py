@@ -130,6 +130,9 @@ def main() -> None:
     ap.add_argument("--release-qc-dir", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc", help="QC dir for release validation")
     ap.add_argument("--harmonize-chunksize", type=int, default=50_000, help="Row chunksize for 03_harmonize (lower uses less RAM)")
     ap.add_argument("--harmonize-value-cols-per-chunk", type=int, default=250, help="Max value columns per melt chunk in 03_harmonize")
+    ap.add_argument("--dedupe", action=argparse.BooleanOptionalAction, default=True, help="Deterministically drop duplicate (UNITID, year, varname)")
+    ap.add_argument("--dedupe-priority", default=None, help="Override source_file priority list for dedupe")
+    ap.add_argument("--duckdb-temp-dir", default=None, help="Temp directory for DuckDB during dedupe")
     ap.add_argument("--build-custom", action=argparse.BooleanOptionalAction, default=False, help="Build a custom wide panel from the cleaned panel")
     ap.add_argument("--custom-input", default=str(DEFAULT_CLEAN_PANEL), help="Input wide panel for custom extraction")
     ap.add_argument("--custom-out", default=str(DEFAULT_CUSTOM_OUT), help="Output path for custom panel")
@@ -169,6 +172,11 @@ def main() -> None:
         ]
         cmd += ["--chunksize", str(args.harmonize_chunksize)]
         cmd += ["--value-cols-per-chunk", str(args.harmonize_value_cols_per_chunk)]
+        cmd += ["--dedupe" if args.dedupe else "--no-dedupe"]
+        if args.dedupe_priority:
+            cmd += ["--dedupe-priority", args.dedupe_priority]
+        if args.duckdb_temp_dir:
+            cmd += ["--duckdb-temp-dir", args.duckdb_temp_dir]
         if args.release_allow:
             cmd += ["--release-allow", args.release_allow]
         cmd += ["--release-strict" if args.release_strict else "--no-release-strict"]
