@@ -1,113 +1,84 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="980" viewBox="0 0 1400 980">
   <defs>
     <style type="text/css"><![CDATA[
-      .box { fill: #ffffff; stroke: #1f2937; stroke-width: 2; }
-      .title { font: 20px "Helvetica Neue", Arial, sans-serif; fill: #111827; font-weight: 700; }
-      .label { font: 16px "Helvetica Neue", Arial, sans-serif; fill: #111827; }
+      .box { fill: #ffffff; stroke: #1f2937; stroke-width: 2; rx: 10; ry: 10; }
+      .qc  { fill: #f9fafb; stroke: #6b7280; stroke-width: 1.6; rx: 10; ry: 10; }
+      .title { font: 22px "Helvetica Neue", Arial, sans-serif; fill: #111827; font-weight: 700; }
+      .label { font: 16px "Helvetica Neue", Arial, sans-serif; fill: #111827; font-weight: 600; }
       .small { font: 13px "Helvetica Neue", Arial, sans-serif; fill: #374151; }
       .arrow { stroke: #1f2937; stroke-width: 2.2; marker-end: url(#arrowhead); }
-      .qc { fill: #f9fafb; stroke: #6b7280; stroke-width: 1.6; }
-      .accent { fill: #eef2ff; stroke: #4f46e5; stroke-width: 2; }
     ]]></style>
     <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
       <polygon points="0 0, 10 3.5, 0 7" fill="#1f2937"/>
     </marker>
   </defs>
 
-  <rect x="0" y="0" width="1400" height="900" fill="#ffffff"/>
-  <text x="60" y="60" class="title">Figure 1. IPEDS Harmonization Pipeline (2004–2024)</text>
+  <rect x="0" y="0" width="1400" height="980" fill="#ffffff"/>
+  <text x="60" y="60" class="title">Figure 1. IPEDS Harmonization Pipeline (2004-2024)</text>
 
-  <!-- Row 1 -->
-  <rect x="60" y="100" width="300" height="110" class="box"/>
-  <text x="80" y="135" class="label">00_download_ipeds.py</text>
-  <text x="80" y="160" class="small">Fetch raw cross‑section data</text>
-  <text x="80" y="182" class="small">Raw_Cross_Section_Data/</text>
+  <!-- Main vertical flow -->
+  <rect x="120" y="110" width="520" height="90" class="box"/>
+  <text x="140" y="145" class="label">Raw Data Ingestion</text>
+  <text x="140" y="168" class="small">Cross-section CSVs by year</text>
 
-  <rect x="420" y="100" width="300" height="110" class="box"/>
-  <text x="440" y="135" class="label">01_ingest_dictionaries.py</text>
-  <text x="440" y="160" class="small">Build dictionary lake + codes</text>
-  <text x="440" y="182" class="small">Dictionary/</text>
+  <rect x="120" y="230" width="520" height="90" class="box"/>
+  <text x="140" y="265" class="label">Dictionary Lake + Codes</text>
+  <text x="140" y="288" class="small">Canonical varname/varnumber + labels</text>
 
-  <rect x="780" y="100" width="300" height="110" class="box"/>
-  <text x="800" y="135" class="label">03_harmonize.py</text>
-  <text x="800" y="160" class="small">Per‑year long panels</text>
-  <text x="800" y="182" class="small">Cross_sections/</text>
+  <rect x="120" y="350" width="520" height="90" class="box"/>
+  <text x="140" y="385" class="label">Long Panel (Authoritative)</text>
+  <text x="140" y="408" class="small">One row per (UNITID, year, varname)</text>
 
-  <rect x="1140" y="100" width="200" height="110" class="box"/>
-  <text x="1160" y="140" class="label">Stitch long</text>
-  <text x="1160" y="165" class="small">panel_long</text>
+  <rect x="120" y="470" width="520" height="90" class="box"/>
+  <text x="140" y="505" class="label">Wide Panel (Raw)</text>
+  <text x="140" y="528" class="small">Unit-year rows, all variables as columns</text>
 
-  <!-- Row 2 -->
-  <rect x="60" y="280" width="300" height="110" class="box"/>
-  <text x="80" y="315" class="label">04_build_wide_panel.py</text>
-  <text x="80" y="340" class="small">Wide panel by year</text>
-  <text x="80" y="362" class="small">Panels/wide_2004_2024/</text>
+  <rect x="120" y="590" width="520" height="90" class="box"/>
+  <text x="140" y="625" class="label">Parent/Child Clean (PRCH)</text>
+  <text x="140" y="648" class="small">Null child component data, keep all rows</text>
 
-  <rect x="420" y="280" width="300" height="110" class="box"/>
-  <text x="440" y="315" class="label">Wide stitch</text>
-  <text x="440" y="340" class="small">2004_2024_IPEDS_Raw_Panel_DS.parquet</text>
+  <rect x="120" y="710" width="520" height="90" class="box"/>
+  <text x="140" y="745" class="label">Research-Ready Panel</text>
+  <text x="140" y="768" class="small">Optional drop of imputation flags</text>
 
-  <rect x="780" y="280" width="300" height="110" class="box"/>
-  <text x="800" y="315" class="label">05_cleaning_panel.py</text>
-  <text x="800" y="340" class="small">PRCH clean (safe)</text>
-  <text x="800" y="362" class="small">2004_2024_IPEDS_PRCHclean_Panel_DS.parquet</text>
+  <rect x="120" y="830" width="520" height="90" class="box"/>
+  <text x="140" y="865" class="label">Custom Panel Builder</text>
+  <text x="140" y="888" class="small">User-selected variables + years</text>
 
-  <rect x="1140" y="280" width="200" height="110" class="box"/>
-  <text x="1160" y="315" class="label">Clean panel</text>
-  <text x="1160" y="340" class="small">Drop X* flags</text>
-  <text x="1160" y="362" class="small">2004_2024_IPEDS_clean_Panel_DS.parquet</text>
+  <!-- QC column -->
+  <rect x="760" y="230" width="520" height="90" class="qc"/>
+  <text x="780" y="265" class="label">Release-Stage QC</text>
+  <text x="780" y="288" class="small">Revised/Final enforcement + evidence</text>
 
-  <!-- Row 3 -->
-  <rect x="60" y="460" width="300" height="110" class="box"/>
-  <text x="80" y="495" class="label">06_build_custom_panel.py</text>
-  <text x="80" y="520" class="small">User‑selected variables</text>
+  <rect x="760" y="430" width="520" height="90" class="qc"/>
+  <text x="780" y="465" class="label">Mapping and Schema QC</text>
+  <text x="780" y="488" class="small">Dictionary coverage + unmapped headers</text>
 
-  <rect x="420" y="460" width="300" height="110" class="box"/>
-  <text x="440" y="495" class="label">07_panel_QA.py</text>
-  <text x="440" y="520" class="small">Raw vs clean QA</text>
+  <rect x="760" y="550" width="520" height="90" class="qc"/>
+  <text x="780" y="585" class="label">Discrete Collapse QC</text>
+  <text x="780" y="608" class="small">Mutual-exclusivity conflicts logged</text>
 
-  <rect x="780" y="460" width="300" height="110" class="box"/>
-  <text x="800" y="495" class="label">09_paper_metrics.py</text>
-  <text x="800" y="520" class="small">Release + mapping + QC metrics</text>
+  <rect x="760" y="670" width="520" height="90" class="qc"/>
+  <text x="780" y="705" class="label">Parent/Child QC</text>
+  <text x="780" y="728" class="small">Child rows identified + fields nulled</text>
 
-  <!-- QC bubbles -->
-  <rect x="60" y="640" width="260" height="90" class="qc"/>
-  <text x="80" y="670" class="label">Release QC</text>
-  <text x="80" y="695" class="small">Checks/release_qc/</text>
+  <rect x="760" y="790" width="520" height="90" class="qc"/>
+  <text x="780" y="825" class="label">Panel QA Summary</text>
+  <text x="780" y="848" class="small">Raw vs PRCH vs Clean comparison</text>
 
-  <rect x="360" y="640" width="260" height="90" class="qc"/>
-  <text x="380" y="670" class="label">Discrete QC</text>
-  <text x="380" y="695" class="small">Checks/disc_qc/</text>
+  <!-- Arrows (main flow) -->
+  <line x1="380" y1="200" x2="380" y2="230" class="arrow"/>
+  <line x1="380" y1="320" x2="380" y2="350" class="arrow"/>
+  <line x1="380" y1="440" x2="380" y2="470" class="arrow"/>
+  <line x1="380" y1="560" x2="380" y2="590" class="arrow"/>
+  <line x1="380" y1="680" x2="380" y2="710" class="arrow"/>
+  <line x1="380" y1="800" x2="380" y2="830" class="arrow"/>
 
-  <rect x="660" y="640" width="260" height="90" class="qc"/>
-  <text x="680" y="670" class="label">PRCH QC</text>
-  <text x="680" y="695" class="small">Checks/prch_qc/</text>
-
-  <rect x="960" y="640" width="260" height="90" class="qc"/>
-  <text x="980" y="670" class="label">QA Summary</text>
-  <text x="980" y="695" class="small">Checks/panel_qc/</text>
-
-  <!-- Arrows -->
-  <line x1="360" y1="155" x2="420" y2="155" class="arrow"/>
-  <line x1="720" y1="155" x2="780" y2="155" class="arrow"/>
-  <line x1="1080" y1="155" x2="1140" y2="155" class="arrow"/>
-
-  <line x1="1240" y1="210" x2="210" y2="280" class="arrow"/>
-  <line x1="360" y1="335" x2="420" y2="335" class="arrow"/>
-  <line x1="720" y1="335" x2="780" y2="335" class="arrow"/>
-  <line x1="1080" y1="335" x2="1140" y2="335" class="arrow"/>
-
-  <line x1="360" y1="515" x2="420" y2="515" class="arrow"/>
-  <line x1="720" y1="515" x2="780" y2="515" class="arrow"/>
-
-  <line x1="210" y1="210" x2="190" y2="640" class="arrow"/>
-  <line x1="930" y1="390" x2="790" y2="640" class="arrow"/>
-  <line x1="540" y1="390" x2="490" y2="640" class="arrow"/>
-  <line x1="1080" y1="515" x2="1050" y2="640" class="arrow"/>
-
-  <!-- Accent footer -->
-  <rect x="60" y="780" width="1280" height="80" class="accent"/>
-  <text x="80" y="815" class="label">Key outputs:</text>
-  <text x="200" y="815" class="small">Raw wide → PRCH clean → Research‑ready clean → Custom subsets</text>
+  <!-- QC connectors -->
+  <line x1="640" y1="275" x2="760" y2="275" class="arrow"/>
+  <line x1="640" y1="395" x2="760" y2="475" class="arrow"/>
+  <line x1="640" y1="515" x2="760" y2="595" class="arrow"/>
+  <line x1="640" y1="635" x2="760" y2="715" class="arrow"/>
+  <line x1="640" y1="755" x2="760" y2="835" class="arrow"/>
 </svg>
