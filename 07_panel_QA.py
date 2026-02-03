@@ -11,10 +11,34 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import sys
 
 import pandas as pd
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
+
+
+def setup_logging(log_path: str | None) -> None:
+    if not log_path:
+        return
+    log_file = Path(log_path)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    f = log_file.open("a", buffering=1)
+
+    class Tee:
+        def __init__(self, *streams):
+            self.streams = streams
+
+        def write(self, data):
+            for s in self.streams:
+                s.write(data)
+
+        def flush(self):
+            for s in self.streams:
+                s.flush()
+
+    sys.stdout = Tee(sys.stdout, f)
+    sys.stderr = Tee(sys.stderr, f)
 
 
 def parse_args() -> argparse.Namespace:
@@ -30,6 +54,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--flag-child", default="2,3,5", help="Child codes for the flag (comma-separated)")
     p.add_argument("--year-sep", default="|", help="Separator for year lists in CSV")
     p.add_argument("--excel-text", action=argparse.BooleanOptionalAction, default=True, help="Prefix year lists with apostrophe for Excel text")
+    p.add_argument("--log-file", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/logs/07_panel_QA.log", help="Optional log file path")
     return p.parse_args()
 
 
@@ -78,6 +103,7 @@ def auto_select_probe(raw: ds.Dataset, clean: ds.Dataset, flag: str, child_codes
 
 def main() -> None:
     args = parse_args()
+    setup_logging(args.log_file)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 

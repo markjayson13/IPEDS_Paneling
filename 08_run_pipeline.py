@@ -134,6 +134,7 @@ def main() -> None:
     ap.add_argument("--dedupe-priority", default=None, help="Override source_file priority list for dedupe")
     ap.add_argument("--final-dedupe", action=argparse.BooleanOptionalAction, default=True, help="Run final DuckDB dedupe after write")
     ap.add_argument("--duckdb-temp-dir", default=None, help="Temp directory for DuckDB during dedupe")
+    ap.add_argument("--log-dir", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/logs", help="Directory for per-step logs")
     ap.add_argument("--build-custom", action=argparse.BooleanOptionalAction, default=False, help="Build a custom wide panel from the cleaned panel")
     ap.add_argument("--custom-input", default=str(DEFAULT_CLEAN_PANEL), help="Input wide panel for custom extraction")
     ap.add_argument("--custom-out", default=str(DEFAULT_CUSTOM_OUT), help="Output path for custom panel")
@@ -152,6 +153,8 @@ def main() -> None:
     years = parse_years(args.years)
     cross_dir = Path(args.cross_sections_dir)
     cross_dir.mkdir(parents=True, exist_ok=True)
+    log_dir = Path(args.log_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
 
     # Step 1: harmonize per-year
     for y in years:
@@ -179,6 +182,7 @@ def main() -> None:
             cmd += ["--dedupe-priority", args.dedupe_priority]
         if args.duckdb_temp_dir:
             cmd += ["--duckdb-temp-dir", args.duckdb_temp_dir]
+        cmd += ["--log-file", str(log_dir / f"03_harmonize_{y}.log")]
         if args.release_allow:
             cmd += ["--release-allow", args.release_allow]
         cmd += ["--release-strict" if args.release_strict else "--no-release-strict"]
@@ -234,6 +238,7 @@ def main() -> None:
             cmd += ["--qc-dir", args.qc_dir]
         if args.wide_write_single:
             cmd += ["--write_single", args.wide_write_single]
+        cmd += ["--log-file", str(log_dir / "04_build_wide_panel.log")]
         run(cmd, args.dry_run)
 
     # Step 4: stitch wide partitions (optional)
@@ -263,6 +268,7 @@ def main() -> None:
         ]
         if args.prch_qc_dir:
             cmd += ["--qc-dir", args.prch_qc_dir]
+        cmd += ["--log-file", str(log_dir / "05_cleaning_panel_prch.log")]
         run(cmd, args.dry_run)
 
         # Research-ready clean (optionally drop X* flags)
@@ -280,6 +286,7 @@ def main() -> None:
             cmd += ["--qc-dir", args.prch_qc_dir]
         if args.drop_imputation_flags:
             cmd.append("--drop-imputation-flags")
+        cmd += ["--log-file", str(log_dir / "05_cleaning_panel_clean.log")]
         run(cmd, args.dry_run)
 
     # Step 6: build a custom panel (optional)
@@ -304,6 +311,7 @@ def main() -> None:
             cmd += ["--vars-file", args.custom_vars_file]
         if args.custom_years:
             cmd += ["--years", args.custom_years]
+        cmd += ["--log-file", str(log_dir / "06_build_custom_panel.log")]
         run(cmd, args.dry_run)
 
 

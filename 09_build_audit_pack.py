@@ -25,6 +25,29 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 
+def setup_logging(log_path: str | None) -> None:
+    if not log_path:
+        return
+    log_file = Path(log_path)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    f = log_file.open("a", buffering=1)
+
+    class Tee:
+        def __init__(self, *streams):
+            self.streams = streams
+
+        def write(self, data):
+            for s in self.streams:
+                s.write(data)
+
+        def flush(self):
+            for s in self.streams:
+                s.flush()
+
+    sys.stdout = Tee(sys.stdout, f)
+    sys.stderr = Tee(sys.stderr, f)
+
+
 def parse_years(spec: str) -> list[int]:
     if ":" in spec:
         start, end = spec.split(":")
@@ -269,7 +292,10 @@ def main() -> None:
     ap.add_argument("--wide-clean", default="/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet")
     ap.add_argument("--run-command", default=None, help="Exact pipeline command string to record")
     ap.add_argument("--built-by", default="")
+    ap.add_argument("--log-file", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/logs/09_build_audit_pack.log", help="Optional log file path")
     args = ap.parse_args()
+
+    setup_logging(args.log_file)
 
     years = parse_years(args.years)
     out_dir = Path(args.out_dir)

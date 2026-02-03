@@ -23,10 +23,34 @@ import pathlib
 import csv
 from typing import Iterable, List
 import os
+import sys
 
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+
+
+def setup_logging(log_path: str | None) -> None:
+    if not log_path:
+        return
+    log_file = pathlib.Path(log_path)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    f = log_file.open("a", buffering=1)
+
+    class Tee:
+        def __init__(self, *streams):
+            self.streams = streams
+
+        def write(self, data):
+            for s in self.streams:
+                s.write(data)
+
+        def flush(self):
+            for s in self.streams:
+                s.flush()
+
+    sys.stdout = Tee(sys.stdout, f)
+    sys.stderr = Tee(sys.stderr, f)
 
 
 def parse_years(arg: str) -> List[int]:
@@ -345,7 +369,10 @@ def main():
     ap.add_argument("--release-allow", default="revised,final", help="Comma list of allowed release statuses")
     ap.add_argument("--release-strict", action=argparse.BooleanOptionalAction, default=True, help="Fail if manifest is missing or not revised/final")
     ap.add_argument("--release-qc-dir", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc", help="QC dir for release validation")
+    ap.add_argument("--log-file", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/logs/03_harmonize.log", help="Optional log file path")
     args = ap.parse_args()
+
+    setup_logging(args.log_file)
 
     years = parse_years(args.years)
     dict_df = pd.read_parquet(args.lake)

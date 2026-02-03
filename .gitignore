@@ -1,7 +1,16 @@
-*.parquet
-artifacts/checks/validation_report.csv
-*.csv
-*.csv
-*.csv
-*.csv
-*.csv
+__pycache__/
+.venv/
+venv/
+
+# Large raw inputs and generated data outputs (keep out of repo)
+Raw_Cross_Section_Data/
+Cross_sections/
+Panels/
+audit_pack/
+Checks/
+
+# Temporary / intermediate files
+*.tmp
+*.parquet.tmp
+*.dedupe.tmp
+**/parts_*/

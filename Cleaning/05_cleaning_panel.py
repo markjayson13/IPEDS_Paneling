@@ -21,6 +21,29 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 
+def setup_logging(log_path: str | None) -> None:
+    if not log_path:
+        return
+    log_file = Path(log_path)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    f = log_file.open("a", buffering=1)
+
+    class Tee:
+        def __init__(self, *streams):
+            self.streams = streams
+
+        def write(self, data):
+            for s in self.streams:
+                s.write(data)
+
+        def flush(self):
+            for s in self.streams:
+                s.flush()
+
+    sys.stdout = Tee(sys.stdout, f)
+    sys.stderr = Tee(sys.stderr, f)
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--input", required=True, help="Input stitched wide parquet")
@@ -30,6 +53,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--batch-rows", type=int, default=100_000, help="Batch size for streaming")
     p.add_argument("--log-every", type=int, default=50, help="Log progress every N batches")
     p.add_argument("--drop-imputation-flags", action=argparse.BooleanOptionalAction, default=False, help="Drop X* imputation columns")
+    p.add_argument("--log-file", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/logs/05_cleaning_panel.log", help="Optional log file path")
     return p.parse_args()
 
 
@@ -50,6 +74,7 @@ def build_var_source_map(dictionary_path: Path) -> dict[str, str]:
 
 def main() -> None:
     args = parse_args()
+    setup_logging(args.log_file)
     in_path = Path(args.input)
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
