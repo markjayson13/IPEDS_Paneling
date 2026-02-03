@@ -290,9 +290,11 @@ def main() -> None:
     ap.add_argument("--wide-raw", default="/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet")
     ap.add_argument("--wide-prch", default="/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet")
     ap.add_argument("--wide-clean", default="/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet")
+    ap.add_argument("--zip-out", default=None, help="Optional zip output path (default: checks_dir/audit_pack.zip)")
     ap.add_argument("--run-command", default=None, help="Exact pipeline command string to record")
     ap.add_argument("--built-by", default="")
     ap.add_argument("--log-file", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/logs/09_build_audit_pack.log", help="Optional log file path")
+    ap.add_argument("--allow-duplicates", action=argparse.BooleanOptionalAction, default=False, help="Do not fail audit pack if long panel has duplicate or missing keys (record counts instead)")
     args = ap.parse_args()
 
     setup_logging(args.log_file)
@@ -408,9 +410,18 @@ def main() -> None:
     # checks index
     build_checks_index(qc_dir, out_dir / "checks_index.md")
 
-    # Fail fast on integrity
+    # Fail fast on integrity (unless explicitly allowed)
     if dup_rows > 0 or missing_keys > 0:
-        raise SystemExit("Integrity check failed: duplicates or missing keys in long panel.")
+        msg = "Integrity check failed: duplicates or missing keys in long panel."
+        if args.allow_duplicates:
+            print(f"[warn] {msg} Continuing because --allow-duplicates was set.")
+            (out_dir / "06_qc" / "long_integrity_warning.txt").write_text(
+                f"{msg}\n"
+                f"duplicate_key_rows={dup_rows}\n"
+                f"missing_key_rows={missing_keys}\n"
+            )
+        else:
+            raise SystemExit(msg)
 
     # README
     readme_template = Path("Artifacts/section5_validation.md").read_text() if Path("Artifacts/section5_validation.md").exists() else "Audit Pack"
@@ -423,7 +434,9 @@ def main() -> None:
     })
 
     if args.zip:
-        shutil.make_archive(str(out_dir), "zip", root_dir=out_dir)
+        zip_target = Path(args.zip_out) if args.zip_out else Path(args.checks_dir) / "audit_pack.zip"
+        zip_target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.make_archive(str(zip_target).removesuffix(".zip"), "zip", root_dir=out_dir)
 
     if missing:
         (out_dir / "00_run" / "missing_artifacts.txt").write_text("\n".join(missing))
