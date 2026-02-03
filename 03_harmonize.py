@@ -379,7 +379,13 @@ def main():
         print(f"[info] processing year {year}")
         year_root = pathlib.Path(args.root) / str(year)
         check_release_manifest(year_root, year, allowlist, args.release_strict, qc_dir)
-        dict_year = dict_df[dict_df["year"] == year]
+        dict_year = dict_df[dict_df["year"] == year].copy()
+        # Deduplicate dictionary rows so each (varname, source_file) is unique.
+        # This prevents cartesian expansion during merge.
+        if not dict_year.empty:
+            dict_year = dict_year.sort_values(["varname", "source_file", "varnumber"]).drop_duplicates(
+                ["varname", "source_file"], keep="first"
+            )
         dict_vars = set(dict_year["varname"].dropna().unique())
         pref_df = None
         if args.dedupe:
