@@ -112,6 +112,7 @@ def main() -> None:
     ap.add_argument("--stitch", action=argparse.BooleanOptionalAction, default=True, help="Stitch per-year outputs into one file")
     ap.add_argument("--stitch-out", default=str(DEFAULT_STITCH), help="Output path for stitched long panel")
     ap.add_argument("--skip-missing", action=argparse.BooleanOptionalAction, default=True, help="Skip missing/bad years during stitch")
+    ap.add_argument("--cleanup-year-longs", action=argparse.BooleanOptionalAction, default=False, help="Delete per-year long parquet files after successful stitch")
     ap.add_argument("--build-wide", action=argparse.BooleanOptionalAction, default=True, help="Build wide panel after stitching")
     ap.add_argument("--wide-out-dir", default=str(DEFAULT_WIDE_OUT), help="Output dir for wide panel (partitioned)")
     ap.add_argument("--wide-years", default=None, help="Years for wide build (default: --years)")
@@ -201,6 +202,18 @@ def main() -> None:
         stitched_path = Path(args.stitch_out)
         if not args.dry_run:
             stitch_years(years, cross_dir, stitched_path, skip_missing=args.skip_missing)
+            if args.cleanup_year_longs:
+                try:
+                    pq.ParquetFile(stitched_path)
+                except Exception as e:
+                    raise SystemExit(f"Refusing to cleanup per-year files; stitched file is not readable: {e}")
+                removed = 0
+                for y in years:
+                    p = cross_dir / f"panel_long_varnum_{y}.parquet"
+                    if p.exists():
+                        p.unlink()
+                        removed += 1
+                print(f"[cleanup] removed {removed} per-year long files")
         else:
             print(f"+ stitch {cross_dir} -> {stitched_path}")
 

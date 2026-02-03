@@ -73,6 +73,28 @@ def discover_files(year_root: pathlib.Path) -> Iterable[pathlib.Path]:
         yield fp
 
 
+def prefer_rv_files(files: Iterable[pathlib.Path]) -> list[pathlib.Path]:
+    """
+    If both base and *_rv files exist in the same folder, keep *_rv only.
+    Otherwise keep the available file.
+    """
+    groups: dict[tuple[pathlib.Path, str], list[tuple[bool, pathlib.Path]]] = {}
+    for fp in files:
+        stem = fp.stem.lower()
+        is_rv = stem.endswith("_rv")
+        key = stem[:-3] if is_rv else stem
+        gkey = (fp.parent, key)
+        groups.setdefault(gkey, []).append((is_rv, fp))
+    kept: list[pathlib.Path] = []
+    for entries in groups.values():
+        has_rv = any(is_rv for is_rv, _ in entries)
+        if has_rv:
+            kept.extend([fp for is_rv, fp in entries if is_rv])
+        else:
+            kept.extend([fp for _, fp in entries])
+    return kept
+
+
 def check_release_manifest(
     year_root: pathlib.Path,
     year: int,
@@ -422,7 +444,12 @@ def main():
                 pref["rank"] = pref["source_file"].map(prio).fillna(999).astype(int)
                 pref = pref.sort_values(["year", "varname", "rank", "source_file"]).drop_duplicates(["year", "varname"], keep="first")
                 pref_df = pref[["year", "varname", "source_file"]].rename(columns={"source_file": "preferred_source"})
-        for fp in discover_files(year_root):
+        all_files = list(discover_files(year_root))
+        files = prefer_rv_files(all_files)
+        skipped_rv = len(all_files) - len(files)
+        if skipped_rv > 0:
+            print(f"[year {year}] skipped {skipped_rv} non-_rv files where _rv exists")
+        for fp in files:
             for chunk in melt_file(
                 fp,
                 year,
