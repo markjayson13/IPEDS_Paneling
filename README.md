@@ -11,6 +11,7 @@ Highlights
 - **Wide panel** builder with optional **discrete-category collapse** (e.g., program-level indicator groups → *_CAT)
 - **Parent/child (PRCH) cleaning** to null out component data for child records while keeping all rows
 - **Release validation** (Revised/Final only) via yearly manifests
+- **_rv preference** when revised files exist (non‑_rv are skipped in that folder)
 - **QC outputs** (duplicate samples, discrete conflicts, wide summary stats)
 
 Pipeline Overview
@@ -28,6 +29,7 @@ Dictionary ingest (Dictionary/01_ingest_dictionaries.py)
         │
         ▼
 Harmonize (03_harmonize.py)  →  Cross_sections/panel_long_varnum_<year>.parquet
+  └─ Prefers *_rv files when present; logs how many non‑_rv were skipped per year
         │
         ▼
 Stitch per-year longs  →  Panels/2004-2024/panel_long_varnum_2004_2024.parquet
@@ -168,6 +170,45 @@ python3 08_run_pipeline.py \
   --clean-out "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
   --prch-qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/prch_qc" \
   --drop-imputation-flags
+```
+
+Optional: clean up per‑year long files after stitching
+-----------------------------------------------------
+If you are disk‑constrained and do not need the per‑year long files:
+
+```bash
+python3 08_run_pipeline.py \
+  --years 2004:2024 \
+  --no-skip-existing \
+  --stitch \
+  --cleanup-year-longs \
+  --build-wide \
+  --stitch-wide \
+  --run-cleaning \
+  --release-allow "revised,final" \
+  --release-qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc" \
+  --no-final-dedupe
+```
+
+Audit Pack (Reviewer Bundle)
+----------------------------
+This builds `audit_pack/` and writes a zip to **`/Users/markjaysonfarol13/IPEDS_Paneling/Checks/audit_pack.zip`**.
+If the long panel contains duplicate keys, use `--allow-duplicates` to record counts and continue.
+
+```bash
+python3 09_build_audit_pack.py \
+  --out-dir audit_pack \
+  --zip \
+  --allow-duplicates \
+  --years "2004:2024" \
+  --raw-root "/Users/markjaysonfarol13/IPEDS_Paneling/Raw_Cross_Section_Data" \
+  --checks-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks" \
+  --dictionary "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
+  --dictionary-codes "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_codes.parquet" \
+  --long-panel "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004-2024/panel_long_varnum_2004_2024.parquet" \
+  --wide-raw "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
+  --wide-prch "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet" \
+  --wide-clean "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet"
 ```
 
 Minimal End‑to‑End (run_pipeline + custom subset)
