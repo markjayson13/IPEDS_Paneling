@@ -180,7 +180,8 @@ def main() -> None:
     ap.add_argument("--dups-max-rows", type=int, default=10000, help="Max rows to write for duplicate samples (0 disables)")
     ap.add_argument("--dups-qc-gzip", action="store_true", help="Write dup samples as .csv.gz")
     ap.add_argument("--qc-dir", default=None, help="Optional dir to write QC summary CSV")
-    ap.add_argument("--log-file", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/logs/04_build_wide_panel.log", help="Optional log file path")
+    repo_root = pathlib.Path(os.environ.get("IPEDS_ROOT", pathlib.Path(__file__).resolve().parents[1]))
+    ap.add_argument("--log-file", default=str(repo_root / "Checks" / "logs" / "04_build_wide_panel.log"), help="Optional log file path")
     args = ap.parse_args()
 
     setup_logging(args.log_file)

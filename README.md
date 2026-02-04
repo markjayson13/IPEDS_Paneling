@@ -13,6 +13,7 @@ Highlights
 - **Release validation** (Revised/Final only) via yearly manifests
 - **_rv preference** when revised files exist (non‑_rv are skipped in that folder)
 - **QC outputs** (duplicate samples, discrete conflicts, wide summary stats)
+- **Portable defaults**: set `IPEDS_ROOT` to override paths (public‑friendly)
 
 Pipeline Overview
 -----------------
@@ -52,6 +53,41 @@ Research‑ready clean (Cleaning/05_cleaning_panel.py --drop-imputation-flags)
 Custom panel builder (Panels/06_build_custom_panel.py)
   └─ User‑selected subset (always keeps UNITID + year)
 ```
+
+User‑Friendly Visual (Simplified)
+---------------------------------
+```
+Raw IPEDS ZIPs
+   │
+   ▼
+Download & Unzip  ──►  Raw_Cross_Section_Data/
+   │
+   ▼
+Dictionary Lake (canonical metadata)
+   │
+   ▼
+Long Panel (UNITID, year, varname)
+   │
+   ▼
+Wide Panel (UNITID, year, columns = variables)
+   │
+   ├─ PRCH‑clean (parent/child safe)
+   └─ Clean (research‑ready; imputation flags removed)
+               │
+               ▼
+        Custom Panel (user‑selected vars)
+```
+
+Public‑Friendly Paths (Portable Defaults)
+----------------------------------------
+By default, scripts now use the repository root as the base path.
+To override all paths in a public environment:
+
+```bash
+export IPEDS_ROOT="/path/to/IPEDS_Paneling"
+```
+
+This makes the pipeline portable without hard‑coded user paths.
 
 Data Shape (Long vs Wide)
 -------------------------
@@ -238,6 +274,11 @@ python3 Panels/06_build_custom_panel.py \
   --vars "INSTNM,SECTOR,TUITION1,PELL_RECP" \
   --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/custom_panel.parquet"
 ```
+
+Notebook (Supplementary QA/QC)
+------------------------------
+`Artifacts/paper_artifacts_overview.ipynb` is **supplementary**.  
+It is intended for **QA/QC viewing**, not as the production pipeline.
 
 One‑liner: full end‑to‑end (raw → PRCH clean → clean → custom subset)
 ---------------------------------------------------------------------

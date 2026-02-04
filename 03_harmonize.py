@@ -390,8 +390,9 @@ def main():
     ap.add_argument("--duckdb-temp-dir", default=None, help="Optional temp directory for DuckDB (used during final dedupe)")
     ap.add_argument("--release-allow", default="revised,final", help="Comma list of allowed release statuses")
     ap.add_argument("--release-strict", action=argparse.BooleanOptionalAction, default=True, help="Fail if manifest is missing or not revised/final")
-    ap.add_argument("--release-qc-dir", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc", help="QC dir for release validation")
-    ap.add_argument("--log-file", default="/Users/markjaysonfarol13/IPEDS_Paneling/Checks/logs/03_harmonize.log", help="Optional log file path")
+    repo_root = pathlib.Path(os.environ.get("IPEDS_ROOT", pathlib.Path(__file__).resolve().parent))
+    ap.add_argument("--release-qc-dir", default=str(repo_root / "Checks" / "release_qc"), help="QC dir for release validation")
+    ap.add_argument("--log-file", default=str(repo_root / "Checks" / "logs" / "03_harmonize.log"), help="Optional log file path")
     args = ap.parse_args()
 
     setup_logging(args.log_file)
