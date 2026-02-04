@@ -24,6 +24,57 @@ import duckdb
 import pandas as pd
 import pyarrow.parquet as pq
 
+DEFAULT_AUDIT_PACK_README = """# IPEDS_Paneling — Audit Pack (End-to-End Reproducibility & Validation)
+
+**Project:** IPEDS_Paneling  
+**Repository:** https://github.com/markjayson13/IPEDS_Paneling  
+**Audit Pack Version:** {AUDIT_PACK_VERSION}  
+**Code Version:** {GIT_TAG_OR_COMMIT_HASH}  
+**Build Date (UTC):** {BUILD_DATETIME_UTC}  
+**Built By:** {BUILT_BY}
+
+## What this is
+This bundle is designed for reviewers to verify:
+1) **Reproducibility** (same inputs + same commit → same outputs)  
+2) **Auditability** (transformations produce machine-readable QC artifacts)  
+3) **Panel safety** (explicit defenses for schema drift, universe changes, and parent–child reporting)
+
+Raw IPEDS files are not redistributed. Instead, this pack includes **input manifests + hashes**, **output hashes**, and **QC artifacts**.
+
+## Where to start
+- **Reproduction metadata:** `00_run/run_metadata.json`, `00_run/run_command.txt`
+- **Input manifest + hashes:** `01_inputs/input_manifest.csv`, `01_inputs/input_hashes.csv`
+- **Output hashes:** `00_run/output_hashes.csv`
+- **QC index:** `06_qc/checks_index.md`
+
+## Key checks (what to inspect)
+### Dictionary / mapping
+- `02_dictionary/dictionary_coverage_by_year_component.csv`
+- `02_dictionary/mapping_collisions.csv` (+ `mapping_collisions_varname.csv`)
+- `02_dictionary/drift_summary.csv`
+
+### Long-panel integrity
+- `03_long_panel/long_key_integrity.csv`
+- `03_long_panel/long_schema.json`
+
+### Wide-panel integrity
+- `04_wide_panel/wide_integrity.csv`
+- `04_wide_panel/wide_schema_diff.csv` (+ `wide_schema_diff_columns.csv`)
+
+### Parent–child (PRCH)
+- `05_prch/prch_rules.md`
+- `05_prch/*.csv` (PRCH QC summaries copied from `Checks/prch_qc/` if present)
+
+### Other QC (release / discrete collapse / wide build)
+- `06_qc/release_qc/*`
+- `06_qc/disc_qc/*`
+- `06_qc/wide_qc/*`
+- `06_qc/panel_qc/*`
+
+## Performance
+- `08_performance/output_sizes.csv`
+"""
+
 
 def setup_logging(log_path: str | None) -> None:
     if not log_path:
@@ -159,7 +210,22 @@ def long_key_integrity(long_panel: Path, years: list[int], out_csv: Path) -> tup
 def long_schema(long_panel: Path, out_json: Path) -> None:
     pf = pq.ParquetFile(long_panel)
     schema = pf.schema.to_arrow_schema()
-    out_json.write_text(schema.to_string())
+    obj = {
+        "n_fields": len(schema),
+        "fields": [
+            {"name": f.name, "type": str(f.type), "nullable": bool(getattr(f, "nullable", True))}
+            for f in schema
+        ],
+    }
+    out_json.write_text(json.dumps(obj, indent=2))
+
+
+def write_output_sizes(paths: list[Path], out_csv: Path) -> None:
+    rows = []
+    for p in paths:
+        if p and p.exists():
+            rows.append({"path": str(p), "size_bytes": p.stat().st_size})
+    pd.DataFrame(rows).to_csv(out_csv, index=False)
 
 
 def wide_integrity(wide_panel: Path, years: list[int], out_csv: Path) -> tuple[int, int, int]:
@@ -283,7 +349,7 @@ def main() -> None:
     ap.add_argument("--overwrite", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--years", default="2004:2024")
     ap.add_argument("--raw-root", default=None, help="Raw_Cross_Section_Data (optional for input hashes)")
-    repo_root = Path(os.environ.get("IPEDS_ROOT", Path(__file__).resolve().parent))
+    repo_root = Path(os.environ.get("IPEDS_ROOT", str(Path(__file__).resolve().parent)))
     ap.add_argument("--checks-dir", default=str(repo_root / "Checks"))
     ap.add_argument("--dictionary", default=str(repo_root / "Dictionary" / "dictionary_lake.parquet"))
     ap.add_argument("--dictionary-codes", default=str(repo_root / "Dictionary" / "dictionary_codes.parquet"))
@@ -296,6 +362,7 @@ def main() -> None:
     ap.add_argument("--built-by", default="")
     ap.add_argument("--log-file", default=str(repo_root / "Checks" / "logs" / "09_build_audit_pack.log"), help="Optional log file path")
     ap.add_argument("--allow-duplicates", action=argparse.BooleanOptionalAction, default=False, help="Do not fail audit pack if long panel has duplicate or missing keys (record counts instead)")
+    ap.add_argument("--spotcheck-cmd", default=None, help="Optional shell command to run spot checks; stdout/stderr saved to 07_spot_checks/spotcheck_run.log")
     args = ap.parse_args()
 
     setup_logging(args.log_file)
@@ -357,6 +424,7 @@ def main() -> None:
         pd.read_parquet(args.dictionary_codes).to_csv(dict_dir / "dictionary_codes.csv", index=False)
     dictionary_coverage(Path(args.dictionary), dict_dir / "dictionary_coverage_by_year_component.csv")
     mapping_collisions(Path(args.dictionary), dict_dir / "mapping_collisions.csv")
+    drift_summary(Path(args.dictionary), years, dict_dir / "drift_summary.csv")
 
     # 03_long_panel
     long_dir = out_dir / "03_long_panel"
@@ -389,7 +457,7 @@ def main() -> None:
 
     # 06_qc
     qc_dir = out_dir / "06_qc"
-    for sub in ["release_qc", "disc_qc", "panel_qc"]:
+    for sub in ["release_qc", "disc_qc", "panel_qc", "wide_qc", "prch_qc"]:
         src = Path(args.checks_dir) / sub
         if src.exists():
             dst = qc_dir / sub
@@ -398,18 +466,43 @@ def main() -> None:
                 if fp.is_file():
                     safe_copy(fp, dst / fp.name, missing)
 
-    # 07_spot_checks + 08_performance placeholders
-    (out_dir / "07_spot_checks" / "spotcheck_plan.md").write_text("Planned.\n")
-    (out_dir / "07_spot_checks" / "spotcheck_results.csv").write_text("varname,year,unitid,raw_value,panel_value,match\n")
-    (out_dir / "07_spot_checks" / "spotcheck_mismatches.md").write_text("Planned.\n")
-    (out_dir / "08_performance" / "output_sizes.csv").write_text("filename,size_bytes\n")
-
+    # 07_spot_checks (placeholders + optional hook)
+    spot_dir = out_dir / "07_spot_checks"
+    ensure_dir(spot_dir)
+    (spot_dir / "spotcheck_plan.md").write_text("Planned.\n")
+    (spot_dir / "spotcheck_results.csv").write_text("varname,year,unitid,raw_value,panel_value,match\n")
+    (spot_dir / "spotcheck_mismatches.md").write_text("Planned.\n")
+    if args.spotcheck_cmd:
+        log_path = spot_dir / "spotcheck_run.log"
+        with log_path.open("w") as f:
+            res = subprocess.run(args.spotcheck_cmd, shell=True, cwd=repo_root, stdout=f, stderr=subprocess.STDOUT)
+        if res.returncode != 0:
+            print(f"[warn] spotcheck command failed (see {log_path})")
     # 99_appendix placeholders
     (out_dir / "99_appendix" / "planned_checks.md").write_text("Planned checks not yet computed.\n")
     (out_dir / "99_appendix" / "planned_figures.md").write_text("Planned figures not yet generated.\n")
+    artifact_dir = repo_root / "Artifacts"
+    for fname in ["Figure_1_pipeline.svg", "section5_validation.md", "table3_validation_metrics_template.csv"]:
+        src = artifact_dir / fname
+        if src.exists():
+            safe_copy(src, out_dir / "99_appendix" / fname, missing)
 
     # checks index
     build_checks_index(qc_dir, out_dir / "checks_index.md")
+    safe_copy(out_dir / "checks_index.md", qc_dir / "checks_index.md", missing)
+
+    # 08_performance (real, not placeholder)
+    perf_dir = out_dir / "08_performance"
+    ensure_dir(perf_dir)
+    size_paths = [
+        out_dir / "02_dictionary" / "dictionary_lake.parquet",
+        out_dir / "03_long_panel" / "panel_long_2004_2024.parquet",
+        out_dir / "04_wide_panel" / "panel_wide_raw.parquet",
+        out_dir / "04_wide_panel" / "panel_wide_prchclean.parquet",
+        out_dir / "04_wide_panel" / "panel_wide_clean.parquet",
+        out_dir / "00_run" / "output_hashes.csv",
+    ]
+    write_output_sizes(size_paths, perf_dir / "output_sizes.csv")
 
     # Fail fast on integrity (unless explicitly allowed)
     if dup_rows > 0 or missing_keys > 0:
@@ -425,14 +518,19 @@ def main() -> None:
             raise SystemExit(msg)
 
     # README
-    readme_template = Path("Artifacts/section5_validation.md").read_text() if Path("Artifacts/section5_validation.md").exists() else "Audit Pack"
+    template_path = repo_root / "Artifacts" / "audit_pack_README_template.md"
+    readme_template = template_path.read_text() if template_path.exists() else DEFAULT_AUDIT_PACK_README
     readme = (out_dir / "README.md")
-    write_readme(readme, readme_template, {
-        "AUDIT_PACK_VERSION": datetime.now(timezone.utc).strftime("%Y%m%d"),
-        "GIT_TAG_OR_COMMIT_HASH": info["git"].get("describe") or info["git"].get("commit") or "",
-        "YYYY-MM-DD HH:MM": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
-        "NAME / AFFILIATION": args.built_by or "",
-    })
+    write_readme(
+        readme,
+        readme_template,
+        {
+            "AUDIT_PACK_VERSION": datetime.now(timezone.utc).strftime("%Y%m%d"),
+            "GIT_TAG_OR_COMMIT_HASH": info["git"].get("describe") or info["git"].get("commit") or "",
+            "BUILD_DATETIME_UTC": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
+            "BUILT_BY": args.built_by or "",
+        },
+    )
 
     if args.zip:
         zip_target = Path(args.zip_out) if args.zip_out else Path(args.checks_dir) / "audit_pack.zip"

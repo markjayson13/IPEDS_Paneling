@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--raw", required=True, help="Raw stitched wide parquet")
     p.add_argument("--clean", required=True, help="PRCH cleaned wide parquet")
-    repo_root = pathlib.Path(os.environ.get("IPEDS_ROOT", pathlib.Path(__file__).resolve().parent))
+    repo_root = Path(os.environ.get("IPEDS_ROOT", str(Path(__file__).resolve().parent)))
     p.add_argument("--out-dir", default=str(repo_root / "Checks" / "panel_qc"), help="QA output directory")
     p.add_argument("--prch-qc-dir", default=str(repo_root / "Checks" / "prch_qc"), help="PRCH QC dir (for prch_clean_columns.csv)")
     p.add_argument("--sample-rows", type=int, default=1000, help="Sample size for flag/column check")
@@ -129,9 +129,12 @@ def main() -> None:
     auto_candidates = 0
     raw_valid = 0
     cln_valid = 0
+    # Flag parsing must happen BEFORE AUTO probe selection
+    flag = args.flag
+    child_codes = {int(x) for x in args.flag_child.split(",") if x.strip()}
     if probe == "AUTO":
         auto_probe_used = True
-        probe, auto_candidates = auto_select_probe(raw, cln, args.flag, child_codes, Path(args.prch_qc_dir), args.auto_max_cols)
+        probe, auto_candidates = auto_select_probe(raw, cln, flag, child_codes, Path(args.prch_qc_dir), args.auto_max_cols)
     if probe and probe in raw.schema.names and probe in cln.schema.names:
         for b in raw.to_batches(columns=[probe]):
             raw_valid += pc.sum(pc.is_valid(b[probe])).as_py()
@@ -139,8 +142,6 @@ def main() -> None:
             cln_valid += pc.sum(pc.is_valid(b[probe])).as_py()
 
     # Flag check on sample
-    flag = args.flag
-    child_codes = {int(x) for x in args.flag_child.split(",") if x.strip()}
     child_raw_nonnull = None
     child_cln_nonnull = None
     if probe and all(c in raw.schema.names for c in ["year", "UNITID", flag, probe]):

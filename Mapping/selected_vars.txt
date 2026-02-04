@@ -1,0 +1,5 @@
+# One varname per line (UNITID and year are always included)
+INSTNM
+SECTOR
+TUITION1
+PELL_RECP

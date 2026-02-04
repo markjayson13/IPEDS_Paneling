@@ -186,6 +186,14 @@ python3 Panels/06_build_custom_panel.py \
   --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
 ```
 
+Custom panel (Option B: vars file):
+```bash
+python3 Panels/06_build_custom_panel.py \
+  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
+  --vars-file "$IPEDS_ROOT/Mapping/selected_vars.txt" \
+  --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
+```
+
 Recommended Single‑Command Run (Raw → PRCH Clean → Clean)
 ---------------------------------------------------------
 This is the preferred end‑to‑end command. It:
