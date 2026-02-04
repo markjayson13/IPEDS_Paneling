@@ -8,11 +8,12 @@ Dictionary QA/QC helper:
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import pandas as pd
 
-BASE = Path("/Users/markjaysonfarol13/IPEDS_Paneling")
+BASE = Path(os.environ.get("IPEDS_ROOT", Path(__file__).resolve().parents[1]))
 DEFAULT_CODES = BASE / "Dictionary" / "dictionary_codes.parquet"
 DEFAULT_COLLAPSED = BASE / "Dictionary" / "dictionary_codes_collapsed.csv"
 DEFAULT_SOURCE_YEARS = BASE / "Dictionary" / "source_file_years.csv"

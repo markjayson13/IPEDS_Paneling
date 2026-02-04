@@ -60,7 +60,8 @@ from urllib3.util.retry import Retry
 import requests
 from bs4 import BeautifulSoup
 
-DOWNLOAD_DIR = '/Users/markjaysonfarol13/IPEDS_Paneling/Raw_Cross_Section_Data'
+BASE_ROOT = os.environ.get("IPEDS_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DOWNLOAD_DIR = os.path.join(BASE_ROOT, "Raw_Cross_Section_Data")
 # Now fetch the full historical span requested (1987–2024)
 YEARS_TO_DOWNLOAD = range(1987, 2025)
 BASE_URL = 'https://nces.ed.gov/ipeds/datacenter/'

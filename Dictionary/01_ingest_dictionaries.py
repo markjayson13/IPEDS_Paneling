@@ -13,12 +13,13 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import os
 from pathlib import Path
 from typing import Tuple
 
 import pandas as pd
 
-BASE_ROOT = Path("/Users/markjaysonfarol13/IPEDS_Paneling")
+BASE_ROOT = Path(os.environ.get("IPEDS_ROOT", Path(__file__).resolve().parents[1]))
 ROOT = BASE_ROOT / "Raw_Cross_Section_Data"
 DICT_PARQUET_PATH = BASE_ROOT / "Dictionary" / "dictionary_lake.parquet"
 DICT_CODES_PARQUET_PATH = BASE_ROOT / "Dictionary" / "dictionary_codes.parquet"

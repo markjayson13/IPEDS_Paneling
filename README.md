@@ -162,28 +162,28 @@ This will:
 Optional PRCH cleaning (safe Option A):
 ```bash
 python3 Cleaning/05_cleaning_panel.py \
-  --input "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
-  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet" \
-  --dictionary "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
-  --qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/prch_qc"
+  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
+  --output "$IPEDS_ROOT/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet" \
+  --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
+  --qc-dir "$IPEDS_ROOT/Checks/prch_qc"
 ```
 
 Research‑ready clean (drop imputation flags):
 ```bash
 python3 Cleaning/05_cleaning_panel.py \
-  --input "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
-  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
-  --dictionary "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
-  --qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/prch_qc" \
+  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
+  --output "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
+  --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
+  --qc-dir "$IPEDS_ROOT/Checks/prch_qc" \
   --drop-imputation-flags
 ```
 
 Custom panel (user‑selected variables; always keeps UNITID + year):
 ```bash
 python3 Panels/06_build_custom_panel.py \
-  --input "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
+  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
   --vars "INSTNM,SECTOR,TUITION1,PELL_RECP" \
-  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/custom_panel.parquet"
+  --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
 ```
 
 Recommended Single‑Command Run (Raw → PRCH Clean → Clean)
@@ -198,13 +198,13 @@ This is the preferred end‑to‑end command. It:
 python3 08_run_pipeline.py \
   --no-skip-existing \
   --release-allow "revised,final" \
-  --release-qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc" \
+  --release-qc-dir "$IPEDS_ROOT/Checks/release_qc" \
   --stitch-wide \
-  --stitch-wide-out "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
+  --stitch-wide-out "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
   --run-cleaning \
-  --prch-clean-out "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet" \
-  --clean-out "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
-  --prch-qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/prch_qc" \
+  --prch-clean-out "$IPEDS_ROOT/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet" \
+  --clean-out "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
+  --prch-qc-dir "$IPEDS_ROOT/Checks/prch_qc" \
   --drop-imputation-flags
 ```
 
@@ -222,13 +222,13 @@ python3 08_run_pipeline.py \
   --stitch-wide \
   --run-cleaning \
   --release-allow "revised,final" \
-  --release-qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc" \
+  --release-qc-dir "$IPEDS_ROOT/Checks/release_qc" \
   --no-final-dedupe
 ```
 
 Audit Pack (Reviewer Bundle)
 ----------------------------
-This builds `audit_pack/` and writes a zip to **`/Users/markjaysonfarol13/IPEDS_Paneling/Checks/audit_pack.zip`**.
+This builds `audit_pack/` and writes a zip to **`$IPEDS_ROOT/Checks/audit_pack.zip`**.
 If the long panel contains duplicate keys, use `--allow-duplicates` to record counts and continue.
 
 ```bash
@@ -237,14 +237,14 @@ python3 09_build_audit_pack.py \
   --zip \
   --allow-duplicates \
   --years "2004:2024" \
-  --raw-root "/Users/markjaysonfarol13/IPEDS_Paneling/Raw_Cross_Section_Data" \
-  --checks-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks" \
-  --dictionary "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
-  --dictionary-codes "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_codes.parquet" \
-  --long-panel "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004-2024/panel_long_varnum_2004_2024.parquet" \
-  --wide-raw "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
-  --wide-prch "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet" \
-  --wide-clean "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet"
+  --raw-root "$IPEDS_ROOT/Raw_Cross_Section_Data" \
+  --checks-dir "$IPEDS_ROOT/Checks" \
+  --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
+  --dictionary-codes "$IPEDS_ROOT/Dictionary/dictionary_codes.parquet" \
+  --long-panel "$IPEDS_ROOT/Panels/2004-2024/panel_long_varnum_2004_2024.parquet" \
+  --wide-raw "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
+  --wide-prch "$IPEDS_ROOT/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet" \
+  --wide-clean "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet"
 ```
 
 Minimal End‑to‑End (run_pipeline + custom subset)
@@ -256,23 +256,23 @@ It includes **release QC outputs** and **RAM‑friendly stitching** of the wide 
 # 1) Build raw wide from 2004–2024 with release QC + streaming wide stitch
 python3 08_run_pipeline.py \
   --release-allow "revised,final" \
-  --release-qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc" \
+  --release-qc-dir "$IPEDS_ROOT/Checks/release_qc" \
   --stitch-wide \
-  --stitch-wide-out "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet"
+  --stitch-wide-out "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet"
 
 # 2) PRCH clean + drop imputation flags (research‑ready clean)
 python3 Cleaning/05_cleaning_panel.py \
-  --input "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
-  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
-  --dictionary "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
-  --qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/prch_qc" \
+  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
+  --output "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
+  --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
+  --qc-dir "$IPEDS_ROOT/Checks/prch_qc" \
   --drop-imputation-flags
 
 # 3) Build your custom research panel (keeps UNITID + year)
 python3 Panels/06_build_custom_panel.py \
-  --input "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
+  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
   --vars "INSTNM,SECTOR,TUITION1,PELL_RECP" \
-  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/custom_panel.parquet"
+  --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
 ```
 
 Notebook (Supplementary QA/QC)
@@ -283,7 +283,7 @@ It is intended for **QA/QC viewing**, not as the production pipeline.
 One‑liner: full end‑to‑end (raw → PRCH clean → clean → custom subset)
 ---------------------------------------------------------------------
 ```bash
-python3 08_run_pipeline.py --release-allow "revised,final" --release-qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc" --stitch-wide --stitch-wide-out "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" && python3 Cleaning/05_cleaning_panel.py --input "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet" --dictionary "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" --qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/prch_qc" && python3 Cleaning/05_cleaning_panel.py --input "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" --dictionary "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" --qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/prch_qc" --drop-imputation-flags && python3 Panels/06_build_custom_panel.py --input "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" --vars "INSTNM,SECTOR,TUITION1,PELL_RECP" --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/custom_panel.parquet"
+python3 08_run_pipeline.py --release-allow "revised,final" --release-qc-dir "$IPEDS_ROOT/Checks/release_qc" --stitch-wide --stitch-wide-out "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" && python3 Cleaning/05_cleaning_panel.py --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" --output "$IPEDS_ROOT/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet" --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" --qc-dir "$IPEDS_ROOT/Checks/prch_qc" && python3 Cleaning/05_cleaning_panel.py --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" --output "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" --qc-dir "$IPEDS_ROOT/Checks/prch_qc" --drop-imputation-flags && python3 Panels/06_build_custom_panel.py --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" --vars "INSTNM,SECTOR,TUITION1,PELL_RECP" --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
 ```
 
 Manual Commands (Advanced)
@@ -292,11 +292,11 @@ Manual Commands (Advanced)
 1) Build dictionary lake (2004–2024) + value labels:
 ```bash
 python3 Dictionary/01_ingest_dictionaries.py \
-  --root "/Users/markjaysonfarol13/IPEDS_Paneling/Raw_Cross_Section_Data" \
+  --root "$IPEDS_ROOT/Raw_Cross_Section_Data" \
   --min-year 2004 \
-  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
-  --codes-output "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_codes.parquet" \
-  --codes-output-csv "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_codes.csv"
+  --output "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
+  --codes-output "$IPEDS_ROOT/Dictionary/dictionary_codes.parquet" \
+  --codes-output-csv "$IPEDS_ROOT/Dictionary/dictionary_codes.csv"
 ```
 
 2) Dictionary QA/QC + collapsed codes:
@@ -309,13 +309,13 @@ python3 Dictionary/02_dictionary_qaqc.py \
 3) Harmonize per‑year (streaming, low‑RAM):
 ```bash
 python3 03_harmonize.py \
-  --root "/Users/markjaysonfarol13/IPEDS_Paneling/Raw_Cross_Section_Data" \
-  --lake "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
+  --root "$IPEDS_ROOT/Raw_Cross_Section_Data" \
+  --lake "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
   --years 2018:2018 \
-  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Cross_sections/panel_long_varnum_2018.parquet" \
+  --output "$IPEDS_ROOT/Cross_sections/panel_long_varnum_2018.parquet" \
   --release-allow "revised,final" \
   --release-strict \
-  --release-qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc"
+  --release-qc-dir "$IPEDS_ROOT/Checks/release_qc"
 ```
 Release QC outputs are written per year to `Checks/release_qc/` for proof of Revised/Final filtering.
 
@@ -325,8 +325,8 @@ python3 - <<'PY'
 from pathlib import Path
 import pyarrow.parquet as pq
 
-base = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Cross_sections")
-out = Path("/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004-2024/panel_long_varnum_2004_2024.parquet")
+base = Path("$IPEDS_ROOT/Cross_sections")
+out = Path("$IPEDS_ROOT/Panels/2004-2024/panel_long_varnum_2004_2024.parquet")
 out.parent.mkdir(parents=True, exist_ok=True)
 
 writer = None
@@ -348,22 +348,22 @@ PY
 5) Build wide panel with discrete collapse:
 ```bash
 python3 Panels/04_build_wide_panel.py \
-  --input "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004-2024/panel_long_varnum_2004_2024.parquet" \
-  --out_dir "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/wide_2004_2024" \
+  --input "$IPEDS_ROOT/Panels/2004-2024/panel_long_varnum_2004_2024.parquet" \
+  --out_dir "$IPEDS_ROOT/Panels/wide_2004_2024" \
   --years "2004:2024" \
-  --dictionary "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
+  --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
   --collapse-disc \
   --drop-disc-components \
-  --disc-qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/disc_qc" \
-  --qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/wide_qc"
+  --disc-qc-dir "$IPEDS_ROOT/Checks/disc_qc" \
+  --qc-dir "$IPEDS_ROOT/Checks/wide_qc"
 ```
 
 6) Build a custom panel subset:
 ```bash
 python3 Panels/06_build_custom_panel.py \
-  --input "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
-  --vars-file "/Users/markjaysonfarol13/IPEDS_Paneling/Mapping/vars_for_my_study.txt" \
-  --output "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/custom_panel.parquet"
+  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
+  --vars-file "$IPEDS_ROOT/Mapping/vars_for_my_study.txt" \
+  --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
 ```
 
 Discrete Category Collapse (Disc → *_CAT)

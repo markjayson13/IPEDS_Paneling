@@ -72,15 +72,15 @@ Run:
 
 ```bash
 python3 09_paper_metrics.py \
-  --dictionary "/Users/markjaysonfarol13/IPEDS_Paneling/Dictionary/dictionary_lake.parquet" \
-  --long-panel "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004-2024/panel_long_varnum_2004_2024.parquet" \
-  --raw-root "/Users/markjaysonfarol13/IPEDS_Paneling/Raw_Cross_Section_Data" \
-  --release-qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/release_qc" \
-  --disc-qc-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/disc_qc" \
-  --prch-qc-summary "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/prch_qc/prch_clean_summary.csv" \
-  --wide-panel "/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
+  --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
+  --long-panel "$IPEDS_ROOT/Panels/2004-2024/panel_long_varnum_2004_2024.parquet" \
+  --raw-root "$IPEDS_ROOT/Raw_Cross_Section_Data" \
+  --release-qc-dir "$IPEDS_ROOT/Checks/release_qc" \
+  --disc-qc-dir "$IPEDS_ROOT/Checks/disc_qc" \
+  --prch-qc-summary "$IPEDS_ROOT/Checks/prch_qc/prch_clean_summary.csv" \
+  --wide-panel "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
   --years "2004:2024" \
-  --out-dir "/Users/markjaysonfarol13/IPEDS_Paneling/Checks/paper_metrics"
+  --out-dir "$IPEDS_ROOT/Checks/paper_metrics"
 ```
 
 Optional (slower): add `--scan-raw` to compute raw‑header mapping coverage.
