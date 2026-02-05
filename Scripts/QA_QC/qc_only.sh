@@ -83,3 +83,6 @@ echo "  $CHECKS_DIR/wide_qc"
 echo "  $CHECKS_DIR/panel_qc"
 echo ""
 echo "Note: temp wide output is in $WIDE_QC_TMP (delete if not needed)."
+
+python3 -c "import duckdb; print(duckdb.query(\"SELECT * FROM '/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004-2024/panel_long_varnum_2004_2024.parquet' LIMIT 1\").df().columns.tolist())"
+python3 -c "import pyarrow.parquet as pq; print(pq.ParquetFile('/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004-2024/panel_long_varnum_2004_2024.parquet').schema.names)"
