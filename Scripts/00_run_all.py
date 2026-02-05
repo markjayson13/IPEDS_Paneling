@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Wrapper to run 03_harmonize.py per-year, stitch outputs, and optionally build a wide panel.
-Defaults are baked in for 2004–2024 and the standard repo layout.
+Defaults are baked in for 2004–2024 and the Artifacts/ output layout.
 """
 from __future__ import annotations
 
@@ -13,20 +13,25 @@ import os
 
 import pyarrow.parquet as pq
 
-BASE = Path(os.environ.get("IPEDS_ROOT", Path(__file__).resolve().parent))
-DEFAULT_ROOT = BASE / "Raw_Cross_Section_Data"
-DEFAULT_LAKE = BASE / "Dictionary" / "dictionary_lake.parquet"
-DEFAULT_CROSS = BASE / "Cross_sections"
-DEFAULT_PARTS = BASE / "Cross_sections"
-DEFAULT_STITCH = BASE / "Panels" / "2004-2024" / "panel_long_varnum_2004_2024.parquet"
-DEFAULT_WIDE_OUT = BASE / "Panels" / "wide_2004_2024"
-DEFAULT_DISC_QC = BASE / "Checks" / "disc_qc"
-DEFAULT_WIDE_QC = BASE / "Checks" / "wide_qc"
-DEFAULT_WIDE_STITCH = BASE / "Panels" / "2004_2024_IPEDS_Raw_Panel_DS.parquet"
-DEFAULT_CLEAN_PANEL = BASE / "Panels" / "2004_2024_IPEDS_clean_Panel_DS.parquet"
-DEFAULT_CUSTOM_OUT = BASE / "Panels" / "custom_panel.parquet"
-DEFAULT_PRCH_CLEAN = BASE / "Panels" / "2004_2024_IPEDS_PRCHclean_Panel_DS.parquet"
-DEFAULT_PRCH_QC = BASE / "Checks" / "prch_qc"
+REPO_ROOT = Path(os.environ.get("IPEDS_ROOT", Path(__file__).resolve().parents[1]))
+SCRIPTS_DIR = Path(__file__).resolve().parent
+ARTIFACTS = REPO_ROOT / "Artifacts"
+
+DEFAULT_ROOT = REPO_ROOT / "Raw_Cross_Section_Data"
+DEFAULT_LAKE = ARTIFACTS / "Dictionary" / "dictionary_lake.parquet"
+DEFAULT_CROSS = ARTIFACTS / "Cross_sections"
+DEFAULT_PARTS = ARTIFACTS / "Cross_sections"
+DEFAULT_STITCH = ARTIFACTS / "Panels" / "2004-2024" / "panel_long_varnum_2004_2024.parquet"
+DEFAULT_WIDE_OUT = ARTIFACTS / "Panels" / "wide_2004_2024"
+DEFAULT_DISC_QC = ARTIFACTS / "Checks" / "disc_qc"
+DEFAULT_WIDE_QC = ARTIFACTS / "Checks" / "wide_qc"
+DEFAULT_WIDE_STITCH = ARTIFACTS / "Panels" / "2004_2024_IPEDS_Raw_Panel_DS.parquet"
+DEFAULT_CLEAN_PANEL = ARTIFACTS / "Panels" / "2004_2024_IPEDS_clean_Panel_DS.parquet"
+DEFAULT_CUSTOM_OUT = ARTIFACTS / "Panels" / "custom_panel.parquet"
+DEFAULT_PRCH_CLEAN = ARTIFACTS / "Panels" / "2004_2024_IPEDS_PRCHclean_Panel_DS.parquet"
+DEFAULT_PRCH_QC = ARTIFACTS / "Checks" / "prch_qc"
+DEFAULT_RELEASE_QC = ARTIFACTS / "Checks" / "release_qc"
+DEFAULT_LOG_DIR = ARTIFACTS / "Checks" / "logs"
 
 
 def parse_years(spec: str) -> list[int]:
@@ -129,14 +134,14 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true", help="Print commands without executing")
     ap.add_argument("--release-allow", default="revised,final", help="Comma list of allowed release statuses")
     ap.add_argument("--release-strict", action=argparse.BooleanOptionalAction, default=True, help="Fail if manifest is missing or not revised/final")
-    ap.add_argument("--release-qc-dir", default=str(BASE / "Checks" / "release_qc"), help="QC dir for release validation")
+    ap.add_argument("--release-qc-dir", default=str(DEFAULT_RELEASE_QC), help="QC dir for release validation")
     ap.add_argument("--harmonize-chunksize", type=int, default=50_000, help="Row chunksize for 03_harmonize (lower uses less RAM)")
     ap.add_argument("--harmonize-value-cols-per-chunk", type=int, default=250, help="Max value columns per melt chunk in 03_harmonize")
     ap.add_argument("--dedupe", action=argparse.BooleanOptionalAction, default=True, help="Deterministically drop duplicate (UNITID, year, varname)")
     ap.add_argument("--dedupe-priority", default=None, help="Override source_file priority list for dedupe")
     ap.add_argument("--final-dedupe", action=argparse.BooleanOptionalAction, default=True, help="Run final DuckDB dedupe after write")
     ap.add_argument("--duckdb-temp-dir", default=None, help="Temp directory for DuckDB during dedupe")
-    ap.add_argument("--log-dir", default=str(BASE / "Checks" / "logs"), help="Directory for per-step logs")
+    ap.add_argument("--log-dir", default=str(DEFAULT_LOG_DIR), help="Directory for per-step logs")
     ap.add_argument("--build-custom", action=argparse.BooleanOptionalAction, default=False, help="Build a custom wide panel from the cleaned panel")
     ap.add_argument("--custom-input", default=str(DEFAULT_CLEAN_PANEL), help="Input wide panel for custom extraction")
     ap.add_argument("--custom-out", default=str(DEFAULT_CUSTOM_OUT), help="Output path for custom panel")
@@ -166,7 +171,7 @@ def main() -> None:
             continue
         cmd = [
             sys.executable,
-            "03_harmonize.py",
+            str(SCRIPTS_DIR / "03_harmonize.py"),
             "--root",
             args.root,
             "--lake",
@@ -228,7 +233,7 @@ def main() -> None:
         wide_years = args.wide_years if args.wide_years else args.years
         cmd = [
             sys.executable,
-            "Panels/04_build_wide_panel.py",
+            str(SCRIPTS_DIR / "04_build_wide_panel.py"),
             "--input",
             str(wide_input),
             "--out_dir",
@@ -272,7 +277,7 @@ def main() -> None:
         # PRCH clean
         cmd = [
             sys.executable,
-            "Cleaning/05_cleaning_panel.py",
+            str(SCRIPTS_DIR / "05_clean_panel.py"),
             "--input",
             str(raw_wide),
             "--output",
@@ -288,7 +293,7 @@ def main() -> None:
         # Research-ready clean (optionally drop X* flags)
         cmd = [
             sys.executable,
-            "Cleaning/05_cleaning_panel.py",
+            str(SCRIPTS_DIR / "05_clean_panel.py"),
             "--input",
             str(raw_wide),
             "--output",
@@ -309,7 +314,7 @@ def main() -> None:
             raise SystemExit("Custom build requires --custom-vars or --custom-vars-file.")
         cmd = [
             sys.executable,
-            "Panels/06_build_custom_panel.py",
+            str(SCRIPTS_DIR / "06_build_custom_panel.py"),
             "--input",
             args.custom_input,
             "--output",

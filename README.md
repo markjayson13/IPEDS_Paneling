@@ -305,6 +305,15 @@ python3 Dictionary/02_dictionary_qaqc.py \
   --excel-text
 ```
 
+QC Output Folders (What They Mean)
+----------------------------------
+- `release_qc/` — Release validation results (Revised/Final checks during harmonization).
+- `disc_qc/` — Discrete-collapse conflict reports from wide panel build.
+- `wide_qc/` — Wide panel summary stats from the wide build.
+- `prch_qc/` — Parent–child cleaning summaries.
+- `panel_qc/` — QA comparison of raw vs PRCH‑cleaned wide panels.
+- `dups_qc/` — Duplicate-key samples from wide build (optional).
+
 3) Harmonize per‑year (streaming, low‑RAM):
 ```bash
 python3 03_harmonize.py \

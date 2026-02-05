@@ -9,10 +9,12 @@ Safest policy (Option A):
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
 from typing import Callable
+import pathlib
 
 import pandas as pd
 import pyarrow as pa
@@ -54,7 +56,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--log-every", type=int, default=50, help="Log progress every N batches")
     p.add_argument("--drop-imputation-flags", action=argparse.BooleanOptionalAction, default=False, help="Drop X* imputation columns")
     repo_root = pathlib.Path(os.environ.get("IPEDS_ROOT", pathlib.Path(__file__).resolve().parents[1]))
-    p.add_argument("--log-file", default=str(repo_root / "Checks" / "logs" / "05_cleaning_panel.log"), help="Optional log file path")
+    artifacts_root = repo_root / "Artifacts"
+    p.add_argument("--log-file", default=str(artifacts_root / "Checks" / "logs" / "05_cleaning_panel.log"), help="Optional log file path")
     return p.parse_args()
 
 

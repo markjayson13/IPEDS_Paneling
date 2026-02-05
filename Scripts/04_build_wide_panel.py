@@ -16,6 +16,7 @@ import os
 import re
 from typing import Iterable, List
 import sys
+import pathlib
 from pathlib import Path
 
 import pandas as pd
@@ -181,7 +182,8 @@ def main() -> None:
     ap.add_argument("--dups-qc-gzip", action="store_true", help="Write dup samples as .csv.gz")
     ap.add_argument("--qc-dir", default=None, help="Optional dir to write QC summary CSV")
     repo_root = pathlib.Path(os.environ.get("IPEDS_ROOT", pathlib.Path(__file__).resolve().parents[1]))
-    ap.add_argument("--log-file", default=str(repo_root / "Checks" / "logs" / "04_build_wide_panel.log"), help="Optional log file path")
+    artifacts_root = repo_root / "Artifacts"
+    ap.add_argument("--log-file", default=str(artifacts_root / "Checks" / "logs" / "04_build_wide_panel.log"), help="Optional log file path")
     args = ap.parse_args()
 
     setup_logging(args.log_file)

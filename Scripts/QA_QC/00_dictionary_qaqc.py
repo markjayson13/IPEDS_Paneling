@@ -13,11 +13,12 @@ from pathlib import Path
 
 import pandas as pd
 
-BASE = Path(os.environ.get("IPEDS_ROOT", Path(__file__).resolve().parents[1]))
-DEFAULT_CODES = BASE / "Dictionary" / "dictionary_codes.parquet"
-DEFAULT_COLLAPSED = BASE / "Dictionary" / "dictionary_codes_collapsed.csv"
-DEFAULT_SOURCE_YEARS = BASE / "Dictionary" / "source_file_years.csv"
-DEFAULT_QAQC = BASE / "Dictionary" / "dictionary_codes_qaqc.csv"
+BASE = Path(os.environ.get("IPEDS_ROOT", Path(__file__).resolve().parents[2]))
+ARTIFACTS = BASE / "Artifacts"
+DEFAULT_CODES = ARTIFACTS / "Dictionary" / "dictionary_codes.parquet"
+DEFAULT_COLLAPSED = ARTIFACTS / "Dictionary" / "dictionary_codes_collapsed.csv"
+DEFAULT_SOURCE_YEARS = ARTIFACTS / "Dictionary" / "source_file_years.csv"
+DEFAULT_QAQC = ARTIFACTS / "Dictionary" / "dictionary_codes_qaqc.csv"
 
 
 def parse_args() -> argparse.Namespace:

@@ -390,14 +390,26 @@ def main():
     ap.add_argument("--duckdb-temp-dir", default=None, help="Optional temp directory for DuckDB (used during final dedupe)")
     ap.add_argument("--release-allow", default="revised,final", help="Comma list of allowed release statuses")
     ap.add_argument("--release-strict", action=argparse.BooleanOptionalAction, default=True, help="Fail if manifest is missing or not revised/final")
-    repo_root = pathlib.Path(os.environ.get("IPEDS_ROOT", pathlib.Path(__file__).resolve().parent))
-    ap.add_argument("--release-qc-dir", default=str(repo_root / "Checks" / "release_qc"), help="QC dir for release validation")
-    ap.add_argument("--log-file", default=str(repo_root / "Checks" / "logs" / "03_harmonize.log"), help="Optional log file path")
+    ap.add_argument("--qc-only", action="store_true", help="Only run release QC and exit; no output is written")
+    repo_root = pathlib.Path(os.environ.get("IPEDS_ROOT", pathlib.Path(__file__).resolve().parents[1]))
+    artifacts_root = repo_root / "Artifacts"
+    ap.add_argument("--release-qc-dir", default=str(artifacts_root / "Checks" / "release_qc"), help="QC dir for release validation")
+    ap.add_argument("--log-file", default=str(artifacts_root / "Checks" / "logs" / "03_harmonize.log"), help="Optional log file path")
     args = ap.parse_args()
 
     setup_logging(args.log_file)
 
     years = parse_years(args.years)
+    allowlist = {s.strip().lower() for s in args.release_allow.split(",") if s.strip()}
+    qc_dir = pathlib.Path(args.release_qc_dir) if args.release_qc_dir else None
+
+    if args.qc_only:
+        for year in years:
+            year_root = pathlib.Path(args.root) / str(year)
+            check_release_manifest(year_root, year, allowlist, args.release_strict, qc_dir)
+        print("[info] release QC complete (qc-only)")
+        return
+
     dict_df = pd.read_parquet(args.lake)
     dict_df["varnumber"] = dict_df["varnumber"].astype(str).str.zfill(8)
     dict_df["varname"] = dict_df["varname"].astype(str).str.upper()
@@ -421,9 +433,6 @@ def main():
 
     # Ensure intermediate per-year directory exists when writing year-by-year runs
     # (useful if caller passes outputs like .../Cross_sections/panel_long_varnum_<year>.parquet)
-
-    allowlist = {s.strip().lower() for s in args.release_allow.split(",") if s.strip()}
-    qc_dir = pathlib.Path(args.release_qc_dir) if args.release_qc_dir else None
 
     def iter_chunks_for_year(year: int):
         print(f"[info] processing year {year}")
