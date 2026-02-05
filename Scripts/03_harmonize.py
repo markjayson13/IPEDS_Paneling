@@ -221,6 +221,7 @@ def melt_file(
     value_cols_per_chunk: int,
     chunksize: int,
     log_prefix: str = "",
+    na_drop_log: list[dict] | None = None,
 ) -> Iterable[pd.DataFrame]:
     logged = False
     for df in read_table_iter(fp, chunksize=chunksize):
@@ -234,12 +235,27 @@ def melt_file(
         before_rows = len(df)
         df = df.dropna(subset=["UNITID"])
         dropped = before_rows - len(df)
-        if dropped > 0:
+        if dropped > 0 and not logged:
             print(f"{log_prefix}[warn] {fp.name} dropped_rows_missing_UNITID={dropped}")
-            if strict:
-                raise SystemExit(
-                    f"[fatal] missing UNITID rows detected in {fp.name} (dropped={dropped})."
-                )
+        if dropped > 0 and na_drop_log is not None:
+            na_drop_log.append(
+                {
+                    "year": year,
+                    "file": fp.name,
+                    "stage": "pre_melt",
+                    "dropped_rows_missing_UNITID": int(dropped),
+                    "rows_before": int(before_rows),
+                    "rows_after": int(len(df)),
+                }
+            )
+        if dropped > 0 and strict:
+            raise SystemExit(
+                f"[fatal] missing UNITID rows detected in {fp.name} (dropped={dropped})."
+            )
+        if df.empty:
+            continue
+        if strict and df["UNITID"].isna().any():
+            raise SystemExit(f"[fatal] NA UNITID remained after pre-melt cleanup for {fp.name} year={year}")
         id_cols = ["UNITID"]
         # Keep only vars we can match in the dictionary for this year
         value_cols = [c for c in df.columns if c not in id_cols and c in dict_vars]
@@ -251,21 +267,68 @@ def melt_file(
         for col_chunk in _chunk_cols(value_cols, value_cols_per_chunk):
             long = df.melt(id_vars=id_cols, value_vars=col_chunk, var_name="varname", value_name="value")
             long["year"] = year
-            if strict:
-                merged = long.merge(dict_year, on=["year", "varname"], how="left", validate="m:1")
-                if len(merged) != len(long):
-                    raise SystemExit(
-                        f"[fatal] dictionary merge expanded rows for {fp.name} year={year}: "
-                        f"{len(long)} -> {len(merged)}"
-                    )
-            else:
-                merged = long.merge(dict_year, on=["year", "varname"], how="left")
+            before_long = len(long)
+            long = long.dropna(subset=["UNITID"])
+            dropped_post = before_long - len(long)
+            if dropped_post > 0:
+                print(f"{log_prefix}[warn] {fp.name} post_melt_dropped_rows_missing_UNITID={dropped_post}")
+            if dropped_post > 0 and na_drop_log is not None:
+                na_drop_log.append(
+                    {
+                        "year": year,
+                        "file": fp.name,
+                        "stage": "post_melt",
+                        "dropped_rows_missing_UNITID": int(dropped_post),
+                        "rows_before": int(before_long),
+                        "rows_after": int(len(long)),
+                    }
+                )
+            if dropped_post > 0 and strict:
+                raise SystemExit(
+                    f"[fatal] missing UNITID rows detected after melt in {fp.name} (dropped={dropped_post})."
+                )
+            if strict and long["UNITID"].isna().any():
+                raise SystemExit(f"[fatal] NA UNITID remained after post-melt cleanup for {fp.name} year={year}")
+
+            dups = dict_year.duplicated(["year", "varname"]).sum() if not dict_year.empty else 0
+            if dups:
+                raise SystemExit(
+                    f"[fatal] dict_year not unique on (year,varname) for year={year} (dups={dups}). "
+                    "This would multiply rows; fix preferred-source reduction."
+                )
+
+            before_merge = len(long)
+            merged = long.merge(dict_year, on=["year", "varname"], how="left", validate="m:1")
+            if len(merged) != before_merge:
+                raise SystemExit(
+                    f"[fatal] dictionary merge expanded rows for {fp.name} year={year}: "
+                    f"{before_merge} -> {len(merged)}"
+                )
+            if strict and merged["UNITID"].isna().any():
+                raise SystemExit(f"[fatal] NA UNITID survived into merged output for {fp.name} year={year}")
+
+            missing_varnumber = int(merged["varnumber"].isna().sum())
+            if missing_varnumber > 0 and strict:
+                raise SystemExit(
+                    f"[fatal] missing varnumber after merge for {fp.name} year={year} "
+                    f"(rows={missing_varnumber})"
+                )
             merged = merged.dropna(subset=["varnumber"])
             # Ensure source_file exists (from dictionary); fall back to data filename if missing.
             if "source_file" not in merged.columns:
+                if strict:
+                    raise SystemExit(f"[fatal] missing source_file column after merge for {fp.name} year={year}")
                 merged["source_file"] = fp.name
             else:
+                missing_source_file = int(merged["source_file"].isna().sum())
+                if missing_source_file > 0 and strict:
+                    raise SystemExit(
+                        f"[fatal] missing source_file after merge for {fp.name} year={year} "
+                        f"(rows={missing_source_file})"
+                    )
                 merged["source_file"] = merged["source_file"].fillna(fp.name)
+            if strict and merged["source_file"].isna().any():
+                raise SystemExit(f"[fatal] NA source_file in merged output for {fp.name} year={year}")
             # NOTE: preferred_source filtering is applied to dict_year before merge.
             # Return full long rows; we'll pivot to wide in a separate step
             cols = [
@@ -409,7 +472,12 @@ def main():
     ap.add_argument("--duckdb-temp-dir", default=None, help="Optional temp directory for DuckDB (used during final dedupe)")
     ap.add_argument("--release-allow", default="revised,final", help="Comma list of allowed release statuses")
     ap.add_argument("--release-strict", action=argparse.BooleanOptionalAction, default=True, help="Fail if manifest is missing or not revised/final")
-    ap.add_argument("--strict", action=argparse.BooleanOptionalAction, default=False, help="Fail fast on missing UNITID or dictionary merge expansion")
+    ap.add_argument(
+        "--strict",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Fail fast on schema and merge anomalies (default: True for debug runs)",
+    )
     ap.add_argument("--qc-only", action="store_true", help="Only run release QC and exit; no output is written")
     repo_root = pathlib.Path(os.environ.get("IPEDS_ROOT", pathlib.Path(__file__).resolve().parents[1]))
     artifacts_root = repo_root / "Artifacts"
@@ -422,6 +490,10 @@ def main():
     years = parse_years(args.years)
     allowlist = {s.strip().lower() for s in args.release_allow.split(",") if s.strip()}
     qc_dir = pathlib.Path(args.release_qc_dir) if args.release_qc_dir else None
+    checks_root = qc_dir.parent if qc_dir is not None else artifacts_root / "Checks"
+    harmonize_qc_dir = checks_root / "harmonize_qc"
+    harmonize_qc_dir.mkdir(parents=True, exist_ok=True)
+    na_drop_log: list[dict] = []
 
     if args.qc_only:
         for year in years:
@@ -503,6 +575,7 @@ def main():
                 args.value_cols_per_chunk,
                 args.chunksize,
                 log_prefix=f"[year {year}] ",
+                na_drop_log=na_drop_log,
             ):
                 if not chunk.empty:
                     yield chunk
@@ -515,54 +588,68 @@ def main():
     else:
         temp_dir = out_path.parent / ".duckdb_tmp"
 
-    if args.parts_dir:
-        parts_dir = pathlib.Path(args.parts_dir)
-        # If a parts dir already exists and reuse is allowed, stitch without reprocessing
-        if args.reuse_parts and parts_dir.exists():
-            part_files = sorted(parts_dir.glob("part_*.parquet"))
-            if part_files:
-                tmp_out = out_path.with_suffix(out_path.suffix + ".tmp")
-                if tmp_out.exists():
-                    tmp_out.unlink()
-                writer = None
-                for part in part_files:
-                    pf = pq.ParquetFile(part)
-                    for batch in pf.iter_batches():
-                        if writer is None:
-                            writer = pq.ParquetWriter(tmp_out, batch.schema, compression="snappy")
-                        writer.write_batch(batch)
-                if writer:
-                    writer.close()
-                    tmp_out.replace(out_path)
-                    print(f"[info] stitched from existing parts: {out_path}")
-                    if args.dedupe and args.final_dedupe:
-                        prio_list = [k.strip() for k in args.dedupe_priority.split(",") if k.strip()]
-                        dedupe_long_panel(out_path, prio_list, temp_dir)
-                    if args.cleanup_parts:
-                        try:
-                            import shutil
-                            shutil.rmtree(parts_dir)
-                            print(f"[info] removed parts dir: {parts_dir}")
-                        except Exception as e:
-                            print(f"[warn] failed to remove parts dir {parts_dir}: {e}")
-                    return
-        # Otherwise, process and write parts
-        write_parquet_parts(out_path, iter_chunks_for_year(years[0]) if len(years) == 1 else (chunk for y in years for chunk in iter_chunks_for_year(y)), parts_dir)
-        if args.dedupe and args.final_dedupe:
-            prio_list = [k.strip() for k in args.dedupe_priority.split(",") if k.strip()]
-            dedupe_long_panel(out_path, prio_list, temp_dir)
-        if args.cleanup_parts:
-            try:
-                import shutil
-                shutil.rmtree(parts_dir)
-                print(f"[info] removed parts dir: {parts_dir}")
-            except Exception as e:
-                print(f"[warn] failed to remove parts dir {parts_dir}: {e}")
-    else:
-        write_parquet_stream(out_path, (chunk for y in years for chunk in iter_chunks_for_year(y)))
-        if args.dedupe and args.final_dedupe:
-            prio_list = [k.strip() for k in args.dedupe_priority.split(",") if k.strip()]
-            dedupe_long_panel(out_path, prio_list, temp_dir)
+    def flush_na_drop_log() -> None:
+        if not na_drop_log:
+            return
+        drop_log_path = harmonize_qc_dir / "dropped_missing_unitid_by_file.csv"
+        pd.DataFrame(na_drop_log).to_csv(drop_log_path, index=False)
+        print(f"[info] wrote {drop_log_path}")
+
+    try:
+        if args.parts_dir:
+            parts_dir = pathlib.Path(args.parts_dir)
+            # If a parts dir already exists and reuse is allowed, stitch without reprocessing
+            if args.reuse_parts and parts_dir.exists():
+                part_files = sorted(parts_dir.glob("part_*.parquet"))
+                if part_files:
+                    tmp_out = out_path.with_suffix(out_path.suffix + ".tmp")
+                    if tmp_out.exists():
+                        tmp_out.unlink()
+                    writer = None
+                    for part in part_files:
+                        pf = pq.ParquetFile(part)
+                        for batch in pf.iter_batches():
+                            if writer is None:
+                                writer = pq.ParquetWriter(tmp_out, batch.schema, compression="snappy")
+                            writer.write_batch(batch)
+                    if writer:
+                        writer.close()
+                        tmp_out.replace(out_path)
+                        print(f"[info] stitched from existing parts: {out_path}")
+                        if args.dedupe and args.final_dedupe:
+                            prio_list = [k.strip() for k in args.dedupe_priority.split(",") if k.strip()]
+                            dedupe_long_panel(out_path, prio_list, temp_dir)
+                        if args.cleanup_parts:
+                            try:
+                                import shutil
+                                shutil.rmtree(parts_dir)
+                                print(f"[info] removed parts dir: {parts_dir}")
+                            except Exception as e:
+                                print(f"[warn] failed to remove parts dir {parts_dir}: {e}")
+                        return
+            # Otherwise, process and write parts
+            write_parquet_parts(
+                out_path,
+                iter_chunks_for_year(years[0]) if len(years) == 1 else (chunk for y in years for chunk in iter_chunks_for_year(y)),
+                parts_dir,
+            )
+            if args.dedupe and args.final_dedupe:
+                prio_list = [k.strip() for k in args.dedupe_priority.split(",") if k.strip()]
+                dedupe_long_panel(out_path, prio_list, temp_dir)
+            if args.cleanup_parts:
+                try:
+                    import shutil
+                    shutil.rmtree(parts_dir)
+                    print(f"[info] removed parts dir: {parts_dir}")
+                except Exception as e:
+                    print(f"[warn] failed to remove parts dir {parts_dir}: {e}")
+        else:
+            write_parquet_stream(out_path, (chunk for y in years for chunk in iter_chunks_for_year(y)))
+            if args.dedupe and args.final_dedupe:
+                prio_list = [k.strip() for k in args.dedupe_priority.split(",") if k.strip()]
+                dedupe_long_panel(out_path, prio_list, temp_dir)
+    finally:
+        flush_na_drop_log()
     print(f"[info] wrote {out_path}")
 
 
