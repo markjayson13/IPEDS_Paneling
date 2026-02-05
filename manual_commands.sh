@@ -71,3 +71,8 @@ echo "  python3 \"$ROOT/Panels/06_build_custom_panel.py\" \\"
 echo "    --input \"$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet\" \\"
 echo "    --vars \"INSTNM,SECTOR,TUITION1,PELL_RECP\" \\"
 echo "    --output \"$IPEDS_ROOT/Panels/custom_panel.parquet\""
+
+
+/Users/markjaysonfarol13/IPEDS_Paneling/IPEDS_Paneling paper/audit_pack_out/03_long_panel/panel_long_2004_2024.parquet
+
+python3 -c "import pyarrow.parquet as pq; print(pq.ParquetFile('/Users/markjaysonfarol13/IPEDS_Paneling/IPEDS_Paneling paper/audit_pack_out/03_long_panel/panel_long_2004_2024.parquet').schema.names)"

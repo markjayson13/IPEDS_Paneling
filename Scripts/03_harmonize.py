@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Harmonizer that builds a LONG panel keyed by (UNITID, year, varname) with varnumber metadata.
+Harmonizer that builds a LONG panel with provenance-preserving grain:
+  canonical key = (UNITID, year, varnumber, source_file)
 
 Inputs:
   - root:   /path/to/Raw_Cross_Section_Data
@@ -13,6 +14,9 @@ Behavior:
   - Skips dictionary folders (name contains "_dict" case‑insensitive)
   - Reads in chunks (low RAM), requires UNITID
   - Melts to long, merges with dictionary on (year, varname)
+      NOTE: dictionary is reduced to a single preferred row per (year, varname) before merge
+            to prevent cartesian expansion.
+  - Drops rows with missing UNITID to avoid <NA> cross-product explosions.
   - Writes a parquet with columns:
       year, UNITID, varname, varnumber, value,
       varTitle, longDescription, DataType, format, Fieldwidth, imputationvar, source_file
@@ -213,6 +217,7 @@ def melt_file(
     dict_year: pd.DataFrame,
     dict_vars: set[str],
     pref_df: pd.DataFrame | None,
+    strict: bool,
     value_cols_per_chunk: int,
     chunksize: int,
     log_prefix: str = "",
@@ -226,6 +231,15 @@ def melt_file(
         if "UNITID" not in df.columns:
             continue
         df["UNITID"] = pd.to_numeric(df["UNITID"], errors="coerce").astype("Int64")
+        before_rows = len(df)
+        df = df.dropna(subset=["UNITID"])
+        dropped = before_rows - len(df)
+        if dropped > 0:
+            print(f"{log_prefix}[warn] {fp.name} dropped_rows_missing_UNITID={dropped}")
+            if strict:
+                raise SystemExit(
+                    f"[fatal] missing UNITID rows detected in {fp.name} (dropped={dropped})."
+                )
         id_cols = ["UNITID"]
         # Keep only vars we can match in the dictionary for this year
         value_cols = [c for c in df.columns if c not in id_cols and c in dict_vars]
@@ -237,18 +251,22 @@ def melt_file(
         for col_chunk in _chunk_cols(value_cols, value_cols_per_chunk):
             long = df.melt(id_vars=id_cols, value_vars=col_chunk, var_name="varname", value_name="value")
             long["year"] = year
-            merged = long.merge(dict_year, on=["year", "varname"], how="left")
+            if strict:
+                merged = long.merge(dict_year, on=["year", "varname"], how="left", validate="m:1")
+                if len(merged) != len(long):
+                    raise SystemExit(
+                        f"[fatal] dictionary merge expanded rows for {fp.name} year={year}: "
+                        f"{len(long)} -> {len(merged)}"
+                    )
+            else:
+                merged = long.merge(dict_year, on=["year", "varname"], how="left")
             merged = merged.dropna(subset=["varnumber"])
             # Ensure source_file exists (from dictionary); fall back to data filename if missing.
             if "source_file" not in merged.columns:
                 merged["source_file"] = fp.name
             else:
                 merged["source_file"] = merged["source_file"].fillna(fp.name)
-            # Deterministic de-duplication by preferred source per (year, varname)
-            if pref_df is not None and not pref_df.empty:
-                merged = merged.merge(pref_df, on=["year", "varname"], how="left")
-                merged = merged[(merged["preferred_source"].isna()) | (merged["source_file"] == merged["preferred_source"])]
-                merged = merged.drop(columns=["preferred_source"])
+            # NOTE: preferred_source filtering is applied to dict_year before merge.
             # Return full long rows; we'll pivot to wide in a separate step
             cols = [
                 "year",
@@ -324,7 +342,8 @@ def write_parquet_parts(out_path: pathlib.Path, frames: Iterable[pd.DataFrame], 
 
 def dedupe_long_panel(out_path: pathlib.Path, priority_list: list[str], temp_dir: pathlib.Path | None = None) -> None:
     """
-    Deterministically drop duplicate (UNITID, year, varname) rows by source_file priority.
+    Deterministically drop duplicate canonical-key rows by source_file priority.
+    Canonical key = (UNITID, year, varnumber, source_file).
     Uses DuckDB to avoid loading the full parquet into memory.
     """
     if not out_path.exists():
@@ -361,7 +380,7 @@ def dedupe_long_panel(out_path: pathlib.Path, priority_list: list[str], temp_dir
                 SELECT *,
                        {case_expr} AS _src_rank,
                        ROW_NUMBER() OVER (
-                           PARTITION BY UNITID, year, varname
+                           PARTITION BY UNITID, year, varnumber, source_file
                            ORDER BY {order_expr}
                        ) AS _rn
                 FROM read_parquet('{out_path}')
@@ -384,12 +403,13 @@ def main():
     ap.add_argument("--cleanup-parts", action=argparse.BooleanOptionalAction, default=True, help="Remove parts directory after successful stitch")
     ap.add_argument("--chunksize", type=int, default=50000, help="Row chunksize for CSV reading (lower uses less RAM)")
     ap.add_argument("--value-cols-per-chunk", type=int, default=250, help="Max number of value columns to melt per chunk")
-    ap.add_argument("--dedupe", action=argparse.BooleanOptionalAction, default=True, help="Deterministically drop duplicate (UNITID, year, varname) by preferred source_file")
+    ap.add_argument("--dedupe", action=argparse.BooleanOptionalAction, default=True, help="Deterministically drop duplicate canonical-key rows by preferred source_file")
     ap.add_argument("--dedupe-priority", default="HD,IC,IC_AY,IC_PY,ADM,AL,C_A,C_B,C_C,CDEP,COST,EAP,EFA,EFA_DIST,EFB,EFC,EFCP,EFFY,EFFY_DIST,EFIA,FLAGS,F_F,F_FA,F_FA_F,F_FA_G,GR,GR200,GR_PELL_SSL,OM,SAL_A,SAL_A_LT,SAL_B,SAL_FACULTY,SAL_IS,S_ABD,S_CN,S_F,S_G,S_IS,S_NH,S_OC,S_SIS,SFA,SFAV", help="Comma-separated source_file priority list for dedupe")
     ap.add_argument("--final-dedupe", action=argparse.BooleanOptionalAction, default=True, help="Apply a final deterministic de-duplication on the output parquet")
     ap.add_argument("--duckdb-temp-dir", default=None, help="Optional temp directory for DuckDB (used during final dedupe)")
     ap.add_argument("--release-allow", default="revised,final", help="Comma list of allowed release statuses")
     ap.add_argument("--release-strict", action=argparse.BooleanOptionalAction, default=True, help="Fail if manifest is missing or not revised/final")
+    ap.add_argument("--strict", action=argparse.BooleanOptionalAction, default=False, help="Fail fast on missing UNITID or dictionary merge expansion")
     ap.add_argument("--qc-only", action="store_true", help="Only run release QC and exit; no output is written")
     repo_root = pathlib.Path(os.environ.get("IPEDS_ROOT", pathlib.Path(__file__).resolve().parents[1]))
     artifacts_root = repo_root / "Artifacts"
@@ -454,6 +474,19 @@ def main():
                 pref["rank"] = pref["source_file"].map(prio).fillna(999).astype(int)
                 pref = pref.sort_values(["year", "varname", "rank", "source_file"]).drop_duplicates(["year", "varname"], keep="first")
                 pref_df = pref[["year", "varname", "source_file"]].rename(columns={"source_file": "preferred_source"})
+        if pref_df is not None and not pref_df.empty and not dict_year.empty:
+            dict_year = dict_year.merge(pref_df, on=["year", "varname"], how="left")
+            dict_year = dict_year[(dict_year["preferred_source"].isna()) | (dict_year["source_file"] == dict_year["preferred_source"])]
+            dict_year = dict_year.drop(columns=["preferred_source"])
+        if not dict_year.empty:
+            dup = dict_year.duplicated(["year", "varname"]).sum()
+            if dup:
+                msg = f"[warn] dict_year not unique on (year,varname) for year={year} (dups={dup})"
+                if args.strict:
+                    raise SystemExit(f"[fatal] {msg}")
+                print(msg)
+                dict_year = dict_year.drop_duplicates(["year", "varname"], keep="first")
+            dict_vars = set(dict_year["varname"].dropna().unique())
         all_files = list(discover_files(year_root))
         files = prefer_rv_files(all_files)
         skipped_rv = len(all_files) - len(files)
@@ -466,6 +499,7 @@ def main():
                 dict_year,
                 dict_vars,
                 pref_df,
+                args.strict,
                 args.value_cols_per_chunk,
                 args.chunksize,
                 log_prefix=f"[year {year}] ",
