@@ -234,27 +234,6 @@ python3 08_run_pipeline.py \
   --no-final-dedupe
 ```
 
-Audit Pack (Reviewer Bundle)
-----------------------------
-This builds `audit_pack/` and writes a zip to **`$IPEDS_ROOT/Checks/audit_pack.zip`**.
-If the long panel contains duplicate keys, use `--allow-duplicates` to record counts and continue.
-
-```bash
-python3 09_build_audit_pack.py \
-  --out-dir audit_pack \
-  --zip \
-  --allow-duplicates \
-  --years "2004:2024" \
-  --raw-root "$IPEDS_ROOT/Raw_Cross_Section_Data" \
-  --checks-dir "$IPEDS_ROOT/Checks" \
-  --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
-  --dictionary-codes "$IPEDS_ROOT/Dictionary/dictionary_codes.parquet" \
-  --long-panel "$IPEDS_ROOT/Panels/2004-2024/panel_long_varnum_2004_2024.parquet" \
-  --wide-raw "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
-  --wide-prch "$IPEDS_ROOT/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet" \
-  --wide-clean "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet"
-```
-
 Minimal End‑to‑End (run_pipeline + custom subset)
 -------------------------------------------------
 This is the shortest safe path to a research‑ready custom panel.
@@ -288,10 +267,22 @@ Notebook (Supplementary QA/QC)
 `Artifacts/paper_artifacts_overview.ipynb` is **supplementary**.  
 It is intended for **QA/QC viewing**, not as the production pipeline.
 
-One‑liner: full end‑to‑end (raw → PRCH clean → clean → custom subset)
----------------------------------------------------------------------
+One‑liner: build the research‑ready clean panel
+------------------------------------------------
+This builds `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet` and then prints the
+custom‑panel command as the next step. The script automatically sets `IPEDS_ROOT`
+to the repo root and creates output folders (`Panels/`, `Checks/`, `Cross_sections/`).
+
 ```bash
-python3 08_run_pipeline.py --release-allow "revised,final" --release-qc-dir "$IPEDS_ROOT/Checks/release_qc" --stitch-wide --stitch-wide-out "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" && python3 Cleaning/05_cleaning_panel.py --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" --output "$IPEDS_ROOT/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet" --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" --qc-dir "$IPEDS_ROOT/Checks/prch_qc" && python3 Cleaning/05_cleaning_panel.py --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" --output "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" --qc-dir "$IPEDS_ROOT/Checks/prch_qc" --drop-imputation-flags && python3 Panels/06_build_custom_panel.py --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" --vars "INSTNM,SECTOR,TUITION1,PELL_RECP" --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
+bash manual_commands.sh
+```
+
+Then build your custom panel:
+```bash
+python3 Panels/06_build_custom_panel.py \
+  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
+  --vars "INSTNM,SECTOR,TUITION1,PELL_RECP" \
+  --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
 ```
 
 Manual Commands (Advanced)
