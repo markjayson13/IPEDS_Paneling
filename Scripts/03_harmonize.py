@@ -33,6 +33,8 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+REPO_ROOT = pathlib.Path(os.environ.get("IPEDS_ROOT", pathlib.Path(__file__).resolve().parents[1]))
+
 
 def setup_logging(log_path: str | None) -> None:
     if not log_path:
@@ -97,6 +99,117 @@ def prefer_rv_files(files: Iterable[pathlib.Path]) -> list[pathlib.Path]:
         else:
             kept.extend([fp for _, fp in entries])
     return kept
+
+
+def _manifest_filename_column(df: pd.DataFrame) -> str | None:
+    """
+    Best-effort detection of a filename/path column in a year manifest.
+    """
+    candidates = ["filename", "file", "filepath", "path", "data_file", "datafile"]
+    lower = {c.lower(): c for c in df.columns}
+    for c in candidates:
+        if c in lower:
+            return lower[c]
+    return None
+
+
+def _normalized_name_key(name: str) -> str:
+    """
+    Normalize filenames across manifest archives and extracted data files.
+    Example:
+      - IC2004.zip -> ic2004
+      - ic2004.csv -> ic2004
+      - c2004_a_rv.csv -> c2004_a
+    """
+    stem = pathlib.Path(str(name)).stem.lower().strip()
+    if stem.endswith("_rv"):
+        return stem[:-3]
+    return stem
+
+
+def build_manifest_allowlist(
+    year_root: pathlib.Path,
+    year: int,
+    allowlist_status: set[str],
+    strict: bool,
+    qc_dir: pathlib.Path | None,
+) -> set[str] | None:
+    """
+    Build an allowlist of file basenames from {year}_manifest.csv.
+    """
+    manifest_path = year_root / f"{year}_manifest.csv"
+    if not manifest_path.exists():
+        if strict:
+            raise SystemExit(f"[release] missing manifest: {manifest_path}")
+        print(f"[release] missing manifest (allowlist disabled): {manifest_path}")
+        return None
+
+    df = pd.read_csv(manifest_path, dtype=str).fillna("")
+    fname_col = _manifest_filename_column(df)
+    if fname_col is None:
+        msg = f"[release] manifest has no filename/path column; allowlist disabled: {manifest_path}"
+        if strict:
+            raise SystemExit(msg)
+        print(msg)
+        return None
+
+    if "release" not in df.columns:
+        msg = f"[release] manifest missing 'release' column; allowlist disabled: {manifest_path}"
+        if strict:
+            raise SystemExit(msg)
+        print(msg)
+        return None
+
+    # Keep release handling consistent with check_release_manifest.
+    df["release_norm"] = df["release"].astype(str).str.strip().str.lower()
+    if "is_revision" in df.columns:
+        df["is_revision_norm"] = df["is_revision"].astype(str).str.strip().str.lower().isin(["1", "true", "yes", "y"])
+    else:
+        df["is_revision_norm"] = False
+    df["status"] = df["release_norm"]
+    df.loc[df["is_revision_norm"], "status"] = "revised"
+    df["allowed"] = df["status"].isin(allowlist_status) | (df["status"] == "")
+
+    # Normalize to basenames in lower case; manifests may contain full paths.
+    df["_base"] = df[fname_col].astype(str).apply(lambda x: pathlib.Path(x).name.lower().strip())
+    df = df[df["_base"] != ""]
+    if df.empty:
+        msg = f"[release] manifest filename column is empty; allowlist disabled: {manifest_path}"
+        if strict:
+            raise SystemExit(msg)
+        print(msg)
+        return None
+
+    allowed_df = df[df["allowed"]].copy()
+    if allowed_df.empty:
+        msg = f"[release] manifest has no allowed files under statuses={sorted(allowlist_status)} for year={year}"
+        if strict:
+            raise SystemExit(msg)
+        print(msg)
+        return None
+
+    # Prefer revised variants at manifest-selection stage, same policy as filesystem selection.
+    groups: dict[str, list[tuple[bool, str]]] = {}
+    for _, r in allowed_df.iterrows():
+        base = r["_base"]
+        stem = pathlib.Path(base).stem
+        is_rv = stem.endswith("_rv")
+        key = stem[:-3] if is_rv else stem
+        groups.setdefault(key, []).append((is_rv, base))
+
+    selected: set[str] = set()
+    for items in groups.values():
+        has_rv = any(is_rv for is_rv, _ in items)
+        if has_rv:
+            for is_rv, base in items:
+                if is_rv:
+                    selected.add(base)
+                    selected.add(_normalized_name_key(base))
+        else:
+            for _, base in items:
+                selected.add(base)
+                selected.add(_normalized_name_key(base))
+    return selected
 
 
 def check_release_manifest(
@@ -211,6 +324,49 @@ def _chunk_cols(cols: list[str], size: int) -> Iterable[list[str]]:
         yield cols[i : i + size]
 
 
+def write_na_drop_log(na_drop_log: list[dict], harmonize_qc_dir: pathlib.Path) -> tuple[pathlib.Path | None, dict]:
+    """
+    Persist NA-UNITID drop events and return a compact summary.
+    """
+    harmonize_qc_dir.mkdir(parents=True, exist_ok=True)
+    summary = {"events": 0, "files": 0, "rows_dropped": 0}
+    if not na_drop_log:
+        return None, summary
+    df = pd.DataFrame(na_drop_log)
+    out_path = harmonize_qc_dir / "dropped_missing_unitid_by_file.csv"
+    df.to_csv(out_path, index=False)
+    summary["events"] = int(len(df))
+    if {"year", "file"}.issubset(df.columns):
+        summary["files"] = int(df[["year", "file"]].drop_duplicates().shape[0])
+    if "dropped_rows_missing_UNITID" in df.columns:
+        summary["rows_dropped"] = int(
+            pd.to_numeric(df["dropped_rows_missing_UNITID"], errors="coerce").fillna(0).sum()
+        )
+    return out_path, summary
+
+
+def print_end_summary(
+    *,
+    out_path: pathlib.Path,
+    na_log_path: pathlib.Path | None,
+    na_summary: dict,
+    strict: bool,
+) -> None:
+    print("")
+    print("=== Harmonize Summary ===")
+    print(f"output_parquet: {out_path}")
+    print(f"strict_mode: {strict}")
+    if na_log_path is None:
+        print("missing_UNITID_drops: none")
+    else:
+        print(f"missing_UNITID_drops_csv: {na_log_path}")
+        print(f"missing_UNITID_drop_events: {na_summary.get('events', 0)}")
+        print(f"missing_UNITID_files_affected: {na_summary.get('files', 0)}")
+        print(f"missing_UNITID_rows_dropped_total: {na_summary.get('rows_dropped', 0)}")
+    print("========================")
+    print("")
+
+
 def melt_file(
     fp: pathlib.Path,
     year: int,
@@ -222,6 +378,7 @@ def melt_file(
     chunksize: int,
     log_prefix: str = "",
     na_drop_log: list[dict] | None = None,
+    harmonize_qc_dir: pathlib.Path | None = None,
 ) -> Iterable[pd.DataFrame]:
     logged = False
     for df in read_table_iter(fp, chunksize=chunksize):
@@ -249,6 +406,10 @@ def melt_file(
                 }
             )
         if dropped > 0 and strict:
+            if harmonize_qc_dir is not None and na_drop_log is not None:
+                na_log_path, _ = write_na_drop_log(na_drop_log, harmonize_qc_dir)
+                if na_log_path is not None:
+                    print(f"[info] wrote {na_log_path}")
             raise SystemExit(
                 f"[fatal] missing UNITID rows detected in {fp.name} (dropped={dropped})."
             )
@@ -284,6 +445,10 @@ def melt_file(
                     }
                 )
             if dropped_post > 0 and strict:
+                if harmonize_qc_dir is not None and na_drop_log is not None:
+                    na_log_path, _ = write_na_drop_log(na_drop_log, harmonize_qc_dir)
+                    if na_log_path is not None:
+                        print(f"[info] wrote {na_log_path}")
                 raise SystemExit(
                     f"[fatal] missing UNITID rows detected after melt in {fp.name} (dropped={dropped_post})."
                 )
@@ -472,6 +637,7 @@ def main():
     ap.add_argument("--duckdb-temp-dir", default=None, help="Optional temp directory for DuckDB (used during final dedupe)")
     ap.add_argument("--release-allow", default="revised,final", help="Comma list of allowed release statuses")
     ap.add_argument("--release-strict", action=argparse.BooleanOptionalAction, default=True, help="Fail if manifest is missing or not revised/final")
+    ap.add_argument("--checks-dir", default=None, help="QC output directory (default: $IPEDS_ROOT/Checks)")
     ap.add_argument(
         "--strict",
         action=argparse.BooleanOptionalAction,
@@ -479,19 +645,19 @@ def main():
         help="Fail fast on schema and merge anomalies (default: True for debug runs)",
     )
     ap.add_argument("--qc-only", action="store_true", help="Only run release QC and exit; no output is written")
-    repo_root = pathlib.Path(os.environ.get("IPEDS_ROOT", pathlib.Path(__file__).resolve().parents[1]))
-    artifacts_root = repo_root / "Artifacts"
-    ap.add_argument("--release-qc-dir", default=str(artifacts_root / "Checks" / "release_qc"), help="QC dir for release validation")
-    ap.add_argument("--log-file", default=str(artifacts_root / "Checks" / "logs" / "03_harmonize.log"), help="Optional log file path")
+    ap.add_argument("--release-qc-dir", default=None, help="QC dir for release validation")
+    ap.add_argument("--log-file", default=None, help="Optional log file path")
     args = ap.parse_args()
 
-    setup_logging(args.log_file)
+    checks_dir = pathlib.Path(args.checks_dir) if args.checks_dir else (REPO_ROOT / "Checks")
+    checks_dir.mkdir(parents=True, exist_ok=True)
+    log_file = args.log_file if args.log_file else str(checks_dir / "logs" / "03_harmonize.log")
+    setup_logging(log_file)
 
     years = parse_years(args.years)
     allowlist = {s.strip().lower() for s in args.release_allow.split(",") if s.strip()}
-    qc_dir = pathlib.Path(args.release_qc_dir) if args.release_qc_dir else None
-    checks_root = qc_dir.parent if qc_dir is not None else artifacts_root / "Checks"
-    harmonize_qc_dir = checks_root / "harmonize_qc"
+    qc_dir = pathlib.Path(args.release_qc_dir) if args.release_qc_dir else (checks_dir / "release_qc")
+    harmonize_qc_dir = checks_dir / "harmonize_qc"
     harmonize_qc_dir.mkdir(parents=True, exist_ok=True)
     na_drop_log: list[dict] = []
 
@@ -530,6 +696,7 @@ def main():
         print(f"[info] processing year {year}")
         year_root = pathlib.Path(args.root) / str(year)
         check_release_manifest(year_root, year, allowlist, args.release_strict, qc_dir)
+        manifest_allow = build_manifest_allowlist(year_root, year, allowlist, args.release_strict, qc_dir)
         dict_year = dict_df[dict_df["year"] == year].copy()
         # Deduplicate dictionary rows so each (varname, source_file) is unique.
         # This prevents cartesian expansion during merge.
@@ -560,10 +727,41 @@ def main():
                 dict_year = dict_year.drop_duplicates(["year", "varname"], keep="first")
             dict_vars = set(dict_year["varname"].dropna().unique())
         all_files = list(discover_files(year_root))
-        files = prefer_rv_files(all_files)
-        skipped_rv = len(all_files) - len(files)
+        files_after_rv = prefer_rv_files(all_files)
+        skipped_rv = len(all_files) - len(files_after_rv)
+        files = files_after_rv
+        excluded_manifest = 0
+        if manifest_allow is not None:
+            before_allow = len(files)
+            files = [
+                fp
+                for fp in files
+                if fp.name.lower() in manifest_allow or _normalized_name_key(fp.name) in manifest_allow
+            ]
+            excluded_manifest = before_allow - len(files)
+            if excluded_manifest > 0:
+                print(f"[year {year}] manifest allowlist excluded {excluded_manifest} files (kept {len(files)}/{before_allow})")
+            if args.release_strict and len(files) == 0:
+                raise SystemExit(f"[fatal] manifest allowlist resulted in zero files for year={year}")
         if skipped_rv > 0:
             print(f"[year {year}] skipped {skipped_rv} non-_rv files where _rv exists")
+        if qc_dir is not None:
+            qc_dir.mkdir(parents=True, exist_ok=True)
+            selected_set = {fp.name.lower() for fp in files}
+            rv_set = {fp.name.lower() for fp in files_after_rv}
+            qc_rows = []
+            for fp in files_after_rv:
+                name = fp.name.lower()
+                qc_rows.append(
+                    {
+                        "year": year,
+                        "file": fp.name,
+                        "normalized_key": _normalized_name_key(fp.name),
+                        "selected": int(name in selected_set),
+                        "excluded_by_manifest": int(manifest_allow is not None and name in rv_set and name not in selected_set),
+                    }
+                )
+            pd.DataFrame(qc_rows).to_csv(qc_dir / f"release_selected_files_{year}.csv", index=False)
         for fp in files:
             for chunk in melt_file(
                 fp,
@@ -576,6 +774,7 @@ def main():
                 args.chunksize,
                 log_prefix=f"[year {year}] ",
                 na_drop_log=na_drop_log,
+                harmonize_qc_dir=harmonize_qc_dir,
             ):
                 if not chunk.empty:
                     yield chunk
@@ -588,13 +787,8 @@ def main():
     else:
         temp_dir = out_path.parent / ".duckdb_tmp"
 
-    def flush_na_drop_log() -> None:
-        if not na_drop_log:
-            return
-        drop_log_path = harmonize_qc_dir / "dropped_missing_unitid_by_file.csv"
-        pd.DataFrame(na_drop_log).to_csv(drop_log_path, index=False)
-        print(f"[info] wrote {drop_log_path}")
-
+    na_log_path: pathlib.Path | None = None
+    na_summary: dict = {"events": 0, "files": 0, "rows_dropped": 0}
     try:
         if args.parts_dir:
             parts_dir = pathlib.Path(args.parts_dir)
@@ -626,6 +820,10 @@ def main():
                                 print(f"[info] removed parts dir: {parts_dir}")
                             except Exception as e:
                                 print(f"[warn] failed to remove parts dir {parts_dir}: {e}")
+                        na_log_path, na_summary = write_na_drop_log(na_drop_log, harmonize_qc_dir)
+                        if na_log_path is not None:
+                            print(f"[info] wrote {na_log_path}")
+                        print_end_summary(out_path=out_path, na_log_path=na_log_path, na_summary=na_summary, strict=args.strict)
                         return
             # Otherwise, process and write parts
             write_parquet_parts(
@@ -649,7 +847,11 @@ def main():
                 prio_list = [k.strip() for k in args.dedupe_priority.split(",") if k.strip()]
                 dedupe_long_panel(out_path, prio_list, temp_dir)
     finally:
-        flush_na_drop_log()
+        if na_log_path is None:
+            na_log_path, na_summary = write_na_drop_log(na_drop_log, harmonize_qc_dir)
+            if na_log_path is not None:
+                print(f"[info] wrote {na_log_path}")
+            print_end_summary(out_path=out_path, na_log_path=na_log_path, na_summary=na_summary, strict=args.strict)
     print(f"[info] wrote {out_path}")
 
 
