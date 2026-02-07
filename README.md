@@ -1,449 +1,108 @@
-IPEDS Panel Builder (2004–2024)
-================================
+# IPEDS Panel Builder (2004-2024)
 
-This repo builds a **longitudinal IPEDS panel** from raw cross‑section files (2004–2024).  
-It is designed for **data science users** who want a reproducible, transparent pipeline and for **IPEDS users** who want consistent metadata across years.
+Builds a reproducible IPEDS panel from raw cross-sections to:
+- `Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet`
+- `Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet`
+- `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet`
 
-Highlights
-----------
-- **Dictionary lake** with core metadata (year, varnumber, varname, varTitle, longDescription, DataType, format, Fieldwidth, imputationvar)
-- **Long panel** output keyed by `(UNITID, year, varname)` with `varnumber` for cross‑year robustness
-- **Wide panel** builder with optional **discrete-category collapse** (e.g., program-level indicator groups → *_CAT)
-- **Parent/child (PRCH) cleaning** to null out component data for child records while keeping all rows
-- **Release validation** (Revised/Final only) via yearly manifests
-- **_rv preference** when revised files exist (non‑_rv are skipped in that folder)
-- **QC outputs** (duplicate samples, discrete conflicts, wide summary stats)
-- **Portable defaults**: set `IPEDS_ROOT` to override paths (public‑friendly)
+## Setup
 
-Pipeline Overview
------------------
-```
-Download (optional): Download Scripts/00_download_ipeds.py
-        │
-Raw IPEDS files (Raw_Cross_Section_Data/)
-        │
-        ▼
-Dictionary ingest (Dictionary/01_ingest_dictionaries.py)
-  ├─ dictionary_lake.parquet  (core metadata)
-  ├─ dictionary_lake.csv      (auto‑generated for inspection)
-  └─ dictionary_codes.parquet (value labels)
-        │
-        ▼
-Harmonize (03_harmonize.py)  →  Cross_sections/panel_long_varnum_<year>.parquet
-  └─ Prefers *_rv files when present; logs how many non‑_rv were skipped per year
-        │
-        ▼
-Stitch per-year longs  →  Panels/2004-2024/panel_long_varnum_2004_2024.parquet
-        │
-        ▼
-Wide panel build (Panels/04_build_wide_panel.py)
-  ├─ Panels/wide_2004_2024/year=YYYY/part.parquet
-  └─ Stitched wide: Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet
-  └─ QC: Checks/disc_qc + Checks/wide_qc
-        │
-        ▼
-PRCH clean (Cleaning/05_cleaning_panel.py)
-  └─ Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet
-        │
-        ▼
-Research‑ready clean (Cleaning/05_cleaning_panel.py --drop-imputation-flags)
-  └─ Panels/2004_2024_IPEDS_clean_Panel_DS.parquet
-        │
-        ▼
-Custom panel builder (Panels/06_build_custom_panel.py)
-  └─ User‑selected subset (always keeps UNITID + year)
+```bash
+pip install -r requirements.txt
 ```
 
-User‑Friendly Visual (Simplified)
----------------------------------
-```
-Raw IPEDS ZIPs
-   │
-   ▼
-Download & Unzip  ──►  Raw_Cross_Section_Data/
-   │
-   ▼
-Dictionary Lake (canonical metadata)
-   │
-   ▼
-Long Panel (UNITID, year, varname)
-   │
-   ▼
-Wide Panel (UNITID, year, columns = variables)
-   │
-   ├─ PRCH‑clean (parent/child safe)
-   └─ Clean (research‑ready; imputation flags removed)
-               │
-               ▼
-        Custom Panel (user‑selected vars)
-```
-
-Public‑Friendly Paths (Portable Defaults)
-----------------------------------------
-By default, scripts now use the repository root as the base path.
-To override all paths in a public environment:
+Set data root (optional, defaults to repo root):
 
 ```bash
 export IPEDS_ROOT="/path/to/IPEDS_Paneling"
 ```
 
-This makes the pipeline portable without hard‑coded user paths.
+Required input folders/files under `IPEDS_ROOT`:
+- `Raw_Cross_Section_Data/`
+- `Dictionary/dictionary_lake.parquet`
 
-Data Shape (Long vs Wide)
--------------------------
-```
-LONG (authoritative)
-┌────────┬────────┬────────┬──────────┬────────┬───────────┬──────────────┐
-│ year   │ UNITID │ varname│ varnumber│ value  │ varTitle  │ DataType      │
-├────────┼────────┼────────┼──────────┼────────┼───────────┼──────────────┤
-│ 2018   │ 100654 │ INSTNM │ 00000002 │ Univ…  │ Institution name │ char     │
-│ 2018   │ 100654 │ SECTOR │ 00000010 │ 4      │ Sector of institution │ disc │
-└────────┴────────┴────────┴──────────┴────────┴───────────┴──────────────┘
-
-WIDE (optional)
-┌────────┬────────┬──────────┬───────────┬──────────┐
-│ year   │ UNITID │ INSTNM   │ SECTOR    │ CONTROL  │
-├────────┼────────┼──────────┼───────────┼──────────┤
-│ 2018   │ 100654 │ Univ…    │ 4         │ 1        │
-└────────┴────────┴──────────┴───────────┴──────────┘
-```
-
-Discrete Collapse (visual)
---------------------------
-```
-Indicators (disc)
-NONCRDT1  NONCRDT2  NONCRDT3  ...  NONCRDT9
-  1       .       .          .
-
-Collapsed category
-NONCRDT_CAT = 1
-```
-
-What You Get
-------------
-- **Long panel (authoritative)**  
-  One row per `(UNITID, year, varname)`:
-  ```
-  year, UNITID, varname, varnumber, value, varTitle, longDescription, DataType, format, Fieldwidth, imputationvar, source_file
-  ```
-
-- **Dictionary lake**  
-  `/Dictionary/dictionary_lake.parquet` with consistent metadata across years  
-  `/Dictionary/dictionary_lake.csv` auto‑generated for inspection.
-
-- **Value labels**  
-  `/Dictionary/dictionary_codes.parquet` from Frequencies/FrequenciesRV/Imputation sheets.
-
-- **Wide panel**  
-  One row per `(UNITID, year)` and one column per `varname`, with optional disc collapse.  
-  Official stitched output: `Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet`
-
-- **PRCH cleaned wide panel**  
-  Safe Option A: keep all rows; null out component data for child records.  
-  Output: `Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet`
-
-- **Research‑ready wide panel**  
-  PRCH‑cleaned + imputation flags removed (X* columns dropped).  
-  Output: `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet`
-
-Quick Start (Recommended)
--------------------------
-Use the wrapper script with defaults baked in:
+If dictionary is missing:
 
 ```bash
-python3 08_run_pipeline.py
+python3 Scripts/02_dictionary_ingest.py \
+  --root "$IPEDS_ROOT/Raw_Cross_Section_Data" \
+  --output "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
+  --output-csv "$IPEDS_ROOT/Dictionary/dictionary_lake.csv" \
+  --codes-output "$IPEDS_ROOT/Dictionary/dictionary_codes.parquet" \
+  --codes-output-csv "$IPEDS_ROOT/Dictionary/dictionary_codes.csv"
 ```
 
-This will:
-1) Harmonize 2004–2024 into per‑year long files  
-2) Stitch them into one master long panel  
-3) Build the wide panel with discrete collapse + QC outputs
+## One-line Run (Recommended)
 
-Optional PRCH cleaning (safe Option A):
 ```bash
-python3 Cleaning/05_cleaning_panel.py \
-  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
-  --output "$IPEDS_ROOT/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet" \
-  --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
-  --qc-dir "$IPEDS_ROOT/Checks/prch_qc"
+bash manual_commands.sh
 ```
 
-Research‑ready clean (drop imputation flags):
-```bash
-python3 Cleaning/05_cleaning_panel.py \
-  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
-  --output "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
-  --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
-  --qc-dir "$IPEDS_ROOT/Checks/prch_qc" \
-  --drop-imputation-flags
-```
+This runs the full pipeline with current script paths and writes outputs into `Panels/` and QC into `Checks/`.
 
-Custom panel (user‑selected variables; always keeps UNITID + year):
-```bash
-python3 Panels/06_build_custom_panel.py \
-  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
-  --vars "INSTNM,SECTOR,TUITION1,PELL_RECP" \
-  --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
-```
-
-Custom panel (Option B: vars file):
-```bash
-python3 Panels/06_build_custom_panel.py \
-  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
-  --vars-file "$IPEDS_ROOT/Mapping/selected_vars.txt" \
-  --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
-```
-
-Recommended Single‑Command Run (Raw → PRCH Clean → Clean)
----------------------------------------------------------
-This is the preferred end‑to‑end command. It:
-1) enforces Revised/Final releases,  
-2) builds the raw wide panel,  
-3) PRCH‑cleans the panel, and  
-4) produces the research‑ready clean panel.
+## Direct Full Run
 
 ```bash
-python3 08_run_pipeline.py \
-  --no-skip-existing \
-  --release-allow "revised,final" \
-  --release-qc-dir "$IPEDS_ROOT/Checks/release_qc" \
+python3 Scripts/00_run_all.py \
+  --root "$IPEDS_ROOT/Raw_Cross_Section_Data" \
+  --lake "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
+  --years "2004:2024" \
+  --cross-sections-dir "$IPEDS_ROOT/Cross_sections" \
+  --parts-dir-base "$IPEDS_ROOT/Cross_sections" \
+  --stitch-out "$IPEDS_ROOT/Panels/2004-2024/panel_long_varnum_2004_2024.parquet" \
+  --wide-out-dir "$IPEDS_ROOT/Panels/wide_2004_2024" \
+  --wide-write-single "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
   --stitch-wide \
   --stitch-wide-out "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
   --run-cleaning \
   --prch-clean-out "$IPEDS_ROOT/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet" \
   --clean-out "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
   --prch-qc-dir "$IPEDS_ROOT/Checks/prch_qc" \
-  --drop-imputation-flags
-```
-
-Optional: clean up per‑year long files after stitching
------------------------------------------------------
-If you are disk‑constrained and do not need the per‑year long files:
-
-```bash
-python3 08_run_pipeline.py \
-  --years 2004:2024 \
-  --no-skip-existing \
-  --stitch \
-  --cleanup-year-longs \
-  --build-wide \
-  --stitch-wide \
-  --run-cleaning \
-  --release-allow "revised,final" \
-  --release-qc-dir "$IPEDS_ROOT/Checks/release_qc" \
-  --no-final-dedupe
-```
-
-Minimal End‑to‑End (run_pipeline + custom subset)
--------------------------------------------------
-This is the shortest safe path to a research‑ready custom panel.
-It includes **release QC outputs** and **RAM‑friendly stitching** of the wide panel:
-
-```bash
-# 1) Build raw wide from 2004–2024 with release QC + streaming wide stitch
-python3 08_run_pipeline.py \
-  --release-allow "revised,final" \
-  --release-qc-dir "$IPEDS_ROOT/Checks/release_qc" \
-  --stitch-wide \
-  --stitch-wide-out "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet"
-
-# 2) PRCH clean + drop imputation flags (research‑ready clean)
-python3 Cleaning/05_cleaning_panel.py \
-  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
-  --output "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
-  --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
-  --qc-dir "$IPEDS_ROOT/Checks/prch_qc" \
-  --drop-imputation-flags
-
-# 3) Build your custom research panel (keeps UNITID + year)
-python3 Panels/06_build_custom_panel.py \
-  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
-  --vars "INSTNM,SECTOR,TUITION1,PELL_RECP" \
-  --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
-```
-
-Notebook (Supplementary QA/QC)
-------------------------------
-`Artifacts/paper_artifacts_overview.ipynb` is **supplementary**.  
-It is intended for **QA/QC viewing**, not as the production pipeline.
-
-One‑liner: build the research‑ready clean panel
-------------------------------------------------
-This builds `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet` and then prints the
-custom‑panel command as the next step. The script automatically sets `IPEDS_ROOT`
-to the repo root and creates output folders (`Panels/`, `Checks/`, `Cross_sections/`).
-
-```bash
-bash manual_commands.sh
-```
-
-Then build your custom panel:
-```bash
-python3 Panels/06_build_custom_panel.py \
-  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
-  --vars "INSTNM,SECTOR,TUITION1,PELL_RECP" \
-  --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
-```
-
-Manual Commands (Advanced)
---------------------------
-
-1) Build dictionary lake (2004–2024) + value labels:
-```bash
-python3 Dictionary/01_ingest_dictionaries.py \
-  --root "$IPEDS_ROOT/Raw_Cross_Section_Data" \
-  --min-year 2004 \
-  --output "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
-  --codes-output "$IPEDS_ROOT/Dictionary/dictionary_codes.parquet" \
-  --codes-output-csv "$IPEDS_ROOT/Dictionary/dictionary_codes.csv"
-```
-
-2) Dictionary QA/QC + collapsed codes:
-```bash
-python3 Dictionary/02_dictionary_qaqc.py \
-  --year-sep "|" \
-  --excel-text
-```
-
-QC Output Folders (What They Mean)
-----------------------------------
-- `release_qc/` — Release validation results (Revised/Final checks during harmonization).
-- `disc_qc/` — Discrete-collapse conflict reports from wide panel build.
-- `wide_qc/` — Wide panel summary stats from the wide build.
-- `prch_qc/` — Parent–child cleaning summaries.
-- `panel_qc/` — QA comparison of raw vs PRCH‑cleaned wide panels.
-- `dups_qc/` — Duplicate-key samples from wide build (optional).
-
-3) Harmonize per‑year (streaming, low‑RAM):
-```bash
-python3 03_harmonize.py \
-  --root "$IPEDS_ROOT/Raw_Cross_Section_Data" \
-  --lake "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
-  --years 2018:2018 \
-  --output "$IPEDS_ROOT/Cross_sections/panel_long_varnum_2018.parquet" \
-  --release-allow "revised,final" \
-  --release-strict \
-  --release-qc-dir "$IPEDS_ROOT/Checks/release_qc"
-```
-Release QC outputs are written per year to `Checks/release_qc/` for proof of Revised/Final filtering.
-
-4) Stitch per‑year long files:
-```bash
-python3 - <<'PY'
-from pathlib import Path
-import pyarrow.parquet as pq
-
-base = Path("$IPEDS_ROOT/Cross_sections")
-out = Path("$IPEDS_ROOT/Panels/2004-2024/panel_long_varnum_2004_2024.parquet")
-out.parent.mkdir(parents=True, exist_ok=True)
-
-writer = None
-for y in range(2004, 2025):
-    p = base / f"panel_long_varnum_{y}.parquet"
-    if not p.exists():
-        continue
-    pf = pq.ParquetFile(p)
-    for batch in pf.iter_batches():
-        if writer is None:
-            writer = pq.ParquetWriter(out, batch.schema)
-        writer.write_batch(batch)
-if writer:
-    writer.close()
-print("Wrote", out)
-PY
-```
-
-5) Build wide panel with discrete collapse:
-```bash
-python3 Panels/04_build_wide_panel.py \
-  --input "$IPEDS_ROOT/Panels/2004-2024/panel_long_varnum_2004_2024.parquet" \
-  --out_dir "$IPEDS_ROOT/Panels/wide_2004_2024" \
-  --years "2004:2024" \
-  --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
-  --collapse-disc \
-  --drop-disc-components \
   --disc-qc-dir "$IPEDS_ROOT/Checks/disc_qc" \
-  --qc-dir "$IPEDS_ROOT/Checks/wide_qc"
+  --qc-dir "$IPEDS_ROOT/Checks/wide_qc" \
+  --release-allow "revised,final" \
+  --release-qc-dir "$IPEDS_ROOT/Checks/release_qc" \
+  --log-dir "$IPEDS_ROOT/Checks/logs" \
+  --no-final-dedupe \
+  --drop-imputation-flags
 ```
 
-6) Build a custom panel subset:
+## Build a Custom Panel
+
 ```bash
-python3 Panels/06_build_custom_panel.py \
+python3 Scripts/06_build_custom_panel.py \
   --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
-  --vars-file "$IPEDS_ROOT/Mapping/vars_for_my_study.txt" \
+  --vars "INSTNM,SECTOR,TUITION1,PELL_RECP" \
   --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
 ```
 
-Discrete Category Collapse (Disc → *_CAT)
------------------------------------------
-Some IPEDS variables are stored as **mutually exclusive indicators** (e.g., LEVEL1…LEVEL19).  
-The wide builder can collapse them into a single categorical variable:
-- `LEVEL1…LEVEL19` → `LEVEL_CAT`
-- Conflicts (more than one active category) are logged to `Checks/disc_qc/`.
-- If the base name already exists independently (e.g., `LEVEL`), the collapsed variable uses `_CAT` to avoid overwriting.
+Or use variable list file:
 
-Storage Notes
--------------
-- Long panels are very large (billions of rows).  
-- Keep Parquet as the canonical format. Export CSV only for small subsets.
+```bash
+python3 Scripts/06_build_custom_panel.py \
+  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
+  --vars-file "Customize_Panel/selectedvars.txt" \
+  --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
+```
 
-FAQ
----
-**Q: Why is the wide panel so large?**  
-Because it contains one row per `(UNITID, year)` and **thousands of columns** (every varname).  
-Wide is intended for **analysis**, not for manual inspection. Use the custom builder to slice.
+## QC Outputs
 
-**Q: Why are long panels so huge (billions of rows)?**  
-Long panels are fully normalized: one row per `(UNITID, year, varname)`.  
-This is the most robust shape for merges, QC, and cross‑year consistency, but it is massive.
+- `Checks/release_qc/` release manifest checks
+- `Checks/harmonize_qc/` harmonize anomalies (including dropped missing UNITID rows)
+- `Checks/disc_qc/` discrete collapse conflicts
+- `Checks/wide_qc/` wide panel summaries
+- `Checks/prch_qc/` parent-child cleaning summaries
+- `Checks/panel_qc/` raw vs PRCH-clean QA
 
-**Q: Why do we run QC at every stage?**  
-IPEDS releases change by year and by survey. QC ensures:  
-1) releases are Revised/Final,  
-2) discrete categories are properly collapsed,  
-3) parent/child records are handled consistently.
+## Repository Layout
 
-**Q: Why do some variables appear all‑null in a given year?**  
-Some components are not collected every year, or the variable is new/retired.  
-This is expected in a 2004–2024 panel. Use `dictionary_lake` for availability context.
+- `Scripts/` pipeline scripts (`00` to `06`)
+- `Scripts/QA_QC/` QA/QC scripts
+- `Customize_Panel/` custom panel variable lists
+- `Artifacts/` small tracked artifacts/docs only
+- `manual_commands.sh` public one-line runner
 
-How the pipeline mitigates common IPEDS pain points
----------------------------------------------------
-Below is how the current workflow explicitly handles the most common IPEDS integration problems.
+## Notes
 
-1) Inconsistent Variable Naming (Schema Drift)
-   - **Dictionary‑first normalization**: raw column names are mapped to a stable `varnumber + varname`.  
-   - **Standardized casing**: all varnames are upper‑cased to prevent drift from case changes.  
-   - **`source_file` + `source_file_label`**: each variable is tagged with its survey source for traceability.
-
-2) Changing Survey Universes and Definitions
-   - The pipeline does **not** impute missing values across years.  
-   - Gaps are visible in the wide panel and can be interpreted as “not asked” vs “missing.”  
-   - Optional **disc collapse** (`*_CAT`) lets you aggregate split categories while logging conflicts.
-
-3) Institution Entity Changes (UNITID and Parent/Child)
-   - **PRCH cleaning (Option A)** keeps all rows but nulls child‑reported components.  
-   - This prevents artificial spikes/drops while preserving the full UNITID history.
-
-4) File Structure Variations (Wide vs Long, headers, legacy quirks)
-   - All raw files are normalized into a **long canonical** format first.  
-   - A single, consistent wide build step avoids mixing heterogeneous layouts.
-
-5) Imputation and Response Flags
-   - Imputation variables (X*) are preserved in **raw** output.  
-   - **Research‑ready clean** drops X* flags for analysis use.  
-   - You can always revert to raw for imputation diagnostics.
-
-Repo Layout
------------
-- `Raw_Cross_Section_Data/` raw IPEDS downloads  
-- `Download Scripts/` IPEDS downloader (`00_download_ipeds.py`)  
-- `Dictionary/` dictionary lake + value labels  
-- `Cross_sections/` per‑year long panels  
-- `Panels/` stitched long + wide outputs  
-- `Cleaning/` parent/child cleaner  
-- `Checks/` QC output (disc conflicts, wide summary)
-
-Attribution
------------
-IPEDS data © NCES. Please cite IPEDS per NCES guidance.
+- `Scripts/03_harmonize.py` excludes mission folders from ingestion.
+- Keep large generated outputs out of git (`Checks/`, `Panels/`, `Cross_sections/`, raw inputs).

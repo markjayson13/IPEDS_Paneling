@@ -14,6 +14,7 @@ import argparse
 import re
 import sys
 import os
+import zlib
 from pathlib import Path
 from typing import Tuple
 
@@ -42,9 +43,132 @@ def normalize_varnumber(val: object) -> str:
     if val is None:
         return ""
     txt = re.sub(r"\s+", "", str(val))
+    if txt.lower() in {"", "nan", "none", "<na>", "nat"}:
+        return ""
     if txt.isdigit():
         return txt.zfill(8)
     return txt
+
+
+def _first_numeric_varnumber(values: pd.Series) -> str:
+    nums = [normalize_varnumber(v) for v in values.tolist()]
+    nums = [v for v in nums if v.isdigit() and v not in {"", "00000000"}]
+    if not nums:
+        return ""
+    return sorted(nums)[0]
+
+
+def _allocate_synthetic_varnumber(anchor_varnumber: str, key: str, used: set[str]) -> str:
+    """
+    Allocate a stable synthetic 8-digit varnumber.
+    Preference is to stay numerically close to anchor_varnumber while guaranteeing uniqueness.
+    """
+    max_num = 99_999_999
+    min_num = 1
+    crc = zlib.crc32(key.encode("utf-8")) & 0xFFFFFFFF
+
+    if anchor_varnumber.isdigit() and anchor_varnumber not in {"", "00000000"}:
+        base = int(anchor_varnumber)
+        start = base + 1 + int(crc % 11)
+        if start > max_num:
+            start = max_num
+    else:
+        # Fallback synthetic range for flags with no usable anchor.
+        start = 85_000_000 + int(crc % 10_000_000)
+        if start > max_num:
+            start = max_num
+
+    for cand in range(start, max_num + 1):
+        s = f"{cand:08d}"
+        if s not in used:
+            used.add(s)
+            return s
+
+    for cand in range(start - 1, min_num - 1, -1):
+        s = f"{cand:08d}"
+        if s not in used:
+            used.add(s)
+            return s
+
+    raise RuntimeError("Unable to allocate unique synthetic varnumber")
+
+
+def append_synthetic_imputation_rows(lake: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """
+    Add dictionary rows for imputation flag variables that are referenced by `imputationvar`
+    but do not have their own varnumber row in the dictionary.
+    """
+    if lake.empty:
+        return lake, 0
+
+    df = lake.copy()
+    df["varname"] = df["varname"].fillna("").astype(str).str.upper().str.strip()
+    df["imputationvar"] = df["imputationvar"].fillna("").astype(str).str.upper().str.strip()
+    df.loc[df["imputationvar"].isin({"", "NAN", "NONE", "<NA>", "NAT"}), "imputationvar"] = ""
+
+    ref = df[df["imputationvar"] != ""].copy()
+    if ref.empty:
+        return df, 0
+
+    existing_keys = (
+        df[["year", "source_file", "varname"]]
+        .drop_duplicates()
+        .rename(columns={"varname": "imputationvar"})
+    )
+
+    grouped = (
+        ref.groupby(["year", "source_file", "imputationvar"], as_index=False)
+        .agg(
+            anchor_varnumber=("varnumber", _first_numeric_varnumber),
+            anchor_varname=("varname", "first"),
+            source_file_label=("source_file_label", "first"),
+        )
+    )
+    grouped = grouped.merge(
+        existing_keys.assign(_exists=1),
+        on=["year", "source_file", "imputationvar"],
+        how="left",
+    )
+    needs_synth = grouped[grouped["_exists"].isna()].copy()
+    if needs_synth.empty:
+        return df, 0
+
+    used_varnumbers = {
+        normalize_varnumber(v)
+        for v in df["varnumber"].fillna("").astype(str).tolist()
+        if normalize_varnumber(v) not in {"", "00000000"}
+    }
+
+    synth_rows: list[dict] = []
+    needs_synth = needs_synth.sort_values(["year", "source_file", "imputationvar"]).reset_index(drop=True)
+    for _, r in needs_synth.iterrows():
+        year = int(r["year"])
+        source_file = str(r["source_file"])
+        impvar = str(r["imputationvar"]).strip().upper()
+        anchor_varnumber = normalize_varnumber(r.get("anchor_varnumber", ""))
+        anchor_varname = str(r.get("anchor_varname", "") or "").strip().upper()
+        source_file_label = str(r.get("source_file_label", "") or "").strip()
+        alloc_key = f"{year}|{source_file}|{impvar}|{anchor_varnumber}"
+        synth_varnumber = _allocate_synthetic_varnumber(anchor_varnumber, alloc_key, used_varnumbers)
+        synth_rows.append(
+            {
+                "year": year,
+                "varnumber": synth_varnumber,
+                "varname": impvar,
+                "varTitle": f"Imputation flag for {anchor_varname}" if anchor_varname else impvar,
+                "longDescription": "Synthetic dictionary row generated from imputationvar mapping.",
+                "DataType": "",
+                "format": "",
+                "Fieldwidth": "",
+                "imputationvar": "",
+                "source_file": source_file,
+                "source_file_label": source_file_label,
+            }
+        )
+
+    out = pd.concat([df, pd.DataFrame(synth_rows)], ignore_index=True)
+    out = out.drop_duplicates(subset=["year", "source_file", "varnumber", "varname"]).reset_index(drop=True)
+    return out, len(synth_rows)
 
 
 def normalize_source_file(path: Path) -> str:
@@ -215,17 +339,23 @@ def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
 
         for _, row in var_df_raw.iterrows():
             varname = str(row.get(varname_col, "") or "").strip().upper() if varname_col else ""
-            if not varname:
+            if varname in {"", "NAN", "NONE", "<NA>", "NAT"}:
+                continue
+            # UNITID is the panel key and should not be represented as a data variable in dictionary_lake.
+            if varname == "UNITID":
                 continue
             varnum = normalize_varnumber(row.get(varnum_col, "") if varnum_col else "")
+            # Drop malformed varnumbers that create false collisions (e.g. 00000000 / blanks).
+            if varnum in {"", "00000000"}:
+                continue
             vartitle = str(row.get(vartitle_col, "") or "").strip() if vartitle_col else ""
             longdesc = desc_map.get(varname.lower(), "") or desc_map.get(varnum.lower(), "")
             datatype = str(row.get(dtype_col, "") or "").strip() if dtype_col else ""
             fmt = str(row.get(format_col, "") or "").strip() if format_col else ""
             width = str(row.get(width_col, "") or "").strip() if width_col else ""
             impvar = str(row.get(imp_col, "") or "").strip().upper() if imp_col else ""
-            if not impvar and varname:
-                impvar = f"X{varname}"
+            if impvar in {"NAN", "NONE", "<NA>", "NAT"}:
+                impvar = ""
             records.append(
                 {
                     "year": year,
@@ -241,25 +371,6 @@ def ingest_year(year_dir: Path, min_year: int) -> Tuple[list[dict], list[dict]]:
                     "source_file_label": source_file_label,
                 }
             )
-            # Also expose the imputation variable itself as a synthetic varname so it can appear in the final panel.
-            # Keep varnumber untouched (no X-prefix); only the varname is synthetic.
-            if impvar and impvar != varname:
-                if impvar:  # guard against blank synthetic names
-                    records.append(
-                        {
-                            "year": year,
-                            "varnumber": varnum,
-                            "varname": impvar.upper(),
-                            "varTitle": f"Imputation flag for {varname}" if vartitle else f"Imputation flag for {varname}",
-                            "longDescription": longdesc,
-                            "DataType": "",
-                            "format": "",
-                            "Fieldwidth": "",
-                            "imputationvar": "",
-                            "source_file": source_file,
-                            "source_file_label": source_file_label,
-                        }
-                    )
 
         # Frequencies / Imputation labels
         if xls:
@@ -356,7 +467,7 @@ def main() -> None:
     lake = pd.DataFrame(all_rows)
     lake["varnumber"] = lake["varnumber"].map(normalize_varnumber)
     lake["year"] = pd.to_numeric(lake["year"], errors="coerce").astype("Int64")
-    lake = lake.drop_duplicates(subset=["year", "varnumber", "varname"]).reset_index(drop=True)
+    lake = lake.drop_duplicates(subset=["year", "source_file", "varnumber", "varname"]).reset_index(drop=True)
     # enforce column order
     desired_cols = [
         "year",
@@ -375,10 +486,14 @@ def main() -> None:
         if c not in lake.columns:
             lake[c] = ""
     lake = lake[desired_cols]
+    lake, synth_count = append_synthetic_imputation_rows(lake)
+    lake = lake[desired_cols]
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     lake.to_parquet(args.output, index=False, compression="snappy")
     print(f"Wrote {len(lake):,} rows to {args.output}")
+    if synth_count:
+        print(f"Added {synth_count:,} synthetic imputation-variable rows with stable varnumbers")
 
     # Always regenerate CSV for inspection
     if args.output_csv:

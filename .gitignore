@@ -8,6 +8,8 @@ Cross_sections/
 Panels/
 audit_pack/
 Checks/
+Artifacts/Checks/
+Artifacts/Checks/dictionary_qc/
 
 # Temporary / intermediate files
 *.tmp

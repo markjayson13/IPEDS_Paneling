@@ -19,7 +19,7 @@ Behavior:
   - Drops rows with missing UNITID to avoid <NA> cross-product explosions.
   - Writes a parquet with columns:
       year, UNITID, varname, varnumber, value,
-      varTitle, longDescription, DataType, format, Fieldwidth, imputationvar, source_file
+      varTitle, longDescription, DataType, format, Fieldwidth, imputationvar, imputation_value, source_file
 """
 import duckdb
 import argparse
@@ -75,6 +75,9 @@ def discover_files(year_root: pathlib.Path) -> Iterable[pathlib.Path]:
             continue
         # skip dictionary folders
         if any("_dict" in part.lower() for part in fp.parts):
+            continue
+        # skip mission folders entirely (requested exclusion)
+        if any("mission" in part.lower() for part in fp.parts):
             continue
         yield fp
 
@@ -287,13 +290,15 @@ def read_table_iter(fp: pathlib.Path, chunksize: int = 50000):
     suffix = fp.suffix.lower()
     sep = "\t" if suffix == ".tsv" else ","
     compression = "gzip" if suffix == ".gz" else None
-    # Try UTF-8 first, then fall back to latin1 and skipping bad lines if needed.
+    # Try UTF-8 first, then latin1. Keep last-resort parsing guarded by UNITID sanity checks.
     attempts = (
-        dict(dtype=str, sep=sep, compression=compression, low_memory=False, chunksize=chunksize),
-        dict(dtype=str, sep=sep, compression=compression, engine="python", on_bad_lines="skip", chunksize=chunksize),
-        dict(dtype=str, sep=sep, compression=compression, engine="python", encoding="latin1", on_bad_lines="skip", chunksize=chunksize),
-        # Last-resort: treat quotes as regular characters
-        dict(
+        ("chunked", dict(dtype=str, sep=sep, compression=compression, low_memory=False, chunksize=chunksize)),
+        ("chunked", dict(dtype=str, sep=sep, compression=compression, engine="python", on_bad_lines="skip", chunksize=chunksize)),
+        ("chunked", dict(dtype=str, sep=sep, compression=compression, engine="python", encoding="latin1", on_bad_lines="skip", chunksize=chunksize)),
+        # Some files fail only in chunked python mode; parse full then yield slices.
+        ("full", dict(dtype=str, sep=sep, compression=compression, engine="python", encoding="latin1", on_bad_lines="skip")),
+        # Last-resort: treat quotes as regular characters.
+        ("chunked", dict(
             dtype=str,
             sep=sep,
             compression=compression,
@@ -303,14 +308,37 @@ def read_table_iter(fp: pathlib.Path, chunksize: int = 50000):
             quoting=csv.QUOTE_NONE,
             escapechar="\\",
             chunksize=chunksize,
-        ),
+        )),
     )
     last_err = None
-    for kwargs in attempts:
+    for mode, kwargs in attempts:
         try:
-            reader = pd.read_csv(fp, **kwargs)
-            for chunk in reader:
-                yield chunk
+            if mode == "chunked":
+                reader = pd.read_csv(fp, **kwargs)
+                first = next(reader, None)
+                if first is None:
+                    return
+                # Guard against malformed parses where UNITID exists but all values are non-numeric.
+                cols = [str(c).strip().upper() for c in first.columns]
+                if "UNITID" in cols:
+                    unitid_col = first.columns[cols.index("UNITID")]
+                    if pd.to_numeric(first[unitid_col], errors="coerce").notna().sum() == 0:
+                        raise ValueError("suspicious parse: UNITID present but no numeric values in first chunk")
+                yield first
+                for chunk in reader:
+                    yield chunk
+                return
+
+            full_df = pd.read_csv(fp, **kwargs)
+            if full_df.empty:
+                return
+            cols = [str(c).strip().upper() for c in full_df.columns]
+            if "UNITID" in cols:
+                unitid_col = full_df.columns[cols.index("UNITID")]
+                if pd.to_numeric(full_df[unitid_col], errors="coerce").notna().sum() == 0:
+                    raise ValueError("suspicious full parse: UNITID present but no numeric values")
+            for i in range(0, len(full_df), chunksize):
+                yield full_df.iloc[i : i + chunksize].copy()
             return
         except Exception as e:
             last_err = e
@@ -417,7 +445,10 @@ def melt_file(
             continue
         if strict and df["UNITID"].isna().any():
             raise SystemExit(f"[fatal] NA UNITID remained after pre-melt cleanup for {fp.name} year={year}")
-        id_cols = ["UNITID"]
+        # Row index lets us map the imputation flag value for each melted variable row.
+        df = df.reset_index(drop=True)
+        df["_rowid"] = df.index.astype("int64")
+        id_cols = ["UNITID", "_rowid"]
         # Keep only vars we can match in the dictionary for this year
         value_cols = [c for c in df.columns if c not in id_cols and c in dict_vars]
         if not value_cols:
@@ -479,6 +510,20 @@ def melt_file(
                     f"(rows={missing_varnumber})"
                 )
             merged = merged.dropna(subset=["varnumber"])
+            merged["imputationvar"] = merged["imputationvar"].fillna("").astype(str).str.upper()
+            merged.loc[merged["imputationvar"].isin({"NAN", "NONE", "<NA>", "NAT"}), "imputationvar"] = ""
+            imp_cols = sorted({c for c in merged["imputationvar"].unique() if c and c in df.columns})
+            if imp_cols:
+                imp_long = df[["_rowid"] + imp_cols].melt(
+                    id_vars=["_rowid"],
+                    value_vars=imp_cols,
+                    var_name="imputationvar",
+                    value_name="imputation_value",
+                )
+                merged = merged.merge(imp_long, on=["_rowid", "imputationvar"], how="left")
+            else:
+                merged["imputation_value"] = ""
+            merged["imputation_value"] = merged["imputation_value"].fillna("")
             # Ensure source_file exists (from dictionary); fall back to data filename if missing.
             if "source_file" not in merged.columns:
                 if strict:
@@ -508,6 +553,7 @@ def melt_file(
                 "format",
                 "Fieldwidth",
                 "imputationvar",
+                "imputation_value",
                 "source_file",
             ]
             yield merged[cols]
@@ -671,6 +717,8 @@ def main():
     dict_df = pd.read_parquet(args.lake)
     dict_df["varnumber"] = dict_df["varnumber"].astype(str).str.zfill(8)
     dict_df["varname"] = dict_df["varname"].astype(str).str.upper()
+    dict_df["imputationvar"] = dict_df["imputationvar"].fillna("").astype(str).str.upper()
+    dict_df.loc[dict_df["imputationvar"].isin({"NAN", "NONE", "<NA>", "NAT"}), "imputationvar"] = ""
     dict_df = dict_df[
         [
             "year",
