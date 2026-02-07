@@ -1,27 +1,47 @@
-# IPEDS Panel Builder (2004-2024)
+# IPEDS Paneling
 
-Builds a reproducible IPEDS panel from raw cross-sections to:
+Build reproducible IPEDS panel datasets (2004-2024) from raw NCES cross-sections.
+
+## Pipeline Graphics
+
+![Figure 1. IPEDS Harmonization Pipeline (2004-2024)](Artifacts/Figure_1_pipeline.svg)
+
+## Main Outputs
+
 - `Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet`
 - `Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet`
 - `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet`
+
+## Prerequisites
+
+- Python 3.10+
+- Input folder: `Raw_Cross_Section_Data/`
+- Dictionary file: `Dictionary/dictionary_lake.parquet` (or build it with the command below)
 
 ## Setup
 
 ```bash
 pip install -r requirements.txt
-```
-
-Set data root (optional, defaults to repo root):
-
-```bash
 export IPEDS_ROOT="/path/to/IPEDS_Paneling"
 ```
 
-Required input folders/files under `IPEDS_ROOT`:
-- `Raw_Cross_Section_Data/`
-- `Dictionary/dictionary_lake.parquet`
+If `requirements.txt` install has issues, install core runtime packages directly:
 
-If dictionary is missing:
+```bash
+pip install duckdb pandas pyarrow openpyxl xlrd pyyaml requests beautifulsoup4 matplotlib
+```
+
+## Quick Start (One Command)
+
+```bash
+bash manual_commands.sh
+```
+
+This runs the full pipeline and writes outputs to `Panels/` and QC results to `Checks/`.
+
+## Full Step-by-Step Run
+
+### 1) Build dictionary (only if missing)
 
 ```bash
 python3 Scripts/02_dictionary_ingest.py \
@@ -32,15 +52,7 @@ python3 Scripts/02_dictionary_ingest.py \
   --codes-output-csv "$IPEDS_ROOT/Dictionary/dictionary_codes.csv"
 ```
 
-## One-line Run (Recommended)
-
-```bash
-bash manual_commands.sh
-```
-
-This runs the full pipeline with current script paths and writes outputs into `Panels/` and QC into `Checks/`.
-
-## Direct Full Run
+### 2) Run full panel build
 
 ```bash
 python3 Scripts/00_run_all.py \
@@ -69,6 +81,8 @@ python3 Scripts/00_run_all.py \
 
 ## Build a Custom Panel
 
+Use explicit variables:
+
 ```bash
 python3 Scripts/06_build_custom_panel.py \
   --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
@@ -76,7 +90,7 @@ python3 Scripts/06_build_custom_panel.py \
   --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
 ```
 
-Or use variable list file:
+Use a variable list file:
 
 ```bash
 python3 Scripts/06_build_custom_panel.py \
@@ -85,24 +99,35 @@ python3 Scripts/06_build_custom_panel.py \
   --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
 ```
 
-## QC Outputs
+## QC Folders
 
 - `Checks/release_qc/` release manifest checks
-- `Checks/harmonize_qc/` harmonize anomalies (including dropped missing UNITID rows)
-- `Checks/disc_qc/` discrete collapse conflicts
-- `Checks/wide_qc/` wide panel summaries
-- `Checks/prch_qc/` parent-child cleaning summaries
-- `Checks/panel_qc/` raw vs PRCH-clean QA
+- `Checks/harmonize_qc/` harmonization checks (including dropped missing UNITID rows)
+- `Checks/disc_qc/` discrete-collapse conflicts
+- `Checks/wide_qc/` wide panel summary checks
+- `Checks/prch_qc/` parent-child cleaning checks
+- `Checks/panel_qc/` raw vs PRCH-clean comparison
 
 ## Repository Layout
 
-- `Scripts/` pipeline scripts (`00` to `06`)
+- `Scripts/` main pipeline scripts
 - `Scripts/QA_QC/` QA/QC scripts
-- `Customize_Panel/` custom panel variable lists
-- `Artifacts/` small tracked artifacts/docs only
-- `manual_commands.sh` public one-line runner
+- `Customize_Panel/` variable-list inputs for custom paneling
+- `Artifacts/` tracked figures/docs only
+- `manual_commands.sh` one-command pipeline runner
+
+## Troubleshooting
+
+- `zsh: parse error near ')'`
+  - You likely pasted a broken multiline block. Run `bash manual_commands.sh` or save commands to a `.sh` file and run with `bash`.
+- `Missing dictionary_lake.parquet`
+  - Run `Scripts/02_dictionary_ingest.py` first.
+- `ModuleNotFoundError: duckdb`
+  - Install dependencies in your active environment.
+- Out-of-memory during final dedupe
+  - Keep `--no-final-dedupe` (already set in recommended command).
 
 ## Notes
 
 - `Scripts/03_harmonize.py` excludes mission folders from ingestion.
-- Keep large generated outputs out of git (`Checks/`, `Panels/`, `Cross_sections/`, raw inputs).
+- Keep generated large outputs out of git (`Raw_Cross_Section_Data/`, `Cross_sections/`, `Panels/`, `Checks/`).

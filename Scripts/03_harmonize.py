@@ -292,11 +292,11 @@ def read_table_iter(fp: pathlib.Path, chunksize: int = 50000):
     compression = "gzip" if suffix == ".gz" else None
     # Try UTF-8 first, then latin1. Keep last-resort parsing guarded by UNITID sanity checks.
     attempts = (
-        ("chunked", dict(dtype=str, sep=sep, compression=compression, low_memory=False, chunksize=chunksize)),
-        ("chunked", dict(dtype=str, sep=sep, compression=compression, engine="python", on_bad_lines="skip", chunksize=chunksize)),
-        ("chunked", dict(dtype=str, sep=sep, compression=compression, engine="python", encoding="latin1", on_bad_lines="skip", chunksize=chunksize)),
+        ("chunked", dict(dtype=str, sep=sep, compression=compression, low_memory=False, index_col=False, chunksize=chunksize)),
+        ("chunked", dict(dtype=str, sep=sep, compression=compression, engine="python", on_bad_lines="skip", index_col=False, chunksize=chunksize)),
+        ("chunked", dict(dtype=str, sep=sep, compression=compression, engine="python", encoding="latin1", on_bad_lines="skip", index_col=False, chunksize=chunksize)),
         # Some files fail only in chunked python mode; parse full then yield slices.
-        ("full", dict(dtype=str, sep=sep, compression=compression, engine="python", encoding="latin1", on_bad_lines="skip")),
+        ("full", dict(dtype=str, sep=sep, compression=compression, engine="python", encoding="latin1", on_bad_lines="skip", index_col=False)),
         # Last-resort: treat quotes as regular characters.
         ("chunked", dict(
             dtype=str,
@@ -305,6 +305,7 @@ def read_table_iter(fp: pathlib.Path, chunksize: int = 50000):
             engine="python",
             encoding="latin1",
             on_bad_lines="skip",
+            index_col=False,
             quoting=csv.QUOTE_NONE,
             escapechar="\\",
             chunksize=chunksize,
