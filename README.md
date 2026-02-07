@@ -6,6 +6,19 @@ Build reproducible IPEDS panel datasets (2004-2024) from raw NCES cross-sections
 
 ![Figure 1. IPEDS Harmonization Pipeline (2004-2024)](Artifacts/Figure_1_pipeline.svg)
 
+- 1) Downloading Cross-Sectional Complete Data
+  - This script automates the download and extraction of IPEDS "Complete Data Files" for a specified range of years (2004-2024).
+- 2) Ingesting Dictionary
+  - Build a lean IPEDS dictionary lake (2004–2024) with core metadata only.
+- 3) Harmonize Variables
+  - Harmonizer that builds a LONG panel with provenance-preserving grain.
+- 4) Build Wide Panel
+  - Build a wide institution–year panel from the stitched long panel.
+- 5) Parent/Child Cleaning
+  - Parent/Child cleaning for the stitched wide panel.
+- 6) Customizing Panel Data
+  - Build a custom wide panel by selecting specific variables from a wide panel.
+
 ## Main Outputs
 
 - `Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet`
@@ -16,7 +29,7 @@ Build reproducible IPEDS panel datasets (2004-2024) from raw NCES cross-sections
 
 - Python 3.10+
 - Input folder: `Raw_Cross_Section_Data/`
-- Dictionary file: `Dictionary/dictionary_lake.parquet` (or build it with the command below)
+- Dictionary file: `Dictionary/dictionary_lake.parquet` 
 
 ## Setup
 
@@ -31,55 +44,19 @@ If `requirements.txt` install has issues, install core runtime packages directly
 pip install duckdb pandas pyarrow openpyxl xlrd pyyaml requests beautifulsoup4 matplotlib
 ```
 
-## Quick Start (One Command)
+## Quick Start
 
 ```bash
 bash manual_commands.sh
 ```
 
 This runs the full pipeline and writes outputs to `Panels/` and QC results to `Checks/`.
+It will output a cleaned wide panel dataset ready for analysis `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet`
 
-## Full Step-by-Step Run
+## Customize Panel Data
 
-### 1) Build dictionary (only if missing)
-
-```bash
-python3 Scripts/02_dictionary_ingest.py \
-  --root "$IPEDS_ROOT/Raw_Cross_Section_Data" \
-  --output "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
-  --output-csv "$IPEDS_ROOT/Dictionary/dictionary_lake.csv" \
-  --codes-output "$IPEDS_ROOT/Dictionary/dictionary_codes.parquet" \
-  --codes-output-csv "$IPEDS_ROOT/Dictionary/dictionary_codes.csv"
-```
-
-### 2) Run full panel build
-
-```bash
-python3 Scripts/00_run_all.py \
-  --root "$IPEDS_ROOT/Raw_Cross_Section_Data" \
-  --lake "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
-  --years "2004:2024" \
-  --cross-sections-dir "$IPEDS_ROOT/Cross_sections" \
-  --parts-dir-base "$IPEDS_ROOT/Cross_sections" \
-  --stitch-out "$IPEDS_ROOT/Panels/2004-2024/panel_long_varnum_2004_2024.parquet" \
-  --wide-out-dir "$IPEDS_ROOT/Panels/wide_2004_2024" \
-  --wide-write-single "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
-  --stitch-wide \
-  --stitch-wide-out "$IPEDS_ROOT/Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet" \
-  --run-cleaning \
-  --prch-clean-out "$IPEDS_ROOT/Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet" \
-  --clean-out "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
-  --prch-qc-dir "$IPEDS_ROOT/Checks/prch_qc" \
-  --disc-qc-dir "$IPEDS_ROOT/Checks/disc_qc" \
-  --qc-dir "$IPEDS_ROOT/Checks/wide_qc" \
-  --release-allow "revised,final" \
-  --release-qc-dir "$IPEDS_ROOT/Checks/release_qc" \
-  --log-dir "$IPEDS_ROOT/Checks/logs" \
-  --no-final-dedupe \
-  --drop-imputation-flags
-```
-
-## Build a Custom Panel
+Using `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet`, the panel data is customizable by keeping only relevant variables.
+Use `panel_var_reference.xlsx` as a reference to select variables. Its title and description is included. Use the given varnme in `panel_var_reference.xlsx` to properly extract the correct variable. Customizing can be done either direct shell code or using `selectedvars.txt` to list selected variables
 
 Use explicit variables:
 

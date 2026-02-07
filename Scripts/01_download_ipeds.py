@@ -3,7 +3,7 @@ IPEDS "Power User" Data Downloader Script (v6 - Multithreaded, Comprehensive & S
 
 PURPOSE:
 This script automates the download and extraction of IPEDS "Complete Data Files"
-for a specified range of years (1987-2024).
+for a specified range of years (2004-2024).
 It is designed to be run from a local
 machine (e.g., in VS Code) to gather all necessary raw cross-sectional files
 and their corresponding data dictionaries.
