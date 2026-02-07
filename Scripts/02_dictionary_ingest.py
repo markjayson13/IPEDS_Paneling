@@ -171,6 +171,56 @@ def append_synthetic_imputation_rows(lake: pd.DataFrame) -> tuple[pd.DataFrame, 
     return out, len(synth_rows)
 
 
+def append_unitid_metadata_rows(lake: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """
+    Add a controlled metadata row for UNITID so dictionary_lake documents
+    the panel key without changing harmonization behavior.
+    """
+    if lake.empty:
+        return lake, 0
+
+    df = lake.copy()
+    years = sorted(pd.to_numeric(df["year"], errors="coerce").dropna().astype(int).unique().tolist())
+    if not years:
+        return df, 0
+
+    existing = set(
+        zip(
+            pd.to_numeric(df["year"], errors="coerce").fillna(-1).astype(int),
+            df["source_file"].fillna("").astype(str),
+            df["varname"].fillna("").astype(str).str.upper(),
+        )
+    )
+
+    rows: list[dict] = []
+    for y in years:
+        key = (y, "KEYS", "UNITID")
+        if key in existing:
+            continue
+        rows.append(
+            {
+                "year": y,
+                "varnumber": "00000001",
+                "varname": "UNITID",
+                "varTitle": "Institution identifier (panel key)",
+                "longDescription": "IPEDS institution identifier used as the panel key. This row is metadata-only.",
+                "DataType": "integer",
+                "format": "",
+                "Fieldwidth": "",
+                "imputationvar": "",
+                "source_file": "KEYS",
+                "source_file_label": "Panel key metadata",
+            }
+        )
+
+    if not rows:
+        return df, 0
+
+    out = pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
+    out = out.drop_duplicates(subset=["year", "source_file", "varnumber", "varname"]).reset_index(drop=True)
+    return out, len(rows)
+
+
 def normalize_source_file(path: Path) -> str:
     """Normalize source filename for dictionary rows.
     - Strip years and digits from names (except GR200).
@@ -487,6 +537,8 @@ def main() -> None:
             lake[c] = ""
     lake = lake[desired_cols]
     lake, synth_count = append_synthetic_imputation_rows(lake)
+    lake, unitid_count = append_unitid_metadata_rows(lake)
+    lake["year"] = pd.to_numeric(lake["year"], errors="coerce").astype("Int64")
     lake = lake[desired_cols]
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -494,6 +546,8 @@ def main() -> None:
     print(f"Wrote {len(lake):,} rows to {args.output}")
     if synth_count:
         print(f"Added {synth_count:,} synthetic imputation-variable rows with stable varnumbers")
+    if unitid_count:
+        print(f"Added {unitid_count:,} UNITID metadata rows (one per year)")
 
     # Always regenerate CSV for inspection
     if args.output_csv:

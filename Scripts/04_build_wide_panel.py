@@ -5,7 +5,8 @@ Build a wide institution–year panel from the stitched long panel.
 Design choices:
 - Observed spine: only UNITID–year pairs present in the long data are included.
 - Year-by-year processing to stay RAM‑friendly.
-- Columns: varname becomes the wide columns; values are kept as strings.
+- Columns: varname becomes the wide columns; raw values are preserved by default.
+- Optional typed output can coerce numeric variables using dictionary metadata.
 - Optional discrete-category collapse (LEVEL1..LEVELn -> LEVEL_CAT) with QC outputs.
 """
 
@@ -66,11 +67,13 @@ def ensure_all_target_cols(df: pd.DataFrame, targets: list[str]) -> pd.DataFrame
     return df.reindex(columns=cols)
 
 
-def coerce_types(df: pd.DataFrame, targets: list[str]) -> pd.DataFrame:
+def coerce_types(df: pd.DataFrame, numeric_targets: set[str] | None = None) -> pd.DataFrame:
     df["year"] = pd.to_numeric(df["year"], errors="coerce").astype("Int32")
     df["UNITID"] = pd.to_numeric(df["UNITID"], errors="coerce").astype("Int64")
-    if targets:
-        df[targets] = df[targets].apply(pd.to_numeric, errors="coerce")
+    if numeric_targets:
+        cols = [c for c in df.columns if c in numeric_targets]
+        if cols:
+            df[cols] = df[cols].apply(pd.to_numeric, errors="coerce")
     return df
 
 
@@ -90,6 +93,74 @@ def order_targets(targets: Iterable[str]) -> list[str]:
     remaining = sorted([t for t in target_set if t not in ordered])
     ordered.extend(remaining)
     return ordered
+
+
+def is_non_empty_value(series: pd.Series) -> pd.Series:
+    txt = series.astype("string")
+    cleaned = txt.str.strip().str.lower()
+    return series.notna() & ~cleaned.isin(["", "nan", "none", "<na>", "na", "nat"])
+
+
+def active_disc_mask(series: pd.Series) -> pd.Series:
+    """
+    Active-state detector for discrete component variables.
+    Rules:
+    - numeric values: active when != 0
+    - logical/text booleans: active for true-like tokens, inactive for false-like tokens
+    - other non-empty strings: treated as active
+    """
+    txt = series.astype("string").str.strip()
+    low = txt.str.lower()
+    null_like = {"", "nan", "none", "<na>", "na", "nat"}
+    true_like = {"y", "yes", "t", "true"}
+    false_like = {"n", "no", "f", "false"}
+
+    non_empty = series.notna() & ~low.isin(null_like)
+    nums = pd.to_numeric(txt, errors="coerce")
+    is_num = nums.notna()
+    active_num = is_num & (nums != 0)
+    active_true = low.isin(true_like)
+    inactive_false = low.isin(false_like)
+    active_other = non_empty & ~is_num & ~inactive_false
+    return active_num | active_true | active_other
+
+
+def build_numeric_targets(dict_path: str | None, targets: Iterable[str]) -> set[str]:
+    """
+    Pick numeric targets from dictionary metadata.
+    Conservative rule:
+    - numeric if DataType/format signals continuous numeric
+    - non-numeric if DataType/format signals discrete/categorical/string
+    """
+    if not dict_path:
+        return set()
+    ddf = pd.read_parquet(dict_path)
+    if "varname" not in ddf.columns:
+        return set()
+    for col in ["DataType", "format"]:
+        if col not in ddf.columns:
+            ddf[col] = ""
+    ddf["varname"] = ddf["varname"].fillna("").astype(str).str.upper().str.strip()
+    ddf["DataType"] = ddf["DataType"].fillna("").astype(str).str.lower().str.strip()
+    ddf["format"] = ddf["format"].fillna("").astype(str).str.lower().str.strip()
+    ddf = ddf[ddf["varname"] != ""]
+    if ddf.empty:
+        return set()
+
+    numeric_markers = {"cont", "continuous", "numeric", "number", "num", "int", "integer", "float", "double", "decimal"}
+    string_markers = {"disc", "discrete", "char", "string", "text", "categorical", "category"}
+    target_set = {str(t).upper().strip() for t in targets}
+    out: set[str] = set()
+
+    for varname, g in ddf.groupby("varname", sort=False):
+        if varname not in target_set:
+            continue
+        vals = set(g["DataType"].tolist() + g["format"].tolist())
+        has_numeric = any(v in numeric_markers for v in vals if v)
+        has_string = any(v in string_markers for v in vals if v)
+        if has_numeric and not has_string:
+            out.add(varname)
+    return out
 
 
 def build_disc_groups(dict_path: str) -> tuple[dict[str, tuple[str, str]], dict[str, list[str]]]:
@@ -172,6 +243,8 @@ def main() -> None:
     ap.add_argument("--years", required=True, help='Year span, e.g. "1987:2024"')
     ap.add_argument("--write_single", default=None, help="Optional single wide parquet path")
     ap.add_argument("--dictionary", default=None, help="Optional dictionary_lake.parquet for disc grouping")
+    ap.add_argument("--typed-output", action=argparse.BooleanOptionalAction, default=False, help="Coerce numeric variables using dictionary metadata")
+    ap.add_argument("--drop-empty-cols", action=argparse.BooleanOptionalAction, default=False, help="Drop vars that are empty across all requested years")
     ap.add_argument("--collapse-disc", action="store_true", help="Collapse discrete (disc) groups into a base var")
     ap.add_argument("--drop-disc-components", action="store_true", help="Drop component vars after collapse")
     ap.add_argument("--disc-qc-dir", default=None, help="Optional dir to write disc conflict reports")
@@ -220,13 +293,32 @@ def main() -> None:
 
     # Collect universe of varnames across requested years
     targets = set()
+    targets_with_data = set()
     for y in years:
         filt = (ds.field(year_col) == y) & ds.field(target_col).is_valid()
-        tbl = dataset.to_table(columns=[target_col], filter=filt)
+        tbl = dataset.to_table(columns=[target_col, value_col], filter=filt)
         df = rename_cols(tbl.to_pandas())
-        targets.update(df["varname"].dropna().unique().tolist())
+        if df.empty:
+            continue
+        df["varname"] = df["varname"].fillna("").astype(str).str.upper().str.strip()
+        df = df[df["varname"] != ""]
+        targets.update(df["varname"].unique().tolist())
+        non_empty = is_non_empty_value(df["value"])
+        if non_empty.any():
+            targets_with_data.update(df.loc[non_empty, "varname"].unique().tolist())
 
     all_targets = order_targets(targets)
+    if args.drop_empty_cols:
+        before = len(all_targets)
+        all_targets = [t for t in all_targets if t in targets_with_data]
+        dropped = before - len(all_targets)
+        if dropped > 0:
+            print(f"[info] dropped {dropped} globally-empty variables (no non-empty values in selected years)")
+
+    numeric_targets = set()
+    if args.typed_output:
+        numeric_targets = build_numeric_targets(args.dictionary, all_targets)
+        print(f"[info] typed output enabled: numeric vars={len(numeric_targets)} string vars={len(all_targets) - len(numeric_targets)}")
     disc_name_map = {}
     if args.collapse_disc and group_to_vars:
         disc_name_map = resolve_disc_names(group_to_vars, set(all_targets), suffix=args.disc_suffix)
@@ -237,10 +329,13 @@ def main() -> None:
             # remove component vars from output columns
             components = {v for vs in group_to_vars.values() for v in vs}
             all_targets = [t for t in all_targets if t not in components]
-    schema_wide = pa.schema(
-        [pa.field("year", pa.int32()), pa.field("UNITID", pa.int64())]
-        + [pa.field(t, pa.string()) for t in all_targets]
-    )
+    schema_fields = [pa.field("year", pa.int32()), pa.field("UNITID", pa.int64())]
+    for t in all_targets:
+        if args.typed_output and t in numeric_targets:
+            schema_fields.append(pa.field(t, pa.float64()))
+        else:
+            schema_fields.append(pa.field(t, pa.string()))
+    schema_wide = pa.schema(schema_fields)
     year_part_paths: list[str] = []
     qc_rows: list[dict] = []
 
@@ -275,25 +370,42 @@ def main() -> None:
                 disc_rows = disc_rows.copy()
                 disc_rows["base"] = disc_rows["varname"].map(lambda v: var_to_group.get(v, ("", ""))[0])
                 disc_rows["suffix"] = disc_rows["varname"].map(lambda v: var_to_group.get(v, ("", ""))[1])
-                # only keep rows with a value
-                disc_rows = disc_rows[disc_rows["value"].notna() & (disc_rows["value"] != "")]
-                # detect conflicts (more than one active per group)
-                counts = disc_rows.groupby(["UNITID", "year", "base"]).size().reset_index(name="n")
-                conflict_bases = set(counts.loc[counts["n"] > 1, "base"])
-                if conflict_bases and args.disc_qc_dir:
-                    conflict_rows = disc_rows[disc_rows["base"].isin(conflict_bases)]
-                    conflict_rows.to_csv(os.path.join(args.disc_qc_dir, f"disc_conflicts_{y}.csv"), index=False)
-                # keep only non-conflicting groups
-                ok = disc_rows[~disc_rows["base"].isin(conflict_bases)]
-                if not ok.empty:
-                    combined = ok.groupby(["UNITID", "year", "base"], as_index=False).first()
-                    combined["varname"] = combined["base"].map(lambda b: disc_name_map.get(b, b))
-                    # store the suffix code (e.g., LEVEL1 -> 1)
-                    combined["value"] = combined["suffix"]
-                    combined = combined[["UNITID", "year", "varname", "value"]]
-                    if args.drop_disc_components:
-                        concept = concept[~concept["varname"].isin(ok["varname"].unique())]
-                    concept = pd.concat([concept, combined], ignore_index=True)
+                disc_rows = disc_rows[is_non_empty_value(disc_rows["value"])]
+                if not disc_rows.empty:
+                    disc_rows["is_active"] = active_disc_mask(disc_rows["value"])
+                    active = disc_rows[disc_rows["is_active"]].copy()
+                    if not active.empty:
+                        # De-noise exact repeats first so they do not become false conflicts.
+                        active = active.drop_duplicates(subset=["UNITID", "year", "base", "suffix"])
+                        choice = (
+                            active.groupby(["UNITID", "year", "base"])["suffix"]
+                            .agg(lambda s: sorted(set(s)))
+                            .reset_index(name="suffixes")
+                        )
+                        choice["n_active"] = choice["suffixes"].str.len()
+
+                        # Conflicts = more than one active suffix for same UNITID-year-base.
+                        conflict_keys = choice[choice["n_active"] > 1][["UNITID", "year", "base"]]
+                        if not conflict_keys.empty and args.disc_qc_dir:
+                            conflict_rows = active.merge(conflict_keys, on=["UNITID", "year", "base"], how="inner")
+                            conflict_rows = conflict_rows.merge(
+                                choice[["UNITID", "year", "base", "n_active"]],
+                                on=["UNITID", "year", "base"],
+                                how="left",
+                            )
+                            conflict_rows.to_csv(os.path.join(args.disc_qc_dir, f"disc_conflicts_{y}.csv"), index=False)
+
+                        ok = choice[choice["n_active"] == 1].copy()
+                        if not ok.empty:
+                            ok["value"] = ok["suffixes"].str[0]
+                            ok["varname"] = ok["base"].map(lambda b: disc_name_map.get(b, b))
+                            combined = ok[["UNITID", "year", "varname", "value"]]
+                            if args.drop_disc_components:
+                                collapsed_bases = set(ok["base"])
+                                drop_components = {v for v, grp in var_to_group.items() if grp[0] in collapsed_bases}
+                                if drop_components:
+                                    concept = concept[~concept["varname"].isin(drop_components)]
+                            concept = pd.concat([concept, combined], ignore_index=True)
 
         # log duplicates if any, then keep first
         dup_mask = concept.duplicated(subset=["UNITID", "year", "varname"], keep=False)
@@ -314,7 +426,7 @@ def main() -> None:
         # Merge to keep spine rows even if no concept values
         wide = spine.merge(wide, on=["year", "UNITID"], how="left")
         wide = ensure_all_target_cols(wide, all_targets)
-        wide = coerce_types(wide, all_targets)
+        wide = coerce_types(wide, numeric_targets if args.typed_output else None)
 
         out_path = os.path.join(args.out_dir, f"year={y}", "part.parquet")
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
@@ -327,7 +439,7 @@ def main() -> None:
             os.makedirs(args.qc_dir, exist_ok=True)
             n_spine = int(len(spine))
             n_vars = int(len(all_targets))
-            non_empty = int(((concept["value"].notna()) & (concept["value"] != "")).sum())
+            non_empty = int(is_non_empty_value(concept["value"]).sum())
             possible = n_spine * n_vars if n_spine and n_vars else 0
             fill_rate = (non_empty / possible) if possible else 0.0
             qc_rows.append(

@@ -69,10 +69,20 @@ def normalize_source_label(label: str) -> str:
     return txt
 
 
+def normalize_varnumber(val: object) -> str:
+    """Normalize varnumber as string; pad only numeric IDs to width 8."""
+    if pd.isna(val):
+        return ""
+    txt = str(val).strip()
+    if txt.lower() in {"", "nan", "none", "<na>", "na", "nat"}:
+        return ""
+    return txt.zfill(8) if txt.isdigit() else txt
+
+
 def build_varnumber_collisions(lake_df: pd.DataFrame) -> pd.DataFrame:
     bad_tokens = {"", "nan", "none", "<na>", "na", "nat"}
     xdf = lake_df.copy()
-    xdf["varnumber"] = xdf["varnumber"].astype(str).str.zfill(8)
+    xdf["varnumber"] = xdf["varnumber"].map(normalize_varnumber)
     xdf["varname"] = xdf["varname"].astype(str).str.strip().str.lower()
 
     coll = (

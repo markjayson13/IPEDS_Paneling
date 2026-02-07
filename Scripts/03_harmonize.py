@@ -36,6 +36,19 @@ import pyarrow.parquet as pq
 REPO_ROOT = pathlib.Path(os.environ.get("IPEDS_ROOT", pathlib.Path(__file__).resolve().parents[1]))
 
 
+def normalize_varnumber(val: object) -> str:
+    """
+    Normalize varnumber as a string ID.
+    Zero-pad only numeric-looking IDs to width 8.
+    """
+    if pd.isna(val):
+        return ""
+    txt = str(val).strip()
+    if txt.lower() in {"", "nan", "none", "<na>", "na", "nat"}:
+        return ""
+    return txt.zfill(8) if txt.isdigit() else txt
+
+
 def setup_logging(log_path: str | None) -> None:
     if not log_path:
         return
@@ -716,7 +729,7 @@ def main():
         return
 
     dict_df = pd.read_parquet(args.lake)
-    dict_df["varnumber"] = dict_df["varnumber"].astype(str).str.zfill(8)
+    dict_df["varnumber"] = dict_df["varnumber"].map(normalize_varnumber)
     dict_df["varname"] = dict_df["varname"].astype(str).str.upper()
     dict_df["imputationvar"] = dict_df["imputationvar"].fillna("").astype(str).str.upper()
     dict_df.loc[dict_df["imputationvar"].isin({"NAN", "NONE", "<NA>", "NAT"}), "imputationvar"] = ""
