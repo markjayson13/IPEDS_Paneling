@@ -286,9 +286,11 @@ def main() -> None:
     ap.add_argument("--wide-analysis-out", default=None, help="Alias for --write_single when building analysis-wide output")
     ap.add_argument("--dim-sources", default="IC_CAMPUSES,IC_PCCAMPUSES,F_FA_F,F_FA_G", help="Exact source_file names treated as dimensioned")
     ap.add_argument("--dim-prefixes", default="C_,EF,GR,GR200,SAL,S_,OM", help="Comma-separated source_file prefixes treated as dimensioned")
+    ap.add_argument("--exclude-vars", default=None, help="Comma-separated varnames to exclude from analysis-wide output")
     ap.add_argument("--fail-on-scalar-conflicts", action=argparse.BooleanOptionalAction, default=True, help="Fail if scalar lane has conflicting values on canonical scalar key")
     ap.add_argument("--scalar-conflicts-max-rows", type=int, default=100000, help="Max rows to write to scalar conflicts QC file")
     ap.add_argument("--anti-garbage-ids", default="CIPCODE,LINE,FORMID,FUNCTCD,MAJORNUM", help="Dimension identifier names that must not appear as scalar wide columns")
+    ap.add_argument("--drop-anti-garbage-cols", action=argparse.BooleanOptionalAction, default=True, help="Drop blocked anti-garbage identifier columns from wide targets before fail gate")
     ap.add_argument("--fail-on-anti-garbage", action=argparse.BooleanOptionalAction, default=True, help="Fail if anti-garbage blocked identifiers appear as wide columns")
     ap.add_argument("--anti-garbage-out", default=None, help="QC output CSV path for anti-garbage column hits")
     ap.add_argument("--typed-output", action=argparse.BooleanOptionalAction, default=False, help="Coerce numeric variables using dictionary metadata")
@@ -326,6 +328,7 @@ def main() -> None:
     dim_sources = parse_upper_set(args.dim_sources)
     dim_prefixes = tuple([x.strip().upper() for x in str(args.dim_prefixes).split(",") if x.strip()])
     anti_garbage_ids = parse_upper_set(args.anti_garbage_ids)
+    exclude_vars = parse_upper_set(args.exclude_vars)
     if args.scalar_long_out:
         pathlib.Path(args.scalar_long_out).parent.mkdir(parents=True, exist_ok=True)
     if args.dim_long_out:
@@ -384,6 +387,10 @@ def main() -> None:
             df = df[df["varname"] != ""]
             if df.empty:
                 continue
+            if exclude_vars:
+                df = df[~df["varname"].isin(exclude_vars)]
+                if df.empty:
+                    continue
             if args.lane_split:
                 dim_mask = df["source_file"].map(lambda s: is_dimensioned_source_file(s, dim_sources, dim_prefixes))
                 df = df[~dim_mask]
@@ -395,6 +402,12 @@ def main() -> None:
                 targets_with_data.update(df.loc[non_empty, "varname"].unique().tolist())
 
     all_targets = order_targets(targets)
+    if exclude_vars:
+        before = len(all_targets)
+        all_targets = [t for t in all_targets if t not in exclude_vars]
+        dropped = before - len(all_targets)
+        if dropped > 0:
+            print(f"[info] excluded {dropped} variables by --exclude-vars")
     if args.drop_empty_cols:
         before = len(all_targets)
         all_targets = [t for t in all_targets if t in targets_with_data]
@@ -421,6 +434,10 @@ def main() -> None:
     if anti_hits and anti_garbage_out:
         pd.DataFrame({"blocked_identifier_column": anti_hits}).to_csv(anti_garbage_out, index=False)
         print(f"[warn] anti-garbage hits written: {anti_garbage_out} (count={len(anti_hits)})")
+    if anti_hits and args.drop_anti_garbage_cols:
+        all_targets = [t for t in all_targets if t not in set(anti_hits)]
+        print(f"[info] dropped {len(anti_hits)} anti-garbage identifier columns from wide targets")
+        anti_hits = find_anti_garbage_hits(all_targets, anti_garbage_ids)
     if anti_hits and args.fail_on_anti_garbage:
         raise SystemExit(
             f"anti-garbage gate failed: {len(anti_hits)} blocked dimension identifiers present in wide targets"
@@ -486,6 +503,10 @@ def main() -> None:
             cdf = cdf[cdf["varname"] != ""]
             if cdf.empty:
                 continue
+            if exclude_vars:
+                cdf = cdf[~cdf["varname"].isin(exclude_vars)]
+                if cdf.empty:
+                    continue
             # De-dup within batch to reduce memory pressure before year-level concat.
             base_cols = ["UNITID", "year", "varname", "value"]
             if args.lane_split:
