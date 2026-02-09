@@ -14,13 +14,12 @@ from pathlib import Path
 import pandas as pd
 
 BASE = Path(os.environ.get("IPEDS_ROOT", Path(__file__).resolve().parents[2]))
-ARTIFACTS = BASE / "Artifacts"
 CHECKS = BASE / "Checks"
-DEFAULT_CODES = ARTIFACTS / "Dictionary" / "dictionary_codes.parquet"
-DEFAULT_CODES_FALLBACK = BASE / "Dictionary" / "dictionary_codes.parquet"
-DEFAULT_COLLAPSED = ARTIFACTS / "Dictionary" / "dictionary_codes_collapsed.csv"
-DEFAULT_SOURCE_YEARS = ARTIFACTS / "Dictionary" / "source_file_years.csv"
-DEFAULT_QAQC = ARTIFACTS / "Dictionary" / "dictionary_codes_qaqc.csv"
+DEFAULT_CODES = BASE / "Dictionary" / "dictionary_codes.parquet"
+DEFAULT_CODES_FALLBACK = BASE / "Artifacts" / "Dictionary" / "dictionary_codes.parquet"
+DEFAULT_COLLAPSED = CHECKS / "dictionary_qc" / "dictionary_codes_collapsed.csv"
+DEFAULT_SOURCE_YEARS = CHECKS / "dictionary_qc" / "source_file_years.csv"
+DEFAULT_QAQC = CHECKS / "dictionary_qc" / "dictionary_codes_qaqc.csv"
 DEFAULT_LAKE = BASE / "Dictionary" / "dictionary_lake.parquet"
 DEFAULT_VARNUMBER_COLLISIONS = CHECKS / "dictionary_qc" / "varnumber_varname_collisions.csv"
 

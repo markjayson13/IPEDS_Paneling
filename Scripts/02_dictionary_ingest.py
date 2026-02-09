@@ -21,11 +21,10 @@ from typing import Tuple
 import pandas as pd
 
 BASE_ROOT = Path(os.environ.get("IPEDS_ROOT", Path(__file__).resolve().parents[1]))
-ARTIFACTS = BASE_ROOT / "Artifacts"
 ROOT = BASE_ROOT / "Raw_Cross_Section_Data"
-DICT_PARQUET_PATH = ARTIFACTS / "Dictionary" / "dictionary_lake.parquet"
-DICT_CODES_PARQUET_PATH = ARTIFACTS / "Dictionary" / "dictionary_codes.parquet"
-DICT_CODES_CSV_PATH = ARTIFACTS / "Dictionary" / "dictionary_codes.csv"
+DICT_PARQUET_PATH = BASE_ROOT / "Dictionary" / "dictionary_lake.parquet"
+DICT_CODES_PARQUET_PATH = BASE_ROOT / "Dictionary" / "dictionary_codes.parquet"
+DICT_CODES_CSV_PATH = BASE_ROOT / "Dictionary" / "dictionary_codes.csv"
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--root", type=Path, default=ROOT)
     p.add_argument("--min-year", type=int, default=2004)
     p.add_argument("--output", type=Path, default=DICT_PARQUET_PATH)
-    p.add_argument("--output-csv", type=Path, default=ARTIFACTS / "Dictionary" / "dictionary_lake.csv")
+    p.add_argument("--output-csv", type=Path, default=BASE_ROOT / "Dictionary" / "dictionary_lake.csv")
     p.add_argument("--codes-output", type=Path, default=DICT_CODES_PARQUET_PATH)
     p.add_argument("--codes-output-csv", type=Path, default=DICT_CODES_CSV_PATH)
     return p.parse_args()

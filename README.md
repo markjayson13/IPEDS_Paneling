@@ -1,73 +1,68 @@
 # IPEDS Paneling
 
-Build reproducible IPEDS panel datasets (2004-2024) from raw NCES cross-sections.
-
-## Pipeline Graphics
+Build reproducible IPEDS panel datasets from NCES cross-sections with strict release checks, harmonization guards, and analysis-wide exports.
 
 ![Figure 1. IPEDS Harmonization Pipeline (2004-2024)](Artifacts/Figure_1_pipeline.svg)
 
-- 1) Downloading Cross-Sectional Complete Data
-  - This script automates the download and extraction of IPEDS "Complete Data Files" for a specified range of years (2004-2024).
-- 2) Ingesting Dictionary
-  - Build a lean IPEDS dictionary lake (2004–2024) with core metadata only.
-- 3) Harmonize Variables
-  - Harmonizer that builds a LONG panel with provenance-preserving grain.
-- 4) Build Wide Panel
-  - Build a wide institution–year panel from the stitched long panel.
-- 5) Parent/Child Cleaning
-  - Parent/Child cleaning for the stitched wide panel.
-- 6) Customizing Panel Data
-  - Build a custom wide panel by selecting specific variables from a wide panel.
+## Overview
 
-## Main Outputs
+This repository supports two outputs:
 
-- `Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet`
-- `Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet`
-- `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet`
+- `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet` (full cleaned panel, 2004-2024)
+- `Panels/panel_wide_analysis_2004_2023.parquet` (analysis release window, 2004-2023 by default)
 
-## Prerequisites
-
-- Python 3.10+
-- Input folder: `Raw_Cross_Section_Data/`
-- Dictionary file: `Dictionary/dictionary_lake.parquet` 
+`2024` is treated as provisional/schema-transition for analysis-wide builds.
 
 ## Setup
 
 ```bash
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 export IPEDS_ROOT="/path/to/IPEDS_Paneling"
 ```
 
-If `requirements.txt` install has issues, install core runtime packages directly:
+Required input under `"$IPEDS_ROOT"`:
 
-```bash
-pip install duckdb pandas pyarrow openpyxl xlrd pyyaml requests beautifulsoup4 matplotlib
-```
+- `Raw_Cross_Section_Data/`
 
-## Quick Start
+## Quick Start (Full Clean Panel)
 
 ```bash
 bash manual_commands.sh
 ```
 
-This runs the full pipeline and writes outputs to `Panels/` and QC results to `Checks/`.
-It will output a cleaned wide panel dataset ready for analysis `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet`
+This runs `Scripts/00_run_all.py` and produces:
 
-## Customize Panel Data
+- `Panels/2004-2024/panel_long_varnum_2004_2024.parquet`
+- `Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet`
+- `Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet`
+- `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet`
 
-Using `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet`, the panel data is customizable by keeping only relevant variables.
-Use `panel_var_reference.xlsx` as a reference to select variables. Its title and description is included. Use the given varnme in `panel_var_reference.xlsx` to properly extract the correct variable. Customizing can be done either direct shell code or using `selectedvars.txt` to list selected variables
+## Build Analysis-Wide Panel (Lane Split)
 
-Use explicit variables:
+Run this after harmonization output exists:
 
 ```bash
-python3 Scripts/06_build_custom_panel.py \
-  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
-  --vars "INSTNM,SECTOR,TUITION1,PELL_RECP" \
-  --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
+python3 Scripts/04_build_wide_panel.py \
+  --input "$IPEDS_ROOT/Panels/2004-2024/panel_long_varnum_2004_2024.parquet" \
+  --out_dir "$IPEDS_ROOT/Panels/wide_analysis_parts" \
+  --years "2004:2023" \
+  --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
+  --lane-split \
+  --dim-sources "C_A,C_B,C_C,CDEP,EAP,IC_CAMPUSES,IC_PCCAMPUSES,F_FA_F,F_FA_G" \
+  --dim-prefixes "C_,EF,GR,GR200,SAL,S_,OM,DRV" \
+  --exclude-vars "SPORT1,SPORT2,SPORT3,SPORT4" \
+  --scalar-long-out "$IPEDS_ROOT/Panels/panel_long_scalar_unique.parquet" \
+  --dim-long-out "$IPEDS_ROOT/Panels/panel_long_dim.parquet" \
+  --wide-analysis-out "$IPEDS_ROOT/Panels/panel_wide_analysis_2004_2023.parquet" \
+  --typed-output \
+  --drop-empty-cols \
+  --collapse-disc \
+  --drop-disc-components \
+  --qc-dir "$IPEDS_ROOT/Checks/wide_qc" \
+  --disc-qc-dir "$IPEDS_ROOT/Checks/disc_qc"
 ```
 
-Use a variable list file:
+## Custom Panel
 
 ```bash
 python3 Scripts/06_build_custom_panel.py \
@@ -76,35 +71,29 @@ python3 Scripts/06_build_custom_panel.py \
   --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
 ```
 
-## QC Folders
+## QA/QC Outputs
 
-- `Checks/release_qc/` release manifest checks
-- `Checks/harmonize_qc/` harmonization checks (including dropped missing UNITID rows)
-- `Checks/disc_qc/` discrete-collapse conflicts
-- `Checks/wide_qc/` wide panel summary checks
-- `Checks/prch_qc/` parent-child cleaning checks
-- `Checks/panel_qc/` raw vs PRCH-clean comparison
-
-## Repository Layout
-
-- `Scripts/` main pipeline scripts
-- `Scripts/QA_QC/` QA/QC scripts
-- `Customize_Panel/` variable-list inputs for custom paneling
-- `Artifacts/` tracked figures/docs only
-- `manual_commands.sh` one-command pipeline runner
+- `Checks/release_qc/` release-manifest validation and selected-file evidence
+- `Checks/harmonize_qc/` missing-UNITID drop logs and harmonize summaries
+- `Checks/disc_qc/` discrete-collapse conflicts and collapse map
+- `Checks/wide_qc/qc_scalar_conflicts.csv` scalar-lane key conflicts
+- `Checks/wide_qc/qc_anti_garbage_failures.csv` blocked dimension identifiers in wide targets
+- `Checks/wide_qc/qc_cast_report.csv` typed-cast parse report
+- `Checks/wide_qc/qc_globally_null_columns_dropped.csv` globally null columns removed post-build
+- `Checks/prch_qc/` PRCH cleaning evidence
 
 ## Troubleshooting
 
-- `zsh: parse error near ')'`
-  - You likely pasted a broken multiline block. Run `bash manual_commands.sh` or save commands to a `.sh` file and run with `bash`.
-- `Missing dictionary_lake.parquet`
-  - Run `Scripts/02_dictionary_ingest.py` first.
-- `ModuleNotFoundError: duckdb`
-  - Install dependencies in your active environment.
-- Out-of-memory during final dedupe
-  - Keep `--no-final-dedupe` (already set in recommended command).
+- `zsh: parse error near ')'`:
+  - Run commands from a `.sh` file or run `bash manual_commands.sh` directly.
+- `ModuleNotFoundError: duckdb`:
+  - Install dependencies in the active Python environment.
+- `scalar conflict gate failed`:
+  - Inspect `Checks/wide_qc/qc_scalar_conflicts.csv`; add true dimensioned sources/prefixes or exclude known problem vars.
+- `anti-garbage gate failed`:
+  - Inspect `Checks/wide_qc/qc_anti_garbage_failures.csv`; treat those variables as dimensioned or exclude them.
 
 ## Notes
 
-- `Scripts/03_harmonize.py` excludes mission folders from ingestion.
-- Keep generated large outputs out of git (`Raw_Cross_Section_Data/`, `Cross_sections/`, `Panels/`, `Checks/`).
+- Keep generated large data out of git: `Raw_Cross_Section_Data/`, `Cross_sections/`, `Panels/`, `Checks/`.
+- `UNITID` is documented in the dictionary as controlled metadata and also used as the panel key in harmonization.

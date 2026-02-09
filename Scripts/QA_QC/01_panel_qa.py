@@ -46,9 +46,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--raw", required=True, help="Raw stitched wide parquet")
     p.add_argument("--clean", required=True, help="PRCH cleaned wide parquet")
     repo_root = Path(os.environ.get("IPEDS_ROOT", str(Path(__file__).resolve().parents[2])))
-    artifacts_root = repo_root / "Artifacts"
-    p.add_argument("--out-dir", default=str(artifacts_root / "Checks" / "panel_qc"), help="QA output directory")
-    p.add_argument("--prch-qc-dir", default=str(artifacts_root / "Checks" / "prch_qc"), help="PRCH QC dir (for prch_clean_columns.csv)")
+    checks_root = repo_root / "Checks"
+    p.add_argument("--out-dir", default=str(checks_root / "panel_qc"), help="QA output directory")
+    p.add_argument("--prch-qc-dir", default=str(checks_root / "prch_qc"), help="PRCH QC dir (for prch_clean_columns.csv)")
     p.add_argument("--sample-rows", type=int, default=1000, help="Sample size for flag/column check")
     p.add_argument("--probe-col", default="AUTO", help="Column to compare non-null counts (or AUTO)")
     p.add_argument("--auto-max-cols", type=int, default=200, help="Max candidate columns to scan when AUTO")
@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--flag-child", default="2,3,5", help="Child codes for the flag (comma-separated)")
     p.add_argument("--year-sep", default="|", help="Separator for year lists in CSV")
     p.add_argument("--excel-text", action=argparse.BooleanOptionalAction, default=True, help="Prefix year lists with apostrophe for Excel text")
-    p.add_argument("--log-file", default=str(artifacts_root / "Checks" / "logs" / "01_panel_qa.log"), help="Optional log file path")
+    p.add_argument("--log-file", default=str(checks_root / "logs" / "01_panel_qa.log"), help="Optional log file path")
     return p.parse_args()
 
 

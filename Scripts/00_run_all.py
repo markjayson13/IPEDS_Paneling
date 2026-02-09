@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Wrapper to run 03_harmonize.py per-year, stitch outputs, and optionally build a wide panel.
-Defaults are baked in for 2004–2024 and the Artifacts/ output layout.
+Wrapper to run 03_harmonize.py per-year, stitch outputs, and optionally build wide panels.
+Defaults target the standard IPEDS_ROOT layout (Raw_Cross_Section_Data, Dictionary, Panels, Checks).
 """
 from __future__ import annotations
 
@@ -15,23 +15,22 @@ import pyarrow.parquet as pq
 
 REPO_ROOT = Path(os.environ.get("IPEDS_ROOT", Path(__file__).resolve().parents[1]))
 SCRIPTS_DIR = Path(__file__).resolve().parent
-ARTIFACTS = REPO_ROOT / "Artifacts"
 
 DEFAULT_ROOT = REPO_ROOT / "Raw_Cross_Section_Data"
-DEFAULT_LAKE = ARTIFACTS / "Dictionary" / "dictionary_lake.parquet"
-DEFAULT_CROSS = ARTIFACTS / "Cross_sections"
-DEFAULT_PARTS = ARTIFACTS / "Cross_sections"
-DEFAULT_STITCH = ARTIFACTS / "Panels" / "2004-2024" / "panel_long_varnum_2004_2024.parquet"
-DEFAULT_WIDE_OUT = ARTIFACTS / "Panels" / "wide_2004_2024"
-DEFAULT_DISC_QC = ARTIFACTS / "Checks" / "disc_qc"
-DEFAULT_WIDE_QC = ARTIFACTS / "Checks" / "wide_qc"
-DEFAULT_WIDE_STITCH = ARTIFACTS / "Panels" / "2004_2024_IPEDS_Raw_Panel_DS.parquet"
-DEFAULT_CLEAN_PANEL = ARTIFACTS / "Panels" / "2004_2024_IPEDS_clean_Panel_DS.parquet"
-DEFAULT_CUSTOM_OUT = ARTIFACTS / "Panels" / "custom_panel.parquet"
-DEFAULT_PRCH_CLEAN = ARTIFACTS / "Panels" / "2004_2024_IPEDS_PRCHclean_Panel_DS.parquet"
-DEFAULT_PRCH_QC = ARTIFACTS / "Checks" / "prch_qc"
-DEFAULT_RELEASE_QC = ARTIFACTS / "Checks" / "release_qc"
-DEFAULT_LOG_DIR = ARTIFACTS / "Checks" / "logs"
+DEFAULT_LAKE = REPO_ROOT / "Dictionary" / "dictionary_lake.parquet"
+DEFAULT_CROSS = REPO_ROOT / "Cross_sections"
+DEFAULT_PARTS = REPO_ROOT / "Cross_sections"
+DEFAULT_STITCH = REPO_ROOT / "Panels" / "2004-2024" / "panel_long_varnum_2004_2024.parquet"
+DEFAULT_WIDE_OUT = REPO_ROOT / "Panels" / "wide_analysis_parts"
+DEFAULT_DISC_QC = REPO_ROOT / "Checks" / "disc_qc"
+DEFAULT_WIDE_QC = REPO_ROOT / "Checks" / "wide_qc"
+DEFAULT_WIDE_STITCH = REPO_ROOT / "Panels" / "2004_2024_IPEDS_Raw_Panel_DS.parquet"
+DEFAULT_CLEAN_PANEL = REPO_ROOT / "Panels" / "2004_2024_IPEDS_clean_Panel_DS.parquet"
+DEFAULT_CUSTOM_OUT = REPO_ROOT / "Panels" / "custom_panel.parquet"
+DEFAULT_PRCH_CLEAN = REPO_ROOT / "Panels" / "2004_2024_IPEDS_PRCHclean_Panel_DS.parquet"
+DEFAULT_PRCH_QC = REPO_ROOT / "Checks" / "prch_qc"
+DEFAULT_RELEASE_QC = REPO_ROOT / "Checks" / "release_qc"
+DEFAULT_LOG_DIR = REPO_ROOT / "Checks" / "logs"
 
 
 def parse_years(spec: str) -> list[int]:
@@ -123,6 +122,21 @@ def main() -> None:
     ap.add_argument("--wide-out-dir", default=str(DEFAULT_WIDE_OUT), help="Output dir for wide panel (partitioned)")
     ap.add_argument("--wide-years", default=None, help="Years for wide build (default: --years)")
     ap.add_argument("--wide-write-single", default=None, help="Optional single wide parquet path")
+    ap.add_argument("--wide-analysis-out", default=None, help="Optional analysis-wide parquet output (lane-split mode)")
+    ap.add_argument("--lane-split", action=argparse.BooleanOptionalAction, default=False, help="Build scalar+dimension lanes and analysis-wide panel")
+    ap.add_argument("--scalar-long-out", default=None, help="Optional output parquet for scalar long lane")
+    ap.add_argument("--dim-long-out", default=None, help="Optional output parquet for dimensioned long lane")
+    ap.add_argument("--dim-sources", default="IC_CAMPUSES,IC_PCCAMPUSES,F_FA_F,F_FA_G", help="Exact source_file names treated as dimensioned")
+    ap.add_argument("--dim-prefixes", default="C_,EF,GR,GR200,SAL,S_,OM,DRV", help="Comma-separated source_file prefixes treated as dimensioned")
+    ap.add_argument("--exclude-vars", default=None, help="Comma-separated varnames to exclude from wide output")
+    ap.add_argument("--typed-output", action=argparse.BooleanOptionalAction, default=False, help="Coerce numeric variables using dictionary metadata")
+    ap.add_argument("--drop-empty-cols", action=argparse.BooleanOptionalAction, default=False, help="Drop vars empty across selected years")
+    ap.add_argument("--drop-globally-null-post", action=argparse.BooleanOptionalAction, default=True, help="Drop globally-null columns in final stitched output")
+    ap.add_argument("--anti-garbage-ids", default="CIPCODE,LINE,FORMID,FUNCTCD,MAJORNUM", help="Dimension identifiers that should not survive as scalar columns")
+    ap.add_argument("--drop-anti-garbage-cols", action=argparse.BooleanOptionalAction, default=True, help="Drop anti-garbage blocked identifier columns")
+    ap.add_argument("--fail-on-anti-garbage", action=argparse.BooleanOptionalAction, default=True, help="Fail if anti-garbage identifiers remain in wide targets")
+    ap.add_argument("--fail-on-scalar-conflicts", action=argparse.BooleanOptionalAction, default=True, help="Fail if scalar lane has conflicting values")
+    ap.add_argument("--scan-batch-rows", type=int, default=200_000, help="Batch size for scanning long input in 04_build_wide_panel.py")
     ap.add_argument("--stitch-wide", action=argparse.BooleanOptionalAction, default=False, help="Stitch partitioned wide output into a single file")
     ap.add_argument("--stitch-wide-out", default=str(DEFAULT_WIDE_STITCH), help="Output path for stitched wide panel")
     ap.add_argument("--collapse-disc", action=argparse.BooleanOptionalAction, default=True, help="Collapse discrete groups in wide builder")
@@ -243,6 +257,25 @@ def main() -> None:
             "--dictionary",
             args.lake,
         ]
+        cmd += ["--lane-split" if args.lane_split else "--no-lane-split"]
+        cmd += ["--dim-sources", args.dim_sources]
+        cmd += ["--dim-prefixes", args.dim_prefixes]
+        if args.exclude_vars:
+            cmd += ["--exclude-vars", args.exclude_vars]
+        if args.scalar_long_out:
+            cmd += ["--scalar-long-out", args.scalar_long_out]
+        if args.dim_long_out:
+            cmd += ["--dim-long-out", args.dim_long_out]
+        if args.wide_analysis_out:
+            cmd += ["--wide-analysis-out", args.wide_analysis_out]
+        cmd += ["--typed-output" if args.typed_output else "--no-typed-output"]
+        cmd += ["--drop-empty-cols" if args.drop_empty_cols else "--no-drop-empty-cols"]
+        cmd += ["--drop-globally-null-post" if args.drop_globally_null_post else "--no-drop-globally-null-post"]
+        cmd += ["--anti-garbage-ids", args.anti_garbage_ids]
+        cmd += ["--drop-anti-garbage-cols" if args.drop_anti_garbage_cols else "--no-drop-anti-garbage-cols"]
+        cmd += ["--fail-on-anti-garbage" if args.fail_on_anti_garbage else "--no-fail-on-anti-garbage"]
+        cmd += ["--fail-on-scalar-conflicts" if args.fail_on_scalar_conflicts else "--no-fail-on-scalar-conflicts"]
+        cmd += ["--scan-batch-rows", str(args.scan_batch_rows)]
         if args.collapse_disc:
             cmd.append("--collapse-disc")
         if args.drop_disc_components:
@@ -271,7 +304,11 @@ def main() -> None:
 
     # Step 4.5: PRCH clean + research-ready clean (optional)
     if args.run_cleaning:
-        raw_wide = Path(args.stitch_wide_out if args.stitch_wide else args.stitch_wide_out)
+        raw_wide = Path(
+            args.stitch_wide_out
+            if args.stitch_wide
+            else (args.wide_write_single or args.wide_analysis_out or args.stitch_wide_out)
+        )
         if not raw_wide.exists() and not args.dry_run:
             raise SystemExit(f"Raw wide not found: {raw_wide}")
         # PRCH clean

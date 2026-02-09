@@ -103,9 +103,22 @@ def order_targets(targets: Iterable[str]) -> list[str]:
 
 
 def is_non_empty_value(series: pd.Series) -> pd.Series:
-    txt = series.astype("string")
-    cleaned = txt.str.strip().str.lower()
-    return series.notna() & ~cleaned.isin(["", "nan", "none", "<na>", "na", "nat"])
+    normalized = normalize_value_tokens(series)
+    return normalized.notna()
+
+
+def normalize_value_tokens(series: pd.Series) -> pd.Series:
+    """
+    Normalize raw value tokens before conflict checks and casting.
+    - strip surrounding whitespace
+    - treat ".", "", and blank-space-only tokens as NULL
+    - treat common null-like tokens as NULL
+    """
+    txt = series.astype("string").str.strip()
+    low = txt.str.lower()
+    null_like = {"", ".", "nan", "none", "<na>", "na", "nat"}
+    txt = txt.mask(low.isin(null_like), pd.NA)
+    return txt
 
 
 def active_disc_mask(series: pd.Series) -> pd.Series:
@@ -118,7 +131,7 @@ def active_disc_mask(series: pd.Series) -> pd.Series:
     """
     txt = series.astype("string").str.strip()
     low = txt.str.lower()
-    null_like = {"", "nan", "none", "<na>", "na", "nat"}
+    null_like = {"", ".", "nan", "none", "<na>", "na", "nat"}
     true_like = {"y", "yes", "t", "true"}
     false_like = {"n", "no", "f", "false"}
 
@@ -277,7 +290,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", required=True, help="Stitched LONG panel parquet")
     ap.add_argument("--out_dir", required=True, help="Output dir for year-partitioned wide parquet")
-    ap.add_argument("--years", required=True, help='Year span, e.g. "1987:2024"')
+    ap.add_argument("--years", default="2004:2023", help='Year span, default analysis window: "2004:2023"')
     ap.add_argument("--write_single", default=None, help="Optional single wide parquet path")
     ap.add_argument("--dictionary", default=None, help="Optional dictionary_lake.parquet for disc grouping")
     ap.add_argument("--lane-split", action=argparse.BooleanOptionalAction, default=False, help="Split long input into scalar lane and dimensioned lane using source_file rules")
@@ -285,7 +298,7 @@ def main() -> None:
     ap.add_argument("--dim-long-out", default=None, help="Optional output parquet for dimensioned long lane")
     ap.add_argument("--wide-analysis-out", default=None, help="Alias for --write_single when building analysis-wide output")
     ap.add_argument("--dim-sources", default="IC_CAMPUSES,IC_PCCAMPUSES,F_FA_F,F_FA_G", help="Exact source_file names treated as dimensioned")
-    ap.add_argument("--dim-prefixes", default="C_,EF,GR,GR200,SAL,S_,OM", help="Comma-separated source_file prefixes treated as dimensioned")
+    ap.add_argument("--dim-prefixes", default="C_,EF,GR,GR200,SAL,S_,OM,DRV", help="Comma-separated source_file prefixes treated as dimensioned")
     ap.add_argument("--exclude-vars", default=None, help="Comma-separated varnames to exclude from analysis-wide output")
     ap.add_argument("--fail-on-scalar-conflicts", action=argparse.BooleanOptionalAction, default=True, help="Fail if scalar lane has conflicting values on canonical scalar key")
     ap.add_argument("--scalar-conflicts-max-rows", type=int, default=100000, help="Max rows to write to scalar conflicts QC file")
@@ -293,6 +306,7 @@ def main() -> None:
     ap.add_argument("--drop-anti-garbage-cols", action=argparse.BooleanOptionalAction, default=True, help="Drop blocked anti-garbage identifier columns from wide targets before fail gate")
     ap.add_argument("--fail-on-anti-garbage", action=argparse.BooleanOptionalAction, default=True, help="Fail if anti-garbage blocked identifiers appear as wide columns")
     ap.add_argument("--anti-garbage-out", default=None, help="QC output CSV path for anti-garbage column hits")
+    ap.add_argument("--drop-globally-null-post", action=argparse.BooleanOptionalAction, default=True, help="Drop globally-null columns in final stitched single-file output")
     ap.add_argument("--typed-output", action=argparse.BooleanOptionalAction, default=False, help="Coerce numeric variables using dictionary metadata")
     ap.add_argument("--drop-empty-cols", action=argparse.BooleanOptionalAction, default=False, help="Drop vars that are empty across all requested years")
     ap.add_argument("--collapse-disc", action="store_true", help="Collapse discrete (disc) groups into a base var")
@@ -308,16 +322,20 @@ def main() -> None:
     ap.add_argument("--cast-report-out", default=None, help="QC CSV path for typed-cast parse report")
     ap.add_argument("--scan-batch-rows", type=int, default=200_000, help="Batch size for scanning long rows")
     repo_root = pathlib.Path(os.environ.get("IPEDS_ROOT", pathlib.Path(__file__).resolve().parents[1]))
-    artifacts_root = repo_root / "Artifacts"
-    ap.add_argument("--log-file", default=str(artifacts_root / "Checks" / "logs" / "04_build_wide_panel.log"), help="Optional log file path")
+    logs_root = repo_root / "Checks" / "logs"
+    ap.add_argument("--log-file", default=str(logs_root / "04_build_wide_panel.log"), help="Optional log file path")
     args = ap.parse_args()
 
     setup_logging(args.log_file)
 
     os.makedirs(args.out_dir, exist_ok=True)
     years = parse_years(args.years)
+    if max(years) >= 2024:
+        print("[warn] 2024 is treated as provisional/schema-transition; prefer 2004:2023 for analysis releases.")
     if args.wide_analysis_out and not args.write_single:
         args.write_single = args.wide_analysis_out
+    if args.write_single is None and args.lane_split:
+        args.write_single = str(repo_root / "Panels" / f"panel_wide_analysis_{years[0]}_{years[-1]}.parquet")
 
     if args.qc_dir:
         os.makedirs(args.qc_dir, exist_ok=True)
@@ -387,6 +405,7 @@ def main() -> None:
             df = df[df["varname"] != ""]
             if df.empty:
                 continue
+            df["value"] = normalize_value_tokens(df["value"])
             if exclude_vars:
                 df = df[~df["varname"].isin(exclude_vars)]
                 if df.empty:
@@ -503,6 +522,7 @@ def main() -> None:
             cdf = cdf[cdf["varname"] != ""]
             if cdf.empty:
                 continue
+            cdf["value"] = normalize_value_tokens(cdf["value"])
             if exclude_vars:
                 cdf = cdf[~cdf["varname"].isin(exclude_vars)]
                 if cdf.empty:
@@ -547,7 +567,7 @@ def main() -> None:
             key_cols = ["UNITID", "year", "varnumber", "source_file"]
             if not scalar_long.empty:
                 s_tmp = scalar_long.copy()
-                s_tmp["value_norm"] = s_tmp["value"].astype("string").fillna("<NA>")
+                s_tmp["value_norm"] = normalize_value_tokens(s_tmp["value"])
                 agg = (
                     s_tmp.groupby(key_cols, dropna=False)
                     .agg(n=("value_norm", "size"), dv=("value_norm", "nunique"))
@@ -563,7 +583,7 @@ def main() -> None:
                     scalar_long = scalar_long.merge(conflicts[key_cols].assign(_conflict=1), on=key_cols, how="left")
                     scalar_long = scalar_long[scalar_long["_conflict"].isna()].drop(columns=["_conflict"])
                 # Remove exact repeats.
-                scalar_long = scalar_long.drop_duplicates(subset=key_cols + ["value"], keep="first")
+                scalar_long = s_tmp.drop_duplicates(subset=key_cols + ["value_norm"], keep="first").drop(columns=["value_norm"])
 
                 if not conflicts.empty and args.fail_on_scalar_conflicts:
                     if scalar_conflicts_out:
@@ -698,12 +718,33 @@ def main() -> None:
     # single-file write
     if args.write_single:
         pathlib.Path(args.write_single).parent.mkdir(parents=True, exist_ok=True)
+        drop_post_cols: set[str] = set()
+        if args.drop_globally_null_post:
+            non_null_counts = {name: 0 for name in schema_wide.names if name not in {"year", "UNITID"}}
+            for p in year_part_paths:
+                pf = pq.ParquetFile(p)
+                for batch in pf.iter_batches():
+                    for name in non_null_counts:
+                        if name not in batch.schema.names:
+                            continue
+                        arr = batch.column(batch.schema.names.index(name))
+                        non_null_counts[name] += int(len(arr) - arr.null_count)
+            drop_post_cols = {name for name, cnt in non_null_counts.items() if cnt == 0}
+            if drop_post_cols:
+                print(f"[info] dropping {len(drop_post_cols)} globally-null columns in stitched output")
+                if args.qc_dir:
+                    qc_globally_null = pathlib.Path(args.qc_dir) / "qc_globally_null_columns_dropped.csv"
+                    pd.DataFrame({"column": sorted(drop_post_cols)}).to_csv(qc_globally_null, index=False)
+                    print(f"[info] wrote globally-null drop QC: {qc_globally_null}")
         writer = None
         for p in year_part_paths:
             # Read each file directly (no dataset merge) to avoid dictionary/int conflicts
             t = pq.ParquetFile(p).read().cast(schema_wide, safe=False)
+            if drop_post_cols:
+                keep_cols = [c for c in t.schema.names if c not in drop_post_cols]
+                t = t.select(keep_cols)
             if writer is None:
-                writer = pq.ParquetWriter(args.write_single, schema_wide)
+                writer = pq.ParquetWriter(args.write_single, t.schema)
             writer.write_table(t)
         writer.close()
 
