@@ -64,11 +64,33 @@ python3 Scripts/04_build_wide_panel.py \
 
 ## Custom Panel
 
+Use the input that matches your goal:
+
+- Analysis-ready subset (recommended): `Panels/panel_wide_analysis_2004_2023.parquet`
+- Broad full panel (includes 2024): `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet`
+
+`UNITID` and `year` are always included automatically.
+
+Export a custom panel as parquet:
+
 ```bash
 python3 Scripts/06_build_custom_panel.py \
-  --input "$IPEDS_ROOT/Panels/2004_2024_IPEDS_clean_Panel_DS.parquet" \
+  --input "$IPEDS_ROOT/Panels/panel_wide_analysis_2004_2023.parquet" \
   --vars-file "Customize_Panel/selectedvars.txt" \
-  --output "$IPEDS_ROOT/Panels/custom_panel.parquet"
+  --years "2004:2023" \
+  --format parquet \
+  --output "$IPEDS_ROOT/Panels/custom_panel_2004_2023.parquet"
+```
+
+Export the same custom panel as CSV:
+
+```bash
+python3 Scripts/06_build_custom_panel.py \
+  --input "$IPEDS_ROOT/Panels/panel_wide_analysis_2004_2023.parquet" \
+  --vars-file "Customize_Panel/selectedvars.txt" \
+  --years "2004:2023" \
+  --format csv \
+  --output "$IPEDS_ROOT/Panels/custom_panel_2004_2023.csv"
 ```
 
 ## QA/QC Outputs
