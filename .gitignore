@@ -2,6 +2,10 @@ __pycache__/
 .venv/
 venv/
 
+# Jupyter (never commit)
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
 # Large raw inputs and generated data outputs (keep out of repo)
 Raw_Cross_Section_Data/
 Cross_sections/

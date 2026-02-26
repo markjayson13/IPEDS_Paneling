@@ -71,7 +71,7 @@ Use the template in `Artifacts/table3_validation_metrics_template.csv` and fill 
 Run:
 
 ```bash
-python3 09_paper_metrics.py \
+python3 Scripts/09_paper_metrics.py \
   --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
   --long-panel "$IPEDS_ROOT/Panels/2004-2024/panel_long_varnum_2004_2024.parquet" \
   --raw-root "$IPEDS_ROOT/Raw_Cross_Section_Data" \

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-export IPEDS_ROOT="/Users/markjaysonfarol13/IPEDS_Paneling"
+export IPEDS_ROOT="${IPEDS_ROOT:-$ROOT}"
 
 if [[ -f "$ROOT/.venv/bin/activate" ]]; then
   # shellcheck disable=SC1090
@@ -42,7 +42,6 @@ check_path "Wide PRCH panel" "$WIDE_PRCH"
 
 echo ""
 echo "[info] Running release QC (scans raw year directories + manifests)"
-# 1) release_qc only (no outputs written)
 python3 "$ROOT/Scripts/03_harmonize.py" \
   --root "$IPEDS_ROOT/Raw_Cross_Section_Data" \
   --lake "$DICT_LAKE" \
@@ -55,7 +54,6 @@ python3 "$ROOT/Scripts/03_harmonize.py" \
 
 echo ""
 echo "[info] Running disc_qc + wide_qc (scans stitched long panel)"
-# 2) disc_qc + wide_qc from stitched long panel (writes a temp wide output)
 python3 "$ROOT/Scripts/04_build_wide_panel.py" \
   --input "$LONG_PANEL" \
   --out_dir "$WIDE_QC_TMP" \
@@ -68,7 +66,6 @@ python3 "$ROOT/Scripts/04_build_wide_panel.py" \
 
 echo ""
 echo "[info] Running panel_qc (raw vs PRCH clean wide panels)"
-# 3) panel_qc (raw vs PRCH clean)
 python3 "$ROOT/Scripts/QA_QC/01_panel_qa.py" \
   --raw "$WIDE_RAW" \
   --clean "$WIDE_PRCH" \
@@ -83,6 +80,3 @@ echo "  $CHECKS_DIR/wide_qc"
 echo "  $CHECKS_DIR/panel_qc"
 echo ""
 echo "Note: temp wide output is in $WIDE_QC_TMP (delete if not needed)."
-
-python3 -c "import duckdb; print(duckdb.query(\"SELECT * FROM '/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004-2024/panel_long_varnum_2004_2024.parquet' LIMIT 1\").df().columns.tolist())"
-python3 -c "import pyarrow.parquet as pq; print(pq.ParquetFile('/Users/markjaysonfarol13/IPEDS_Paneling/Panels/2004-2024/panel_long_varnum_2004_2024.parquet').schema.names)"
