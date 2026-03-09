@@ -34,6 +34,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--duckdb-memory-limit", default="8GB")
     p.add_argument("--poll-seconds", type=float, default=1.0)
     p.add_argument("--log-interval-seconds", type=int, default=60)
+    p.add_argument("--terminal-heartbeat-seconds", type=float, default=30.0, help="Print a live terminal status line every N seconds; set to 0 to disable.")
     p.add_argument("--timeout-seconds", type=int, default=900)
     p.add_argument("--kill-if-no-partitions", action=argparse.BooleanOptionalAction, default=True)
     return p.parse_args()
@@ -79,6 +80,45 @@ def last_phase(build_log: Path) -> str | None:
             if len(parts) == 2:
                 phase = parts[1]
     return phase
+
+
+def format_bytes(num_bytes: int) -> str:
+    value = float(num_bytes)
+    units = ["B", "KB", "MB", "GB", "TB"]
+    for unit in units:
+        if value < 1024.0 or unit == units[-1]:
+            return f"{value:.1f}{unit}"
+        value /= 1024.0
+    return f"{num_bytes}B"
+
+
+def format_elapsed(seconds: float) -> str:
+    whole = max(0, int(seconds))
+    hours, rem = divmod(whole, 3600)
+    minutes, secs = divmod(rem, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def emit_terminal_status(
+    *,
+    elapsed: float,
+    partition_count: int,
+    work_bytes: int,
+    db_bytes: int,
+    temp_bytes: int,
+    phase: str | None,
+) -> None:
+    phase_text = phase or "phase not yet logged"
+    print(
+        "[tracker] "
+        f"elapsed={format_elapsed(elapsed)} "
+        f"partitions={partition_count} "
+        f"work={format_bytes(work_bytes)} "
+        f"duckdb={format_bytes(db_bytes)} "
+        f"temp={format_bytes(temp_bytes)} "
+        f"phase={phase_text}",
+        flush=True,
+    )
 
 
 def main() -> None:
@@ -153,6 +193,7 @@ def main() -> None:
         "out_root": str(out_root),
         "command": cmd,
         "started_at": datetime.now().isoformat(),
+        "terminal_heartbeat_seconds": args.terminal_heartbeat_seconds,
     }
     meta_path.write_text(json.dumps(meta, indent=2))
 
@@ -161,12 +202,21 @@ def main() -> None:
     peak_work = peak_db = peak_temp = peak_parts = 0
     raw_reason = "completed"
     next_log_at = 0
+    next_terminal_heartbeat_at = 0.0
+
+    print(f"run_dir: {run_dir}")
+    print(f"out_root: {out_root}")
+    print(f"build_log: {build_log}")
+    print(f"monitor_log: {monitor_log}")
+    print(f"heartbeat_seconds: {args.terminal_heartbeat_seconds}")
+    print("starting monitored analysis build...", flush=True)
 
     with build_log.open("w", buffering=1) as logf, monitor_log.open("w", buffering=1) as mon:
         mon.write(f"start {datetime.now().isoformat()}\n")
         proc = subprocess.Popen(cmd, cwd=str(repo_root), stdout=logf, stderr=subprocess.STDOUT)
         mon.write(f"pid {proc.pid}\n")
         mon.flush()
+        print(f"pid: {proc.pid}", flush=True)
 
         while True:
             rc = proc.poll()
@@ -175,6 +225,7 @@ def main() -> None:
             db_bytes = tree_size(out_root / "build")
             temp_bytes = tree_size(out_root / "duckdb_tmp")
             partition_count = sum(1 for _ in (out_root / "wide_parts").glob("year=*/part.parquet"))
+            phase = last_phase(build_log)
             peak_work = max(peak_work, work_bytes)
             peak_db = max(peak_db, db_bytes)
             peak_temp = max(peak_temp, temp_bytes)
@@ -197,6 +248,17 @@ def main() -> None:
                 )
                 mon.flush()
                 next_log_at += args.log_interval_seconds
+
+            if args.terminal_heartbeat_seconds > 0 and elapsed >= next_terminal_heartbeat_at:
+                emit_terminal_status(
+                    elapsed=elapsed,
+                    partition_count=partition_count,
+                    work_bytes=work_bytes,
+                    db_bytes=db_bytes,
+                    temp_bytes=temp_bytes,
+                    phase=phase,
+                )
+                next_terminal_heartbeat_at += args.terminal_heartbeat_seconds
 
             if rc is not None:
                 break
@@ -225,6 +287,15 @@ def main() -> None:
         reason = classify_termination(rc, raw_reason)
         mon.write(f"end {datetime.now().isoformat()} rc={rc} reason={reason}\n")
         mon.flush()
+        emit_terminal_status(
+            elapsed=elapsed,
+            partition_count=partition_count,
+            work_bytes=work_bytes,
+            db_bytes=db_bytes,
+            temp_bytes=temp_bytes,
+            phase=last_phase(build_log),
+        )
+        print(f"completed rc={rc} reason={reason}", flush=True)
 
     telemetry = {
         "run_id": run_id,
