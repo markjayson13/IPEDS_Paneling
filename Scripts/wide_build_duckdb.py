@@ -6,7 +6,9 @@ import time
 from pathlib import Path
 
 import pandas as pd
+import pyarrow as pa
 import pyarrow.dataset as ds
+import pyarrow.parquet as pq
 
 from duckdb_build_utils import (
     bootstrap_build_db,
@@ -59,10 +61,9 @@ def build_stage_long_query(
     varnumber_expr = f"COALESCE(TRIM(CAST({quote_ident(varnumber_col)} AS VARCHAR)), '')" if varnumber_col else "''"
     null_tokens = ", ".join(sql_quote(x) for x in ["", ".", "nan", "none", "<na>", "na", "nat"])
     return f"""
-        CREATE OR REPLACE TABLE stage.long_selected AS
+        CREATE OR REPLACE VIEW stage.long_selected AS
         WITH src AS (
             SELECT
-                ROW_NUMBER() OVER () AS row_id,
                 TRY_CAST({quote_ident(unitid_col)} AS BIGINT) AS UNITID,
                 TRY_CAST({quote_ident(year_col)} AS INTEGER) AS year,
                 UPPER(TRIM(CAST({quote_ident(target_col)} AS VARCHAR))) AS varname,
@@ -73,7 +74,6 @@ def build_stage_long_query(
             WHERE TRY_CAST({quote_ident(year_col)} AS INTEGER) IN ({years_sql})
         )
         SELECT
-            row_id,
             UNITID,
             year,
             varname,
@@ -95,6 +95,91 @@ def build_stage_long_query(
           AND varname IS NOT NULL
           AND varname <> ''
     """
+
+
+def file_size_bytes(path: str | None) -> int:
+    if not path or path == ":memory:":
+        return 0
+    fp = Path(path)
+    if not fp.exists():
+        return 0
+    return int(fp.stat().st_size)
+
+
+def build_where_sql(clauses: list[str]) -> str:
+    clean = [c for c in clauses if c]
+    if not clean:
+        return ""
+    return "WHERE " + " AND ".join(clean)
+
+
+def build_year_base_query(
+    *,
+    year: int,
+    extra_clauses: list[str],
+    partition_sql: str,
+    dedupe_order_sql: str,
+) -> str:
+    where_sql = build_where_sql([f"year = {int(year)}"] + extra_clauses)
+    return f"""
+        WITH deduped AS (
+            SELECT
+                UNITID,
+                year,
+                varname,
+                value,
+                value_norm,
+                source_file,
+                varnumber
+            FROM (
+                SELECT
+                    *,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY {partition_sql}
+                        ORDER BY {dedupe_order_sql}
+                    ) AS _rn
+                FROM stage.long_selected
+                {where_sql}
+            )
+            WHERE _rn = 1
+        )
+        SELECT
+            ROW_NUMBER() OVER (ORDER BY {dedupe_order_sql}) AS row_id,
+            UNITID,
+            year,
+            varname,
+            value,
+            value_norm,
+            source_file,
+            varnumber
+        FROM deduped
+    """
+
+
+def append_query_to_parquet(
+    con,
+    query: str,
+    out_path: str,
+    writer: pq.ParquetWriter | None,
+    schema: pa.Schema | None,
+    *,
+    rows_per_batch: int = 250_000,
+) -> tuple[pq.ParquetWriter | None, pa.Schema | None, bool]:
+    reader = con.execute(query).fetch_record_batch(rows_per_batch)
+    wrote_any = False
+    for batch in reader:
+        if batch.num_rows == 0:
+            continue
+        table = pa.Table.from_batches([batch])
+        if writer is None:
+            Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+            schema = table.schema
+            writer = pq.ParquetWriter(out_path, schema, compression="snappy")
+        elif schema is not None and table.schema != schema:
+            table = table.cast(schema, safe=False)
+        writer.write_table(table)
+        wrote_any = True
+    return writer, schema, wrote_any
 
 
 def create_empty_conflicts(con) -> None:
@@ -160,15 +245,15 @@ def register_df_as_table(con, table_name: str, df: pd.DataFrame) -> None:
     con.unregister(temp_name)
 
 
-def build_wide_query(targets: list[str], source_table: str) -> str:
+def build_wide_query(targets: list[str], source_table: str, spine_table: str = "stage.spine") -> str:
     if not targets:
         return """
             SELECT
                 CAST(s.year AS INTEGER) AS year,
                 CAST(s.UNITID AS BIGINT) AS UNITID
-            FROM stage.spine s
+            FROM {spine_table} s
             ORDER BY s.year, s.UNITID
-        """
+        """.format(spine_table=spine_table)
     exprs = [
         f"MAX(CASE WHEN a.varname = {sql_quote(t)} THEN a.value END) AS {quote_ident(t)}"
         for t in targets
@@ -179,7 +264,7 @@ def build_wide_query(targets: list[str], source_table: str) -> str:
             CAST(s.year AS INTEGER) AS year,
             CAST(s.UNITID AS BIGINT) AS UNITID,
             {select_sql}
-        FROM stage.spine s
+        FROM {spine_table} s
         LEFT JOIN {source_table} a
           ON s.year = a.year
          AND s.UNITID = a.UNITID
@@ -188,7 +273,7 @@ def build_wide_query(targets: list[str], source_table: str) -> str:
     """
 
 
-def build_typed_wide_query(targets: list[str], numeric_targets: set[str]) -> str:
+def build_typed_wide_query(targets: list[str], numeric_targets: set[str], source_table: str = "mart.panel_wide_raw") -> str:
     select_exprs = ["CAST(year AS INTEGER) AS year", "CAST(UNITID AS BIGINT) AS UNITID"]
     for target in targets:
         ident = quote_ident(target)
@@ -199,19 +284,19 @@ def build_typed_wide_query(targets: list[str], numeric_targets: set[str]) -> str
     return f"""
         SELECT
             {", ".join(select_exprs)}
-        FROM mart.panel_wide_raw
+        FROM {source_table}
         ORDER BY year, UNITID
     """
 
 
-def build_non_null_count_query(targets: list[str]) -> str | None:
+def build_non_null_count_query(targets: list[str], source_table: str = "mart.panel_wide") -> str | None:
     if not targets:
         return None
     exprs = [f"SUM(CASE WHEN {quote_ident(t)} IS NOT NULL THEN 1 ELSE 0 END) AS {quote_ident(t)}" for t in targets]
-    return f"SELECT {', '.join(exprs)} FROM mart.panel_wide"
+    return f"SELECT {', '.join(exprs)} FROM {source_table}"
 
 
-def build_cast_report_query(numeric_targets: list[str]) -> str | None:
+def build_cast_report_query(numeric_targets: list[str], source_table: str = "mart.panel_wide_raw") -> str | None:
     if not numeric_targets:
         return None
     unions = []
@@ -222,10 +307,10 @@ def build_cast_report_query(numeric_targets: list[str]) -> str | None:
             SELECT
                 year,
                 {sql_quote(target)} AS column,
-                COUNT({ident}) AS non_empty_tokens,
-                SUM(CASE WHEN TRY_CAST({ident} AS DOUBLE) IS NOT NULL THEN 1 ELSE 0 END) AS parsed_numeric_tokens,
-                COUNT({ident}) - SUM(CASE WHEN TRY_CAST({ident} AS DOUBLE) IS NOT NULL THEN 1 ELSE 0 END) AS failed_parse_tokens
-            FROM mart.panel_wide_raw
+                CAST(COUNT({ident}) AS BIGINT) AS non_empty_tokens,
+                CAST(SUM(CASE WHEN TRY_CAST({ident} AS DOUBLE) IS NOT NULL THEN 1 ELSE 0 END) AS BIGINT) AS parsed_numeric_tokens,
+                CAST(COUNT({ident}) - SUM(CASE WHEN TRY_CAST({ident} AS DOUBLE) IS NOT NULL THEN 1 ELSE 0 END) AS BIGINT) AS failed_parse_tokens
+            FROM {source_table}
             GROUP BY year
             """
         )
@@ -303,6 +388,8 @@ def run(args) -> None:
     if args.dictionary:
         con.execute(f"CREATE OR REPLACE TABLE meta.dictionary_lake AS SELECT * FROM read_parquet({sql_quote(args.dictionary)})")
 
+    register_started = time.monotonic()
+    register_db_before = file_size_bytes(effective_db_path)
     log_phase("register parquet input start", input=args.input, years=args.years)
     con.execute(
         build_stage_long_query(
@@ -316,11 +403,19 @@ def run(args) -> None:
             varnumber_col=varnumber_col,
         )
     )
+    register_elapsed = time.monotonic() - register_started
+    register_db_after = file_size_bytes(effective_db_path)
+    register_db_growth = register_db_after - register_db_before
     log_phase(
         "register parquet input end",
-        stage_rows=scalar_int(con, "SELECT COUNT(*) FROM stage.long_selected"),
-        stage_cols=8,
+        elapsed_seconds=f"{register_elapsed:.3f}",
+        stage_cols=7,
+        db_growth_bytes=register_db_growth,
+        registered_object="view",
     )
+    if args.persist_duckdb and register_elapsed > 30 and register_db_growth > 64 * 1024 * 1024:
+        raise SystemExit("registration is materializing the input parquet instead of registering it lazily")
+    log_phase("spine materialization start")
     con.execute("CREATE OR REPLACE TABLE stage.spine AS SELECT DISTINCT year, UNITID FROM stage.long_selected ORDER BY year, UNITID")
     log_phase("spine materialization end", spine_rows=scalar_int(con, "SELECT COUNT(*) FROM stage.spine"))
 
@@ -329,12 +424,44 @@ def run(args) -> None:
         dedupe_partition.extend(["varnumber", "source_file"])
     partition_sql = ", ".join(dedupe_partition)
     where_sql = f"WHERE varname NOT IN ({sql_upper_in(runtime.exclude_vars)})" if runtime.exclude_vars else ""
+    dedupe_order_sql = ", ".join(
+        [
+            "year",
+            "UNITID",
+            "varname",
+            "source_file",
+            "varnumber",
+            "COALESCE(value_norm, '')",
+            "COALESCE(value, '')",
+        ]
+    )
     log_phase("analysis base build start")
     con.execute(
         f"""
-        CREATE OR REPLACE TABLE core.analysis_long_base AS
+        CREATE OR REPLACE VIEW core.analysis_long_base AS
+        WITH deduped AS (
+            SELECT
+                UNITID,
+                year,
+                varname,
+                value,
+                value_norm,
+                source_file,
+                varnumber
+            FROM (
+                SELECT
+                    *,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY {partition_sql}
+                        ORDER BY {dedupe_order_sql}
+                    ) AS _rn
+                FROM stage.long_selected
+                {where_sql}
+            )
+            WHERE _rn = 1
+        )
         SELECT
-            row_id,
+            ROW_NUMBER() OVER (ORDER BY {dedupe_order_sql}) AS row_id,
             UNITID,
             year,
             varname,
@@ -342,25 +469,14 @@ def run(args) -> None:
             value_norm,
             source_file,
             varnumber
-        FROM (
-            SELECT
-                *,
-                ROW_NUMBER() OVER (
-                    PARTITION BY {partition_sql}
-                    ORDER BY row_id
-                ) AS _rn
-            FROM stage.long_selected
-            {where_sql}
-        )
-        WHERE _rn = 1
+        FROM deduped
         """
     )
-    log_phase(
-        "analysis base build end",
-        rows=scalar_int(con, "SELECT COUNT(*) FROM core.analysis_long_base"),
-    )
+    log_phase("analysis base build end", materialized_object="view")
 
-    analysis_source_table = "core.analysis_long_base"
+    exclude_clause = f"varname NOT IN ({sql_upper_in(runtime.exclude_vars)})" if runtime.exclude_vars else ""
+    year_base_clauses = [exclude_clause] if exclude_clause else []
+    dimension_expr = None
     if args.lane_split:
         log_phase(
             "lane split planning start",
@@ -368,140 +484,29 @@ def run(args) -> None:
             dim_prefixes=len(runtime.dim_prefixes),
         )
         dimension_expr = build_dimension_expr(runtime.dim_sources, runtime.dim_prefixes)
-        con.execute(
-            f"""
-            CREATE OR REPLACE TABLE core.scalar_long_raw AS
-            SELECT * FROM core.analysis_long_base
-            WHERE NOT ({dimension_expr})
-            """
-        )
-        con.execute(
-            f"""
-            CREATE OR REPLACE TABLE core.dim_long_raw AS
-            SELECT * FROM core.analysis_long_base
-            WHERE {dimension_expr}
-            """
-        )
         log_phase(
             "lane split planning end",
-            scalar_rows=scalar_int(con, "SELECT COUNT(*) FROM core.scalar_long_raw"),
-            dim_rows=scalar_int(con, "SELECT COUNT(*) FROM core.dim_long_raw"),
+            strategy="year_scoped",
+            scalar_export=bool(args.scalar_long_out),
+            dim_export=bool(args.dim_long_out),
         )
-        if args.scalar_long_out:
-            copy_query_to_parquet(
-                con,
-                "SELECT UNITID, year, varname, value, varnumber, source_file FROM core.scalar_long_raw ORDER BY year, row_id",
-                args.scalar_long_out,
-            )
-            print(f"[info] wrote scalar long lane: {args.scalar_long_out}", flush=True)
-        if args.dim_long_out:
-            copy_query_to_parquet(
-                con,
-                "SELECT UNITID, year, varname, value, varnumber, source_file FROM core.dim_long_raw ORDER BY year, row_id",
-                args.dim_long_out,
-            )
-            print(f"[info] wrote dimensioned long lane: {args.dim_long_out}", flush=True)
 
-        log_phase("scalar conflict scan start")
-        con.execute(
-            """
-            CREATE OR REPLACE TABLE core.scalar_conflict_keys AS
-            SELECT
-                UNITID,
-                year,
-                varnumber,
-                source_file,
-                COUNT(DISTINCT value_norm) AS distinct_values
-            FROM core.scalar_long_raw
-            GROUP BY 1, 2, 3, 4
-            HAVING COUNT(DISTINCT value_norm) > 1
-            """
-        )
-        conflict_key_count = int(con.execute("SELECT COUNT(*) FROM core.scalar_conflict_keys").fetchone()[0])
-        log_phase("scalar conflict scan end", conflict_keys=conflict_key_count)
-        if conflict_key_count:
-            con.execute(
-                """
-                CREATE OR REPLACE TABLE qa.scalar_conflicts AS
-                SELECT
-                    s.row_id,
-                    s.UNITID,
-                    s.year,
-                    s.varname,
-                    s.value,
-                    s.value_norm,
-                    s.varnumber,
-                    s.source_file,
-                    k.distinct_values
-                FROM core.scalar_long_raw s
-                INNER JOIN core.scalar_conflict_keys k
-                  ON s.UNITID = k.UNITID
-                 AND s.year = k.year
-                 AND s.varnumber = k.varnumber
-                 AND s.source_file = k.source_file
-                ORDER BY s.year, s.row_id
-                """
-            )
-            if runtime.scalar_conflicts_out:
-                write_query_csv(
-                    con,
-                    f"""
-                    SELECT
-                        UNITID,
-                        year,
-                        varname,
-                        value,
-                        varnumber,
-                        source_file,
-                        distinct_values
-                    FROM qa.scalar_conflicts
-                    ORDER BY year, UNITID, varnumber, source_file, row_id
-                    LIMIT {int(args.scalar_conflicts_max_rows)}
-                    """,
-                    runtime.scalar_conflicts_out,
-                )
-                print(f"[info] wrote scalar conflict QC: {runtime.scalar_conflicts_out}", flush=True)
-            if args.fail_on_scalar_conflicts:
-                raise SystemExit(f"scalar conflict gate failed: conflict_keys={conflict_key_count}")
-        else:
-            create_empty_conflicts(con)
-
-        con.execute(
-            """
-            CREATE OR REPLACE TABLE core.scalar_long_unique AS
-            WITH marked AS (
-                SELECT
-                    s.*,
-                    CASE WHEN k.UNITID IS NULL THEN FALSE ELSE TRUE END AS is_conflict,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY s.UNITID, s.year, s.varnumber, s.source_file, s.value_norm
-                        ORDER BY s.row_id
-                    ) AS _rn
-                FROM core.scalar_long_raw s
-                LEFT JOIN core.scalar_conflict_keys k
-                  ON s.UNITID = k.UNITID
-                 AND s.year = k.year
-                 AND s.varnumber = k.varnumber
-                 AND s.source_file = k.source_file
-            )
-            SELECT row_id, UNITID, year, varname, value, value_norm, source_file, varnumber
-            FROM marked
-            WHERE _rn = 1
-              AND NOT is_conflict
-            """
-        )
-        analysis_source_table = "core.scalar_long_unique"
-    else:
-        create_empty_conflicts(con)
+    create_empty_conflicts(con)
+    create_empty_cast_report(con)
+    create_empty_disc_conflicts(con)
 
     log_phase("discover targets start")
     log_phase("non-empty scan start")
+    target_scan_clauses = list(year_base_clauses)
+    if args.lane_split and dimension_expr:
+        target_scan_clauses.append(f"NOT ({dimension_expr})")
     target_df = con.execute(
         f"""
         SELECT
             varname,
             COUNT(*) FILTER (WHERE value_norm IS NOT NULL) AS non_empty_rows
-        FROM {analysis_source_table}
+        FROM stage.long_selected
+        {build_where_sql(target_scan_clauses)}
         GROUP BY 1
         ORDER BY 1
         """
@@ -541,14 +546,15 @@ def run(args) -> None:
                 group_to_vars = {k: v for k, v in group_to_vars.items() if k.upper() not in excludes}
                 var_to_group = {v: grp for v, grp in var_to_group.items() if grp[0].upper() not in excludes}
     disc_name_map = {}
+    component_vars: set[str] = set()
     if args.collapse_disc and group_to_vars:
         disc_name_map = resolve_disc_names(group_to_vars, set(all_targets), suffix=args.disc_suffix)
         for base, new_name in disc_name_map.items():
             if new_name not in all_targets:
                 all_targets.append(new_name)
+        component_vars = {v for vs in group_to_vars.values() for v in vs}
         if args.drop_disc_components:
-            components = {v for vs in group_to_vars.values() for v in vs}
-            all_targets = [t for t in all_targets if t not in components]
+            all_targets = [t for t in all_targets if t not in component_vars]
 
     anti_hits = find_anti_garbage_hits(all_targets, runtime.anti_garbage_ids)
     anti_df = pd.DataFrame({"blocked_identifier_column": anti_hits})
@@ -572,288 +578,457 @@ def run(args) -> None:
     print(f"[info] wide columns (varname): {len(all_targets)}", flush=True)
 
     if args.collapse_disc and group_to_vars:
-        disc_rows = []
-        for varname, (base, suffix) in var_to_group.items():
-            disc_rows.append({"varname": varname, "base": base, "suffix": suffix, "output_varname": disc_name_map.get(base, base)})
+        disc_rows = [
+            {"varname": varname, "base": base, "suffix": suffix, "output_varname": disc_name_map.get(base, base)}
+            for varname, (base, suffix) in var_to_group.items()
+        ]
         disc_map_df = pd.DataFrame(disc_rows)
         register_df_as_table(con, "stage.disc_map", disc_map_df)
         register_df_as_table(con, "stage.disc_output_names", disc_map_df[["base", "output_varname"]].drop_duplicates())
-        con.execute(
-            f"""
-            CREATE OR REPLACE TABLE core.disc_active AS
-            SELECT
-                row_id,
-                UNITID,
-                year,
-                varname,
-                value,
-                value_norm,
-                source_file,
-                varnumber,
-                base,
-                suffix,
-                is_active
-            FROM (
-                SELECT
-                    a.row_id,
-                    a.UNITID,
-                    a.year,
-                    a.varname,
-                    a.value,
-                    a.value_norm,
-                    a.source_file,
-                    a.varnumber,
-                    m.base,
-                    m.suffix,
-                    CASE
-                        WHEN a.value_norm IS NULL THEN FALSE
-                        WHEN TRY_CAST(a.value_norm AS DOUBLE) IS NOT NULL THEN TRY_CAST(a.value_norm AS DOUBLE) <> 0
-                        WHEN lower(a.value_norm) IN ('y', 'yes', 't', 'true') THEN TRUE
-                        WHEN lower(a.value_norm) IN ('n', 'no', 'f', 'false') THEN FALSE
-                        ELSE TRUE
-                    END AS is_active,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY a.UNITID, a.year, m.base, m.suffix
-                        ORDER BY a.row_id
-                    ) AS _rn
-                FROM {analysis_source_table} a
-                INNER JOIN stage.disc_map m
-                    ON a.varname = m.varname
-                WHERE a.value_norm IS NOT NULL
-            )
-            WHERE is_active
-              AND _rn = 1
-            """
-        )
-        con.execute(
-            """
-            CREATE OR REPLACE TABLE core.disc_choice AS
-            SELECT
-                UNITID,
-                year,
-                base,
-                COUNT(DISTINCT suffix) AS n_active,
-                MIN(suffix) AS chosen_suffix
-            FROM core.disc_active
-            GROUP BY 1, 2, 3
-            """
-        )
-        con.execute(
-            """
-            CREATE OR REPLACE TABLE qa.disc_conflicts AS
-            SELECT
-                a.row_id,
-                a.UNITID,
-                a.year,
-                a.varname,
-                a.value,
-                a.value_norm,
-                a.source_file,
-                a.varnumber,
-                a.base,
-                a.suffix,
-                a.is_active,
-                c.n_active
-            FROM core.disc_active a
-            INNER JOIN core.disc_choice c
-                ON a.UNITID = c.UNITID
-               AND a.year = c.year
-               AND a.base = c.base
-            WHERE c.n_active > 1
-            ORDER BY a.year, a.row_id
-            """
-        )
-        if args.disc_qc_dir:
-            for year in years:
-                cnt = int(con.execute(f"SELECT COUNT(*) FROM qa.disc_conflicts WHERE year = {int(year)}").fetchone()[0])
-                if cnt > 0:
-                    write_query_csv(
-                        con,
-                        f"SELECT UNITID, year, varname, value, source_file, varnumber, base, suffix, is_active, n_active FROM qa.disc_conflicts WHERE year = {int(year)} ORDER BY row_id",
-                        os.path.join(args.disc_qc_dir, f"disc_conflicts_{year}.csv"),
-                    )
-        offset = int(con.execute(f"SELECT COALESCE(MAX(row_id), 0) FROM {analysis_source_table}").fetchone()[0])
-        con.execute(
-            f"""
-            CREATE OR REPLACE TABLE core.disc_collapsed AS
-            SELECT
-                {offset} + ROW_NUMBER() OVER (ORDER BY c.year, c.UNITID, c.base) AS row_id,
-                c.UNITID,
-                c.year,
-                n.output_varname AS varname,
-                c.chosen_suffix AS value,
-                c.chosen_suffix AS value_norm,
-                '' AS source_file,
-                '' AS varnumber
-            FROM core.disc_choice c
-            INNER JOIN stage.disc_output_names n
-                ON c.base = n.base
-            WHERE c.n_active = 1
-            """
-        )
-        component_filter = ""
-        if args.drop_disc_components:
-            component_vars = {v for vs in group_to_vars.values() for v in vs}
-            if component_vars:
-                component_filter = f"WHERE varname NOT IN ({sql_upper_in(component_vars)})"
-        con.execute(
-            f"""
-            CREATE OR REPLACE TABLE core.analysis_long_pre_dedup AS
-            SELECT * FROM {analysis_source_table}
-            {component_filter}
-            UNION ALL
-            SELECT * FROM core.disc_collapsed
-            """
-        )
-    else:
-        create_empty_disc_conflicts(con)
-        con.execute(f"CREATE OR REPLACE TABLE core.analysis_long_pre_dedup AS SELECT * FROM {analysis_source_table}")
 
-    con.execute(
-        """
-        CREATE OR REPLACE TABLE qa.dup_groups AS
-        SELECT
-            year,
-            UNITID,
-            varname,
-            COUNT(*) AS dup_rows
-        FROM core.analysis_long_pre_dedup
-        GROUP BY 1, 2, 3
-        HAVING COUNT(*) > 1
-        """
-    )
-    if args.dups_qc_dir and args.dups_max_rows > 0:
-        Path(args.dups_qc_dir).mkdir(parents=True, exist_ok=True)
-        for year in years:
-            dup_count = int(con.execute(f"SELECT COALESCE(SUM(dup_rows), 0) FROM qa.dup_groups WHERE year = {int(year)}").fetchone()[0])
-            if dup_count == 0:
-                continue
+    year_part_paths: list[str] = []
+    qc_rows: list[dict] = []
+    cast_report_frames: list[pd.DataFrame] = []
+    scalar_conflict_frames: list[pd.DataFrame] = []
+    scalar_conflict_rows_written = 0
+    scalar_writer: pq.ParquetWriter | None = None
+    scalar_schema: pa.Schema | None = None
+    dim_writer: pq.ParquetWriter | None = None
+    dim_schema: pa.Schema | None = None
+
+    for year in years:
+        log_phase(f"year {year} start")
+        con.execute(f"CREATE OR REPLACE TEMP VIEW year_spine AS SELECT year, UNITID FROM stage.spine WHERE year = {int(year)}")
+        spine_rows = scalar_int(con, "SELECT COUNT(*) FROM year_spine")
+        log_phase(f"year {year} spine done", rows=spine_rows)
+
+        con.execute(
+            f"""
+            CREATE OR REPLACE TEMP VIEW year_long_base AS
+            {build_year_base_query(
+                year=year,
+                extra_clauses=year_base_clauses,
+                partition_sql=partition_sql,
+                dedupe_order_sql=dedupe_order_sql,
+            )}
+            """
+        )
+
+        year_source_table = "year_long_base"
+        if args.lane_split and dimension_expr:
+            con.execute(
+                f"""
+                CREATE OR REPLACE TEMP VIEW year_scalar_long_raw AS
+                SELECT * FROM year_long_base
+                WHERE NOT ({dimension_expr})
+                """
+            )
+            con.execute(
+                f"""
+                CREATE OR REPLACE TEMP VIEW year_dim_long_raw AS
+                SELECT * FROM year_long_base
+                WHERE {dimension_expr}
+                """
+            )
+            if args.scalar_long_out:
+                scalar_writer, scalar_schema, _ = append_query_to_parquet(
+                    con,
+                    "SELECT UNITID, year, varname, value, varnumber, source_file FROM year_scalar_long_raw ORDER BY row_id",
+                    args.scalar_long_out,
+                    scalar_writer,
+                    scalar_schema,
+                )
+            if args.dim_long_out:
+                dim_writer, dim_schema, _ = append_query_to_parquet(
+                    con,
+                    "SELECT UNITID, year, varname, value, varnumber, source_file FROM year_dim_long_raw ORDER BY row_id",
+                    args.dim_long_out,
+                    dim_writer,
+                    dim_schema,
+                )
+
+            log_phase(f"year {year} scalar conflict scan start")
+            con.execute(
+                """
+                CREATE OR REPLACE TEMP TABLE year_scalar_conflict_keys AS
+                SELECT
+                    UNITID,
+                    year,
+                    varnumber,
+                    source_file,
+                    COUNT(DISTINCT value_norm) AS distinct_values
+                FROM year_scalar_long_raw
+                GROUP BY 1, 2, 3, 4
+                HAVING COUNT(DISTINCT value_norm) > 1
+                """
+            )
+            conflict_key_count = scalar_int(con, "SELECT COUNT(*) FROM year_scalar_conflict_keys")
+            log_phase(f"year {year} scalar conflict scan end", conflict_keys=conflict_key_count)
+            if conflict_key_count:
+                remaining = max(int(args.scalar_conflicts_max_rows) - scalar_conflict_rows_written, 0)
+                if remaining > 0:
+                    conflict_df = con.execute(
+                        f"""
+                        SELECT
+                            s.UNITID,
+                            s.year,
+                            s.varname,
+                            s.value,
+                            s.varnumber,
+                            s.source_file,
+                            k.distinct_values
+                        FROM year_scalar_long_raw s
+                        INNER JOIN year_scalar_conflict_keys k
+                          ON s.UNITID = k.UNITID
+                         AND s.year = k.year
+                         AND s.varnumber = k.varnumber
+                         AND s.source_file = k.source_file
+                        ORDER BY year, UNITID, varnumber, source_file, row_id
+                        LIMIT {remaining}
+                        """
+                    ).fetchdf()
+                    if not conflict_df.empty:
+                        scalar_conflict_frames.append(conflict_df)
+                        scalar_conflict_rows_written += len(conflict_df)
+                con.execute(
+                    """
+                    CREATE OR REPLACE TEMP VIEW year_analysis_source AS
+                    WITH marked AS (
+                        SELECT
+                            s.*,
+                            CASE WHEN k.UNITID IS NULL THEN FALSE ELSE TRUE END AS is_conflict,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY s.UNITID, s.year, s.varnumber, s.source_file, s.value_norm
+                                ORDER BY s.row_id
+                            ) AS _rn
+                        FROM year_scalar_long_raw s
+                        LEFT JOIN year_scalar_conflict_keys k
+                          ON s.UNITID = k.UNITID
+                         AND s.year = k.year
+                         AND s.varnumber = k.varnumber
+                         AND s.source_file = k.source_file
+                    )
+                    SELECT row_id, UNITID, year, varname, value, value_norm, source_file, varnumber
+                    FROM marked
+                    WHERE _rn = 1
+                      AND NOT is_conflict
+                    """
+                )
+                if args.fail_on_scalar_conflicts:
+                    if runtime.scalar_conflicts_out and scalar_conflict_frames:
+                        out_df = pd.concat(scalar_conflict_frames, ignore_index=True)
+                        Path(runtime.scalar_conflicts_out).parent.mkdir(parents=True, exist_ok=True)
+                        out_df.to_csv(runtime.scalar_conflicts_out, index=False)
+                        register_df_as_table(con, "qa.scalar_conflicts", out_df)
+                    raise SystemExit(f"scalar conflict gate failed for year={year}: conflict_keys={conflict_key_count}")
+            else:
+                con.execute(
+                    """
+                    CREATE OR REPLACE TEMP VIEW year_analysis_source AS
+                    SELECT
+                        row_id,
+                        UNITID,
+                        year,
+                        varname,
+                        value,
+                        value_norm,
+                        source_file,
+                        varnumber
+                    FROM year_scalar_long_raw
+                    """
+                )
+            year_source_table = "year_analysis_source"
+        else:
+            con.execute(
+                """
+                CREATE OR REPLACE TEMP VIEW year_analysis_source AS
+                SELECT row_id, UNITID, year, varname, value, value_norm, source_file, varnumber
+                FROM year_long_base
+                """
+            )
+            year_source_table = "year_analysis_source"
+
+        if args.collapse_disc and group_to_vars:
+            con.execute(
+                f"""
+                CREATE OR REPLACE TEMP TABLE year_disc_active AS
+                SELECT
+                    row_id,
+                    UNITID,
+                    year,
+                    varname,
+                    value,
+                    value_norm,
+                    source_file,
+                    varnumber,
+                    base,
+                    suffix,
+                    is_active
+                FROM (
+                    SELECT
+                        a.row_id,
+                        a.UNITID,
+                        a.year,
+                        a.varname,
+                        a.value,
+                        a.value_norm,
+                        a.source_file,
+                        a.varnumber,
+                        m.base,
+                        m.suffix,
+                        CASE
+                            WHEN a.value_norm IS NULL THEN FALSE
+                            WHEN TRY_CAST(a.value_norm AS DOUBLE) IS NOT NULL THEN TRY_CAST(a.value_norm AS DOUBLE) <> 0
+                            WHEN lower(a.value_norm) IN ('y', 'yes', 't', 'true') THEN TRUE
+                            WHEN lower(a.value_norm) IN ('n', 'no', 'f', 'false') THEN FALSE
+                            ELSE TRUE
+                        END AS is_active,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY a.UNITID, a.year, m.base, m.suffix
+                            ORDER BY a.row_id
+                        ) AS _rn
+                    FROM {year_source_table} a
+                    INNER JOIN stage.disc_map m
+                      ON a.varname = m.varname
+                    WHERE a.value_norm IS NOT NULL
+                )
+                WHERE is_active
+                  AND _rn = 1
+                """
+            )
+            con.execute(
+                """
+                CREATE OR REPLACE TEMP TABLE year_disc_choice AS
+                SELECT
+                    UNITID,
+                    year,
+                    base,
+                    COUNT(DISTINCT suffix) AS n_active,
+                    MIN(suffix) AS chosen_suffix
+                FROM year_disc_active
+                GROUP BY 1, 2, 3
+                """
+            )
+            if args.disc_qc_dir and scalar_int(con, "SELECT COUNT(*) FROM year_disc_choice WHERE n_active > 1") > 0:
+                write_query_csv(
+                    con,
+                    f"""
+                    SELECT
+                        a.UNITID,
+                        a.year,
+                        a.varname,
+                        a.value,
+                        a.source_file,
+                        a.varnumber,
+                        a.base,
+                        a.suffix,
+                        a.is_active,
+                        c.n_active
+                    FROM year_disc_active a
+                    INNER JOIN year_disc_choice c
+                      ON a.UNITID = c.UNITID
+                     AND a.year = c.year
+                     AND a.base = c.base
+                    WHERE c.n_active > 1
+                    ORDER BY a.row_id
+                    """,
+                    os.path.join(args.disc_qc_dir, f"disc_conflicts_{year}.csv"),
+                )
+            offset = scalar_int(con, f"SELECT COALESCE(MAX(row_id), 0) FROM {year_source_table}")
+            con.execute(
+                f"""
+                CREATE OR REPLACE TEMP TABLE year_disc_collapsed AS
+                SELECT
+                    {offset} + ROW_NUMBER() OVER (ORDER BY c.year, c.UNITID, c.base) AS row_id,
+                    c.UNITID,
+                    c.year,
+                    n.output_varname AS varname,
+                    c.chosen_suffix AS value,
+                    c.chosen_suffix AS value_norm,
+                    '' AS source_file,
+                    '' AS varnumber
+                FROM year_disc_choice c
+                INNER JOIN stage.disc_output_names n
+                  ON c.base = n.base
+                WHERE c.n_active = 1
+                """
+            )
+            component_filter = ""
+            if args.drop_disc_components and component_vars:
+                component_filter = f"WHERE varname NOT IN ({sql_upper_in(component_vars)})"
+            con.execute(
+                f"""
+                CREATE OR REPLACE TEMP VIEW year_analysis_pre_dedup AS
+                SELECT * FROM {year_source_table}
+                {component_filter}
+                UNION ALL
+                SELECT * FROM year_disc_collapsed
+                """
+            )
+        else:
+            con.execute(f"CREATE OR REPLACE TEMP VIEW year_analysis_pre_dedup AS SELECT * FROM {year_source_table}")
+
+        con.execute(
+            """
+            CREATE OR REPLACE TEMP TABLE year_dup_groups AS
+            SELECT
+                year,
+                UNITID,
+                varname,
+                COUNT(*) AS dup_rows
+            FROM year_analysis_pre_dedup
+            GROUP BY 1, 2, 3
+            HAVING COUNT(*) > 1
+            """
+        )
+        dup_count = scalar_int(con, "SELECT COALESCE(SUM(dup_rows), 0) FROM year_dup_groups")
+        if args.dups_qc_dir and args.dups_max_rows > 0 and dup_count > 0:
+            Path(args.dups_qc_dir).mkdir(parents=True, exist_ok=True)
+            ext = ".csv.gz" if args.dups_qc_gzip else ".csv"
+            compression = "gzip" if args.dups_qc_gzip else None
             dup_df = con.execute(
                 f"""
-                SELECT p.UNITID, p.year, p.varname, p.value, p.varnumber, p.source_file
-                FROM core.analysis_long_pre_dedup p
-                INNER JOIN qa.dup_groups g
+                SELECT
+                    p.UNITID,
+                    p.year,
+                    p.varname,
+                    p.value,
+                    p.varnumber,
+                    p.source_file
+                FROM year_analysis_pre_dedup p
+                INNER JOIN year_dup_groups g
                   ON p.year = g.year
                  AND p.UNITID = g.UNITID
                  AND p.varname = g.varname
-                WHERE p.year = {int(year)}
                 ORDER BY p.row_id
                 LIMIT {int(args.dups_max_rows)}
                 """
             ).fetchdf()
-            ext = ".csv.gz" if args.dups_qc_gzip else ".csv"
-            compression = "gzip" if args.dups_qc_gzip else None
             dup_df.to_csv(os.path.join(args.dups_qc_dir, f"dups_{year}{ext}"), index=False, compression=compression)
 
-    con.execute(
-        """
-        CREATE OR REPLACE TABLE core.analysis_long_final AS
-        SELECT row_id, UNITID, year, varname, value, value_norm, source_file, varnumber
-        FROM (
-            SELECT
-                *,
-                ROW_NUMBER() OVER (
-                    PARTITION BY UNITID, year, varname
-                    ORDER BY row_id
-                ) AS _rn
-            FROM core.analysis_long_pre_dedup
+        con.execute(
+            """
+            CREATE OR REPLACE TEMP TABLE year_analysis_final AS
+            SELECT row_id, UNITID, year, varname, value, value_norm, source_file, varnumber
+            FROM (
+                SELECT
+                    *,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY UNITID, year, varname
+                        ORDER BY row_id
+                    ) AS _rn
+                FROM year_analysis_pre_dedup
+            )
+            WHERE _rn = 1
+            """
         )
-        WHERE _rn = 1
-        """
-    )
-    log_phase("analysis long finalize end", rows=scalar_int(con, "SELECT COUNT(*) FROM core.analysis_long_final"))
-
-    con.execute(
-        f"""
-        CREATE OR REPLACE TABLE qa.wide_year_summary AS
-        WITH spine_counts AS (
-            SELECT year, COUNT(*) AS rows
-            FROM stage.spine
-            GROUP BY year
-        ),
-        non_empty AS (
-            SELECT year, COUNT(*) AS non_empty_values
-            FROM core.analysis_long_final
-            WHERE value_norm IS NOT NULL
-            GROUP BY year
-        ),
-        dup_rows AS (
-            SELECT year, COALESCE(SUM(dup_rows), 0) AS dup_rows
-            FROM qa.dup_groups
-            GROUP BY year
-        )
-        SELECT
-            s.year,
-            s.rows,
-            {len(all_targets)} AS vars,
-            COALESCE(n.non_empty_values, 0) AS non_empty_values,
-            CASE
-                WHEN s.rows > 0 AND {len(all_targets)} > 0
-                    THEN COALESCE(n.non_empty_values, 0)::DOUBLE / (s.rows * {len(all_targets)})
-                ELSE 0.0
-            END AS fill_rate,
-            COALESCE(d.dup_rows, 0) AS dup_rows
-        FROM spine_counts s
-        LEFT JOIN non_empty n USING (year)
-        LEFT JOIN dup_rows d USING (year)
-        ORDER BY s.year
-        """
-    )
-
-    log_phase("global pivot start", targets=len(all_targets))
-    con.execute(f"CREATE OR REPLACE TABLE mart.panel_wide_raw AS {build_wide_query(all_targets, 'core.analysis_long_final')}")
-    log_phase("global pivot end", rows=scalar_int(con, "SELECT COUNT(*) FROM mart.panel_wide_raw"))
-    if args.typed_output:
-        cast_query = build_cast_report_query([t for t in all_targets if t in numeric_targets])
-        if cast_query:
-            con.execute(f"CREATE OR REPLACE TABLE qa.cast_report AS {cast_query}")
-        else:
-            create_empty_cast_report(con)
-        con.execute(f"CREATE OR REPLACE TABLE mart.panel_wide AS {build_typed_wide_query(all_targets, numeric_targets)}")
-    else:
-        create_empty_cast_report(con)
-        con.execute("CREATE OR REPLACE TABLE mart.panel_wide AS SELECT * FROM mart.panel_wide_raw ORDER BY year, UNITID")
-    log_phase("typed projection end", rows=scalar_int(con, "SELECT COUNT(*) FROM mart.panel_wide"))
-
-    if runtime.cast_report_out and args.typed_output and con.execute("SELECT COUNT(*) FROM qa.cast_report").fetchone()[0]:
-        write_query_csv(con, 'SELECT * FROM qa.cast_report ORDER BY year, "column"', runtime.cast_report_out)
-        print(f"[info] wrote cast report QC: {runtime.cast_report_out}", flush=True)
-
-    year_part_paths: list[str] = []
-    for year in years:
-        log_phase(f"year {year} start")
-        spine_rows = scalar_int(con, f"SELECT COUNT(*) FROM stage.spine WHERE year = {int(year)}")
-        log_phase(f"year {year} spine done", rows=spine_rows)
-        concept_rows = scalar_int(con, f"SELECT COUNT(*) FROM core.analysis_long_final WHERE year = {int(year)}")
+        concept_rows = scalar_int(con, "SELECT COUNT(*) FROM year_analysis_final")
         log_phase(f"year {year} concept done", rows=concept_rows)
+
         log_phase(f"year {year} pivot start")
-        wide_rows = scalar_int(con, f"SELECT COUNT(*) FROM mart.panel_wide WHERE year = {int(year)}")
+        con.execute(f"CREATE OR REPLACE TEMP TABLE year_wide_raw AS {build_wide_query(all_targets, 'year_analysis_final', 'year_spine')}")
+        if args.typed_output:
+            con.execute(f"CREATE OR REPLACE TEMP TABLE year_wide AS {build_typed_wide_query(all_targets, numeric_targets, 'year_wide_raw')}")
+        else:
+            con.execute("CREATE OR REPLACE TEMP TABLE year_wide AS SELECT * FROM year_wide_raw ORDER BY year, UNITID")
+        wide_rows = scalar_int(con, "SELECT COUNT(*) FROM year_wide")
         log_phase(f"year {year} pivot end", rows=wide_rows)
+
         out_path = os.path.join(args.out_dir, f"year={year}", "part.parquet")
-        copy_query_to_parquet(con, f"SELECT * FROM mart.panel_wide WHERE year = {int(year)} ORDER BY UNITID", out_path)
+        copy_query_to_parquet(con, "SELECT * FROM year_wide ORDER BY UNITID", out_path)
         year_part_paths.append(out_path)
         print(f"[info] wrote {out_path}", flush=True)
         log_phase(f"year {year} write complete", path=out_path, rows=wide_rows)
 
+        if args.typed_output:
+            numeric_target_list = [t for t in all_targets if t in numeric_targets]
+            for start_idx in range(0, len(numeric_target_list), 250):
+                cast_query = build_cast_report_query(
+                    numeric_target_list[start_idx : start_idx + 250],
+                    source_table="year_wide_raw",
+                )
+                if not cast_query:
+                    continue
+                year_cast_df = con.execute(cast_query).fetchdf()
+                if not year_cast_df.empty:
+                    cast_report_frames.append(year_cast_df)
+
+        non_empty_values = scalar_int(con, "SELECT COUNT(*) FROM year_analysis_final WHERE value_norm IS NOT NULL")
+        possible = spine_rows * len(all_targets) if spine_rows and all_targets else 0
+        fill_rate = (non_empty_values / possible) if possible else 0.0
+        qc_rows.append(
+            {
+                "year": int(year),
+                "rows": int(spine_rows),
+                "vars": int(len(all_targets)),
+                "non_empty_values": int(non_empty_values),
+                "fill_rate": float(fill_rate),
+                "dup_rows": int(dup_count),
+            }
+        )
+
+    if scalar_writer is not None:
+        scalar_writer.close()
+        print(f"[info] wrote scalar long lane: {args.scalar_long_out}", flush=True)
+    if dim_writer is not None:
+        dim_writer.close()
+        print(f"[info] wrote dimensioned long lane: {args.dim_long_out}", flush=True)
+
+    if scalar_conflict_frames:
+        scalar_conflicts_df = pd.concat(scalar_conflict_frames, ignore_index=True)
+        if runtime.scalar_conflicts_out:
+            Path(runtime.scalar_conflicts_out).parent.mkdir(parents=True, exist_ok=True)
+            scalar_conflicts_df.to_csv(runtime.scalar_conflicts_out, index=False)
+            print(f"[info] wrote scalar conflict QC: {runtime.scalar_conflicts_out}", flush=True)
+        register_df_as_table(con, "qa.scalar_conflicts", scalar_conflicts_df)
+
+    if cast_report_frames:
+        cast_report_df = pd.concat(cast_report_frames, ignore_index=True)
+        register_df_as_table(con, "qa.cast_report", cast_report_df)
+        if runtime.cast_report_out:
+            Path(runtime.cast_report_out).parent.mkdir(parents=True, exist_ok=True)
+            cast_report_df.to_csv(runtime.cast_report_out, index=False)
+            print(f"[info] wrote cast report QC: {runtime.cast_report_out}", flush=True)
+
+    if qc_rows:
+        qc_df = pd.DataFrame(qc_rows)
+        register_df_as_table(con, "qa.wide_year_summary", qc_df)
+
     if args.write_single:
+        Path(args.write_single).parent.mkdir(parents=True, exist_ok=True)
         drop_post_cols: set[str] = set()
         if args.drop_globally_null_post and all_targets:
-            count_query = build_non_null_count_query(all_targets)
-            if count_query:
-                row = con.execute(count_query).fetchone()
-                drop_post_cols = {target for target, count in zip(all_targets, row) if int(count or 0) == 0}
+            non_null_counts = {name: 0 for name in all_targets}
+            for part_path in year_part_paths:
+                pf = pq.ParquetFile(part_path)
+                for batch in pf.iter_batches():
+                    schema_names = batch.schema.names
+                    for name in non_null_counts:
+                        if name not in schema_names:
+                            continue
+                        arr = batch.column(schema_names.index(name))
+                        non_null_counts[name] += int(len(arr) - arr.null_count)
+            drop_post_cols = {name for name, cnt in non_null_counts.items() if cnt == 0}
             if drop_post_cols and args.qc_dir:
                 qc_globally_null = Path(args.qc_dir) / "qc_globally_null_columns_dropped.csv"
                 pd.DataFrame({"column": sorted(drop_post_cols)}).to_csv(qc_globally_null, index=False)
                 print(f"[info] wrote globally-null drop QC: {qc_globally_null}", flush=True)
         keep_cols = ["year", "UNITID"] + [t for t in all_targets if t not in drop_post_cols]
-        select_cols = ", ".join(quote_ident(c) for c in keep_cols)
         log_phase("stitched write start", output=args.write_single, columns=len(keep_cols))
-        copy_query_to_parquet(con, f"SELECT {select_cols} FROM mart.panel_wide ORDER BY year, UNITID", args.write_single)
+        writer = None
+        for part_path in year_part_paths:
+            table = pq.ParquetFile(part_path).read()
+            if drop_post_cols:
+                table = table.select([c for c in table.schema.names if c not in drop_post_cols])
+            if writer is None:
+                writer = pq.ParquetWriter(args.write_single, table.schema, compression="snappy")
+            writer.write_table(table)
+        if writer is not None:
+            writer.close()
         if drop_post_cols:
             print(f"[info] dropping {len(drop_post_cols)} globally-null columns in stitched output", flush=True)
         log_phase("stitched write end", output=args.write_single)
 
-    if args.qc_dir:
-        write_query_csv(con, "SELECT * FROM qa.wide_year_summary ORDER BY year", os.path.join(args.qc_dir, "wide_panel_qc_summary.csv"))
+    if args.qc_dir and qc_rows:
+        qc_df.to_csv(os.path.join(args.qc_dir, "wide_panel_qc_summary.csv"), index=False)
         log_phase("qc write end", qc_dir=args.qc_dir)
