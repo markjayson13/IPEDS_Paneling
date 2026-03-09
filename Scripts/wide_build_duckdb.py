@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -231,11 +232,30 @@ def build_cast_report_query(numeric_targets: list[str]) -> str | None:
     return "\nUNION ALL\n".join(unions)
 
 
+def log_phase(message: str, **fields) -> None:
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    suffix = " ".join(f"{key}={value}" for key, value in fields.items())
+    if suffix:
+        print(f"[phase {stamp}] {message} {suffix}", flush=True)
+    else:
+        print(f"[phase {stamp}] {message}", flush=True)
+
+
+def scalar_int(con, query: str) -> int:
+    value = con.execute(query).fetchone()[0]
+    if value is None:
+        return 0
+    return int(value)
+
+
 def run(args) -> None:
     runtime: WideBuildRuntime = prepare_runtime(args)
     years = runtime.years
     if max(years) >= 2024:
-        print("[warn] 2024 is treated as provisional/schema-transition; prefer 2004:2023 for analysis releases.")
+        print(
+            "[warn] 2024 is treated as provisional/schema-transition; prefer 2004:2023 for analysis releases.",
+            flush=True,
+        )
 
     dataset = ds.dataset(args.input, format="parquet")
     schema = dataset.schema
@@ -251,7 +271,7 @@ def run(args) -> None:
 
     con, effective_db_path = open_build_connection(args.duckdb_path, args.duckdb_temp_dir, args.persist_duckdb)
     bootstrap_build_db(con)
-    print(f"[info] DuckDB build state: {effective_db_path}")
+    print(f"[info] DuckDB build state: {effective_db_path}", flush=True)
 
     config = {
         "anti_garbage_ids": args.anti_garbage_ids,
@@ -283,6 +303,7 @@ def run(args) -> None:
     if args.dictionary:
         con.execute(f"CREATE OR REPLACE TABLE meta.dictionary_lake AS SELECT * FROM read_parquet({sql_quote(args.dictionary)})")
 
+    log_phase("register parquet input start", input=args.input, years=args.years)
     con.execute(
         build_stage_long_query(
             input_path=args.input,
@@ -295,13 +316,20 @@ def run(args) -> None:
             varnumber_col=varnumber_col,
         )
     )
+    log_phase(
+        "register parquet input end",
+        stage_rows=scalar_int(con, "SELECT COUNT(*) FROM stage.long_selected"),
+        stage_cols=8,
+    )
     con.execute("CREATE OR REPLACE TABLE stage.spine AS SELECT DISTINCT year, UNITID FROM stage.long_selected ORDER BY year, UNITID")
+    log_phase("spine materialization end", spine_rows=scalar_int(con, "SELECT COUNT(*) FROM stage.spine"))
 
     dedupe_partition = ["UNITID", "year", "varname", "value_norm"]
     if args.lane_split:
         dedupe_partition.extend(["varnumber", "source_file"])
     partition_sql = ", ".join(dedupe_partition)
     where_sql = f"WHERE varname NOT IN ({sql_upper_in(runtime.exclude_vars)})" if runtime.exclude_vars else ""
+    log_phase("analysis base build start")
     con.execute(
         f"""
         CREATE OR REPLACE TABLE core.analysis_long_base AS
@@ -327,9 +355,18 @@ def run(args) -> None:
         WHERE _rn = 1
         """
     )
+    log_phase(
+        "analysis base build end",
+        rows=scalar_int(con, "SELECT COUNT(*) FROM core.analysis_long_base"),
+    )
 
     analysis_source_table = "core.analysis_long_base"
     if args.lane_split:
+        log_phase(
+            "lane split planning start",
+            dim_sources=len(runtime.dim_sources),
+            dim_prefixes=len(runtime.dim_prefixes),
+        )
         dimension_expr = build_dimension_expr(runtime.dim_sources, runtime.dim_prefixes)
         con.execute(
             f"""
@@ -345,21 +382,27 @@ def run(args) -> None:
             WHERE {dimension_expr}
             """
         )
+        log_phase(
+            "lane split planning end",
+            scalar_rows=scalar_int(con, "SELECT COUNT(*) FROM core.scalar_long_raw"),
+            dim_rows=scalar_int(con, "SELECT COUNT(*) FROM core.dim_long_raw"),
+        )
         if args.scalar_long_out:
             copy_query_to_parquet(
                 con,
                 "SELECT UNITID, year, varname, value, varnumber, source_file FROM core.scalar_long_raw ORDER BY year, row_id",
                 args.scalar_long_out,
             )
-            print(f"[info] wrote scalar long lane: {args.scalar_long_out}")
+            print(f"[info] wrote scalar long lane: {args.scalar_long_out}", flush=True)
         if args.dim_long_out:
             copy_query_to_parquet(
                 con,
                 "SELECT UNITID, year, varname, value, varnumber, source_file FROM core.dim_long_raw ORDER BY year, row_id",
                 args.dim_long_out,
             )
-            print(f"[info] wrote dimensioned long lane: {args.dim_long_out}")
+            print(f"[info] wrote dimensioned long lane: {args.dim_long_out}", flush=True)
 
+        log_phase("scalar conflict scan start")
         con.execute(
             """
             CREATE OR REPLACE TABLE core.scalar_conflict_keys AS
@@ -375,6 +418,7 @@ def run(args) -> None:
             """
         )
         conflict_key_count = int(con.execute("SELECT COUNT(*) FROM core.scalar_conflict_keys").fetchone()[0])
+        log_phase("scalar conflict scan end", conflict_keys=conflict_key_count)
         if conflict_key_count:
             con.execute(
                 """
@@ -416,7 +460,7 @@ def run(args) -> None:
                     """,
                     runtime.scalar_conflicts_out,
                 )
-                print(f"[info] wrote scalar conflict QC: {runtime.scalar_conflicts_out}")
+                print(f"[info] wrote scalar conflict QC: {runtime.scalar_conflicts_out}", flush=True)
             if args.fail_on_scalar_conflicts:
                 raise SystemExit(f"scalar conflict gate failed: conflict_keys={conflict_key_count}")
         else:
@@ -450,6 +494,8 @@ def run(args) -> None:
     else:
         create_empty_conflicts(con)
 
+    log_phase("discover targets start")
+    log_phase("non-empty scan start")
     target_df = con.execute(
         f"""
         SELECT
@@ -462,19 +508,29 @@ def run(args) -> None:
     ).fetchdf()
     targets = target_df["varname"].tolist()
     targets_with_data = set(target_df.loc[target_df["non_empty_rows"] > 0, "varname"].tolist())
+    log_phase("non-empty scan end", non_empty_targets=len(targets_with_data))
     all_targets = order_targets(targets)
+    log_phase("discover targets end", discovered_targets=len(targets), ordered_targets=len(all_targets))
 
     if args.drop_empty_cols:
         before = len(all_targets)
         all_targets = [t for t in all_targets if t in targets_with_data]
         dropped = before - len(all_targets)
         if dropped > 0:
-            print(f"[info] dropped {dropped} globally-empty variables (no non-empty values in selected years)")
+            print(
+                f"[info] dropped {dropped} globally-empty variables (no non-empty values in selected years)",
+                flush=True,
+            )
 
     numeric_targets = set()
     if args.typed_output:
+        log_phase("numeric target build start")
         numeric_targets = build_numeric_targets(args.dictionary, all_targets)
-        print(f"[info] typed output enabled: numeric vars={len(numeric_targets)} string vars={len(all_targets) - len(numeric_targets)}")
+        log_phase("numeric target build end", numeric_targets=len(numeric_targets))
+        print(
+            f"[info] typed output enabled: numeric vars={len(numeric_targets)} string vars={len(all_targets) - len(numeric_targets)}",
+            flush=True,
+        )
 
     var_to_group, group_to_vars = ({}, {})
     if args.collapse_disc:
@@ -499,18 +555,21 @@ def run(args) -> None:
     register_df_as_table(con, "qa.anti_garbage_hits", anti_df)
     if anti_hits and runtime.anti_garbage_out:
         anti_df.to_csv(runtime.anti_garbage_out, index=False)
-        print(f"[warn] anti-garbage hits written: {runtime.anti_garbage_out} (count={len(anti_hits)})")
+        print(
+            f"[warn] anti-garbage hits written: {runtime.anti_garbage_out} (count={len(anti_hits)})",
+            flush=True,
+        )
     if anti_hits and args.drop_anti_garbage_cols:
         all_targets = [t for t in all_targets if t not in set(anti_hits)]
-        print(f"[info] dropped {len(anti_hits)} anti-garbage identifier columns from wide targets")
+        print(f"[info] dropped {len(anti_hits)} anti-garbage identifier columns from wide targets", flush=True)
         anti_hits = find_anti_garbage_hits(all_targets, runtime.anti_garbage_ids)
         anti_df = pd.DataFrame({"blocked_identifier_column": anti_hits})
         register_df_as_table(con, "qa.anti_garbage_hits", anti_df)
     if anti_hits and args.fail_on_anti_garbage:
         raise SystemExit(f"anti-garbage gate failed: {len(anti_hits)} blocked dimension identifiers present in wide targets")
 
-    print(f"[info] years: {years[0]}–{years[-1]} ({len(years)} total)")
-    print(f"[info] wide columns (varname): {len(all_targets)}")
+    print(f"[info] years: {years[0]}–{years[-1]} ({len(years)} total)", flush=True)
+    print(f"[info] wide columns (varname): {len(all_targets)}", flush=True)
 
     if args.collapse_disc and group_to_vars:
         disc_rows = []
@@ -702,6 +761,7 @@ def run(args) -> None:
         WHERE _rn = 1
         """
     )
+    log_phase("analysis long finalize end", rows=scalar_int(con, "SELECT COUNT(*) FROM core.analysis_long_final"))
 
     con.execute(
         f"""
@@ -740,7 +800,9 @@ def run(args) -> None:
         """
     )
 
+    log_phase("global pivot start", targets=len(all_targets))
     con.execute(f"CREATE OR REPLACE TABLE mart.panel_wide_raw AS {build_wide_query(all_targets, 'core.analysis_long_final')}")
+    log_phase("global pivot end", rows=scalar_int(con, "SELECT COUNT(*) FROM mart.panel_wide_raw"))
     if args.typed_output:
         cast_query = build_cast_report_query([t for t in all_targets if t in numeric_targets])
         if cast_query:
@@ -751,17 +813,27 @@ def run(args) -> None:
     else:
         create_empty_cast_report(con)
         con.execute("CREATE OR REPLACE TABLE mart.panel_wide AS SELECT * FROM mart.panel_wide_raw ORDER BY year, UNITID")
+    log_phase("typed projection end", rows=scalar_int(con, "SELECT COUNT(*) FROM mart.panel_wide"))
 
     if runtime.cast_report_out and args.typed_output and con.execute("SELECT COUNT(*) FROM qa.cast_report").fetchone()[0]:
         write_query_csv(con, 'SELECT * FROM qa.cast_report ORDER BY year, "column"', runtime.cast_report_out)
-        print(f"[info] wrote cast report QC: {runtime.cast_report_out}")
+        print(f"[info] wrote cast report QC: {runtime.cast_report_out}", flush=True)
 
     year_part_paths: list[str] = []
     for year in years:
+        log_phase(f"year {year} start")
+        spine_rows = scalar_int(con, f"SELECT COUNT(*) FROM stage.spine WHERE year = {int(year)}")
+        log_phase(f"year {year} spine done", rows=spine_rows)
+        concept_rows = scalar_int(con, f"SELECT COUNT(*) FROM core.analysis_long_final WHERE year = {int(year)}")
+        log_phase(f"year {year} concept done", rows=concept_rows)
+        log_phase(f"year {year} pivot start")
+        wide_rows = scalar_int(con, f"SELECT COUNT(*) FROM mart.panel_wide WHERE year = {int(year)}")
+        log_phase(f"year {year} pivot end", rows=wide_rows)
         out_path = os.path.join(args.out_dir, f"year={year}", "part.parquet")
         copy_query_to_parquet(con, f"SELECT * FROM mart.panel_wide WHERE year = {int(year)} ORDER BY UNITID", out_path)
         year_part_paths.append(out_path)
-        print(f"[info] wrote {out_path}")
+        print(f"[info] wrote {out_path}", flush=True)
+        log_phase(f"year {year} write complete", path=out_path, rows=wide_rows)
 
     if args.write_single:
         drop_post_cols: set[str] = set()
@@ -773,12 +845,15 @@ def run(args) -> None:
             if drop_post_cols and args.qc_dir:
                 qc_globally_null = Path(args.qc_dir) / "qc_globally_null_columns_dropped.csv"
                 pd.DataFrame({"column": sorted(drop_post_cols)}).to_csv(qc_globally_null, index=False)
-                print(f"[info] wrote globally-null drop QC: {qc_globally_null}")
+                print(f"[info] wrote globally-null drop QC: {qc_globally_null}", flush=True)
         keep_cols = ["year", "UNITID"] + [t for t in all_targets if t not in drop_post_cols]
         select_cols = ", ".join(quote_ident(c) for c in keep_cols)
+        log_phase("stitched write start", output=args.write_single, columns=len(keep_cols))
         copy_query_to_parquet(con, f"SELECT {select_cols} FROM mart.panel_wide ORDER BY year, UNITID", args.write_single)
         if drop_post_cols:
-            print(f"[info] dropping {len(drop_post_cols)} globally-null columns in stitched output")
+            print(f"[info] dropping {len(drop_post_cols)} globally-null columns in stitched output", flush=True)
+        log_phase("stitched write end", output=args.write_single)
 
     if args.qc_dir:
         write_query_csv(con, "SELECT * FROM qa.wide_year_summary ORDER BY year", os.path.join(args.qc_dir, "wide_panel_qc_summary.csv"))
+        log_phase("qc write end", qc_dir=args.qc_dir)
