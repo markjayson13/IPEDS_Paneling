@@ -2,7 +2,7 @@
 
 Build reproducible IPEDS institution-year panels from NCES IPEDS cross-sections with strict release checks, provenance-preserving harmonization, DuckDB-backed wide builds, and auditable QC artifacts.
 
-![Figure 1. IPEDS Harmonization Pipeline (2004-2024)](Artifacts/Figure_1_pipeline.svg)
+![Figure 1. IPEDS Panel Construction Pipeline](Artifacts/Figure_1_pipeline.svg)
 
 ## Overview
 
