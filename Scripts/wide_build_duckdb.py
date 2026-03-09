@@ -59,10 +59,9 @@ def build_stage_long_query(
     varnumber_expr = f"COALESCE(TRIM(CAST({quote_ident(varnumber_col)} AS VARCHAR)), '')" if varnumber_col else "''"
     null_tokens = ", ".join(sql_quote(x) for x in ["", ".", "nan", "none", "<na>", "na", "nat"])
     return f"""
-        CREATE OR REPLACE TABLE stage.long_selected AS
+        CREATE OR REPLACE VIEW stage.long_selected AS
         WITH src AS (
             SELECT
-                ROW_NUMBER() OVER () AS row_id,
                 TRY_CAST({quote_ident(unitid_col)} AS BIGINT) AS UNITID,
                 TRY_CAST({quote_ident(year_col)} AS INTEGER) AS year,
                 UPPER(TRIM(CAST({quote_ident(target_col)} AS VARCHAR))) AS varname,
@@ -73,7 +72,6 @@ def build_stage_long_query(
             WHERE TRY_CAST({quote_ident(year_col)} AS INTEGER) IN ({years_sql})
         )
         SELECT
-            row_id,
             UNITID,
             year,
             varname,
@@ -95,6 +93,15 @@ def build_stage_long_query(
           AND varname IS NOT NULL
           AND varname <> ''
     """
+
+
+def file_size_bytes(path: str | None) -> int:
+    if not path or path == ":memory:":
+        return 0
+    fp = Path(path)
+    if not fp.exists():
+        return 0
+    return int(fp.stat().st_size)
 
 
 def create_empty_conflicts(con) -> None:
@@ -303,6 +310,8 @@ def run(args) -> None:
     if args.dictionary:
         con.execute(f"CREATE OR REPLACE TABLE meta.dictionary_lake AS SELECT * FROM read_parquet({sql_quote(args.dictionary)})")
 
+    register_started = time.monotonic()
+    register_db_before = file_size_bytes(effective_db_path)
     log_phase("register parquet input start", input=args.input, years=args.years)
     con.execute(
         build_stage_long_query(
@@ -316,11 +325,19 @@ def run(args) -> None:
             varnumber_col=varnumber_col,
         )
     )
+    register_elapsed = time.monotonic() - register_started
+    register_db_after = file_size_bytes(effective_db_path)
+    register_db_growth = register_db_after - register_db_before
     log_phase(
         "register parquet input end",
-        stage_rows=scalar_int(con, "SELECT COUNT(*) FROM stage.long_selected"),
-        stage_cols=8,
+        elapsed_seconds=f"{register_elapsed:.3f}",
+        stage_cols=7,
+        db_growth_bytes=register_db_growth,
+        registered_object="view",
     )
+    if args.persist_duckdb and register_elapsed > 30 and register_db_growth > 64 * 1024 * 1024:
+        raise SystemExit("registration is materializing the input parquet instead of registering it lazily")
+    log_phase("spine materialization start")
     con.execute("CREATE OR REPLACE TABLE stage.spine AS SELECT DISTINCT year, UNITID FROM stage.long_selected ORDER BY year, UNITID")
     log_phase("spine materialization end", spine_rows=scalar_int(con, "SELECT COUNT(*) FROM stage.spine"))
 
@@ -329,12 +346,44 @@ def run(args) -> None:
         dedupe_partition.extend(["varnumber", "source_file"])
     partition_sql = ", ".join(dedupe_partition)
     where_sql = f"WHERE varname NOT IN ({sql_upper_in(runtime.exclude_vars)})" if runtime.exclude_vars else ""
+    dedupe_order_sql = ", ".join(
+        [
+            "year",
+            "UNITID",
+            "varname",
+            "source_file",
+            "varnumber",
+            "COALESCE(value_norm, '')",
+            "COALESCE(value, '')",
+        ]
+    )
     log_phase("analysis base build start")
     con.execute(
         f"""
-        CREATE OR REPLACE TABLE core.analysis_long_base AS
+        CREATE OR REPLACE VIEW core.analysis_long_base AS
+        WITH deduped AS (
+            SELECT
+                UNITID,
+                year,
+                varname,
+                value,
+                value_norm,
+                source_file,
+                varnumber
+            FROM (
+                SELECT
+                    *,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY {partition_sql}
+                        ORDER BY {dedupe_order_sql}
+                    ) AS _rn
+                FROM stage.long_selected
+                {where_sql}
+            )
+            WHERE _rn = 1
+        )
         SELECT
-            row_id,
+            ROW_NUMBER() OVER (ORDER BY {dedupe_order_sql}) AS row_id,
             UNITID,
             year,
             varname,
@@ -342,23 +391,10 @@ def run(args) -> None:
             value_norm,
             source_file,
             varnumber
-        FROM (
-            SELECT
-                *,
-                ROW_NUMBER() OVER (
-                    PARTITION BY {partition_sql}
-                    ORDER BY row_id
-                ) AS _rn
-            FROM stage.long_selected
-            {where_sql}
-        )
-        WHERE _rn = 1
+        FROM deduped
         """
     )
-    log_phase(
-        "analysis base build end",
-        rows=scalar_int(con, "SELECT COUNT(*) FROM core.analysis_long_base"),
-    )
+    log_phase("analysis base build end", materialized_object="view")
 
     analysis_source_table = "core.analysis_long_base"
     if args.lane_split:
