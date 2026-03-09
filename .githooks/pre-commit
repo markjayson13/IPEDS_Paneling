@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(git rev-parse --show-toplevel)
+
+python3 "$ROOT/Scripts/QA_QC/06_staged_repo_guard.py" --repo-root "$ROOT"
