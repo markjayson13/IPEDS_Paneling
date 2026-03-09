@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Build a wide institution-year panel from the stitched long panel.
+Build wide institution-year panels from the stitched long panel.
 
-DuckDB is the relational execution layer. Python remains responsible for
-CLI parsing, target ordering, and artifact orchestration.
+DuckDB is the relational execution layer for target discovery, lane-split
+planning, scalar-conflict QC, discrete collapse, typed casting, partitioned
+exports, and stitched outputs. Python remains responsible for CLI parsing,
+target ordering, runtime setup, and artifact orchestration.
 """
 
 from __future__ import annotations

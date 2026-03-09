@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """
-Parent/Child cleaning for the stitched wide panel.
+Apply PRCH parent/child cleaning to a stitched wide panel.
 
-Safest policy (Option A):
-- Keep all UNITID-year rows.
-- If a PRCH_* flag indicates CHILD, null out only that component's columns.
+Safest policy:
+- keep all `UNITID-year` rows
+- if a `PRCH_*` flag indicates a child observation, null only the affected
+  component-family columns
+
+This is the final cleaning step for the full `2004:2024` release and can also
+be applied to the stitched `2004:2023` analysis-wide panel when a cleaned
+analysis panel is needed.
 """
 from __future__ import annotations
 

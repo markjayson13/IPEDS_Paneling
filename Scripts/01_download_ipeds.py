@@ -1,45 +1,15 @@
 """
-IPEDS "Power User" Data Downloader Script (v6 - Multithreaded, Comprehensive & Sorted)
+Download raw IPEDS complete data files and dictionaries.
 
-PURPOSE:
-This script automates the download and extraction of IPEDS "Complete Data Files"
-for a specified range of years (2004-2024).
-It is designed to be run from a local
-machine (e.g., in VS Code) to gather all necessary raw cross-sectional files
-and their corresponding data dictionaries.
+This is the acquisition-only stage of the pipeline. It fetches NCES IPEDS
+cross-sectional survey files, prioritizes the best available release files,
+writes per-year manifests, and optionally extracts dictionary workbooks. The
+standard project release window is `2004:2024`, but the downloader supports
+broader historical spans and survey filters as new releases arrive.
 
-METHODOLOGY AND CITATION:
-This script implements a methodology common in the academic research community
-for handling IPEDS data. The core logic (programmatically querying the 
-'DataFiles.aspx' page and parsing the HTML response) is a standard practice
-to bypass the tedious manual download of hundreds of files.
-
-While this specific script is generated from scratch, its methodology is 
-informed by and similar to that found in community-supported tools like:
-- The Urban Institute's 'ipeds-scraper' (Python)
-- The 'ipedsr' package (R)
-- Various 'StataIPEDSAll' scripts (Stata)
-
-If you use this script in research, it is good practice to cite the IPEDS
-data source itself (NCES). You can also note that data was "programmatically
-downloaded using a custom Python script implementing established web-scraping
-methodologies for the IPEDS Data Center."
-
-CRITICAL NOTE ON ROBUSTNESS AND DATA INTEGRITY:
-This script ONLY downloads the raw, cross-sectional files. It **DOES NOT**
-perform any harmonization, cleaning, or paneling. 
-
-The user is fully responsible for the critical research work of:
-1.  **Harmonization:** Using the downloaded Data Dictionaries to map variable
-    names that change over time (e.g., `F1C01` in one year vs. `F1D05` in another).
-2.  **Crosswalking:** Reconciling changes in reporting standards (e.g.,
-    GASB finance rules, 2010 and 2020 CIP code updates, race/ethnicity 
-    category changes pre/post 2007).
-3.  **De-duplicating:** Handling parent-child `UNITID` relationships.
-
-This script's job is to give you all the raw materials. The "robustness" of
-your final panel dataset depends on the analysis you perform *after*
-using this script.
+This script does not harmonize, clean, or panel the data. Those steps happen in
+`02_dictionary_ingest.py`, `03_harmonize.py`, `04_build_wide_panel.py`, and
+`05_clean_panel.py`.
 """
 
 import argparse
@@ -62,7 +32,7 @@ from bs4 import BeautifulSoup
 
 BASE_ROOT = os.environ.get("IPEDS_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DOWNLOAD_DIR = os.path.join(BASE_ROOT, "Raw_Cross_Section_Data")
-# Now fetch the full historical span requested (1987–2024)
+# Default historical fetch span. Standard release builds still focus on 2004+.
 YEARS_TO_DOWNLOAD = range(1987, 2025)
 BASE_URL = 'https://nces.ed.gov/ipeds/datacenter/'
 USER_AGENT = (

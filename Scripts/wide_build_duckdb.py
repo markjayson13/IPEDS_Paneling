@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+"""
+DuckDB execution engine for `04_build_wide_panel.py`.
+
+This module keeps the stitched long parquet lazy where possible, builds compact
+global planning artifacts, executes year-scoped scalar and dimension lanes,
+performs exact scalar-conflict QC with optional hash bucketing, writes
+target-lineage and seeded-schema audits, and exports partitioned plus stitched
+wide outputs.
+"""
 from __future__ import annotations
 
 import os

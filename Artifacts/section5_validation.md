@@ -1,7 +1,9 @@
 # 5. Evaluation and Validation
 
-This section reports validation metrics produced by the pipeline’s built‑in QC artifacts.  
-All numbers below are reproducible from the Parquet outputs and QC directories.
+This section reports validation metrics produced by the pipeline’s built-in QC
+artifacts. All numbers below are reproducible from the Parquet outputs, QC
+directories, and monitored/certification artifacts produced by the current
+Python + DuckDB workflow.
 
 ## 5.1 Release‑stage validation
 
@@ -26,8 +28,11 @@ All numbers below are reproducible from the Parquet outputs and QC directories.
 
 ## 5.3 Long‑panel integrity checks
 
-**Claim.** The long panel enforces a single grain, reducing silent join errors.  
-**Evidence.** One row per `(UNITID, year, varname)`.
+**Claim.** The long panel enforces a provenance-preserving grain, reducing
+silent join errors and schema drift across source files.
+**Evidence.** Long rows retain `source_file` and canonical metadata, while the
+harmonization step reports duplicate-key behavior after deterministic
+canonicalization.
 
 **Report:**
 - Total rows by year in the long panel  
@@ -58,7 +63,9 @@ All numbers below are reproducible from the Parquet outputs and QC directories.
 
 - Fixed release selection rules (revised/final)  
 - Deterministic canonicalization (uppercase varnames, standardized varnumbers)  
-- Machine‑readable outputs (Parquet) with stable schemas
+- Machine-readable outputs (Parquet) with stable schemas
+- Monitored analysis builds with phase logs, telemetry, and run metadata
+- Optional certification summaries for completed `2004:2023` analysis builds
 
 ---
 

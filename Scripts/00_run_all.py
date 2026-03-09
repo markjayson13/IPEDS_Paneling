@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-Wrapper to run 03_harmonize.py per-year, stitch outputs, and optionally build wide panels.
-Defaults target the standard IPEDS_ROOT layout (Raw_Cross_Section_Data, Dictionary, Panels, Checks).
+Repository orchestrator for the IPEDS panel pipeline.
+
+This wrapper runs per-year harmonization, stitches the long panel, optionally
+builds wide panels, optionally runs PRCH cleaning, and can finish with a custom
+panel extract. Defaults target the standard IPEDS_ROOT layout
+(Raw_Cross_Section_Data, Dictionary, Panels, Checks).
 """
 from __future__ import annotations
 

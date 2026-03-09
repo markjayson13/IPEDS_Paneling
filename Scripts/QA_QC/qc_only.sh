@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+#
+# Run the repo's standalone QC checks without rebuilding the full release.
+#
+# This helper targets the standard `2004:2024` full-release artifacts:
+# - stitched long panel
+# - stitched raw wide panel
+# - stitched PRCH-clean panel
+#
+# It refreshes release QC, disc/wide QC, and raw-vs-PRCH panel QA summaries.
 
 set -euo pipefail
 

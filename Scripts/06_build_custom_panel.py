@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Build a custom wide panel by selecting specific variables from a wide panel.
+Build a custom extract from a stitched wide or cleaned panel.
 
-Always keeps UNITID and year. Users specify additional varnames via --vars or --vars-file.
-Supports parquet or CSV output (streamed).
+`UNITID` and `year` are always retained. Users specify the remaining variables
+via `--vars` or `--vars-file`. Outputs can be written as parquet or CSV using a
+streamed Arrow path so large panel subsets remain cheap to materialize.
 """
 from __future__ import annotations
 

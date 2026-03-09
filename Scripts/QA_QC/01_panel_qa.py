@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-QA checks for PRCH cleaning vs raw wide panel.
+QA checks for PRCH cleaning versus the raw stitched wide panel.
 
-Outputs:
-- Prints year coverage, row counts, size, and non-null comparisons
-- Writes a small CSV report to Checks/panel_qc/panel_qa_summary.csv
+The script verifies year coverage, row preservation, and selected non-null
+comparisons, then writes a compact summary to `Checks/panel_qc/` for the full
+release cleaning workflow.
 """
 from __future__ import annotations
 

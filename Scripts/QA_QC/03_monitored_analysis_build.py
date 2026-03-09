@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""
+Run a monitored real-data analysis-wide build with durable logs and telemetry.
+
+The script launches `04_build_wide_panel.py`, stores logs and runtime metadata
+under `Checks/real_parity_runs/<run_id>/`, and prints a live terminal heartbeat
+so long DuckDB builds can be monitored without tailing log files separately.
+"""
 from __future__ import annotations
 
 import argparse

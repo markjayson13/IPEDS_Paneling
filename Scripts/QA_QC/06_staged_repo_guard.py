@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""
+Block staged large-data artifacts before commit or push.
+
+This guard rejects staged files under generated-data directories, staged parquet
+or DuckDB artifacts, oversized staged files, and other paths that should never
+enter version control in this repo.
+"""
 from __future__ import annotations
 
 import argparse

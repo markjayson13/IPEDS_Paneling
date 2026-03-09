@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+"""
+Run parity checks between the legacy and DuckDB wide-build engines.
+
+This harness executes both implementations on the same stitched long input and
+compares column order, row counts, QC artifacts, seeded-schema behavior, and
+shared-column content under either the legacy-schema or semantic-window
+contract.
+"""
 from __future__ import annotations
 
 import argparse

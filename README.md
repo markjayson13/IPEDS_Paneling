@@ -1,19 +1,28 @@
 # IPEDS Paneling
 
-Build reproducible IPEDS panel datasets from NCES cross-sections with strict release checks, harmonization guards, and DuckDB-backed analysis-wide exports.
+Build reproducible IPEDS institution-year panels from NCES IPEDS cross-sections with strict release checks, provenance-preserving harmonization, DuckDB-backed wide builds, and auditable QC artifacts.
 
 ![Figure 1. IPEDS Harmonization Pipeline (2004-2024)](Artifacts/Figure_1_pipeline.svg)
 
 ## Overview
 
-This repository supports two outputs:
+This repository supports two main release products:
 
-- `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet` (full cleaned panel, 2004-2024)
-- `Panels/panel_wide_analysis_2004_2023.parquet` (analysis release window, 2004-2023 by default)
+- `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet` for the full cleaned release window (`2004:2024`)
+- `Panels/panel_wide_analysis_2004_2023.parquet` for the analysis release window (`2004:2023` by default)
 
 `2024` is treated as provisional/schema-transition for analysis-wide builds.
 
 `Scripts/04_build_wide_panel.py` now uses DuckDB as the build/query engine for wide-panel construction, QC, and partition export. Python remains the orchestration layer.
+
+Core stages:
+
+1. `Scripts/01_download_ipeds.py`: multithreaded raw acquisition, manifests, retry logic, and optional dictionary extraction.
+2. `Scripts/02_dictionary_ingest.py`: dictionary lake and dictionary codes, including synthetic imputation-variable rows and UNITID metadata rows.
+3. `Scripts/03_harmonize.py`: provenance-preserving long panel build with chunked melts, release allowlist checks, and deterministic deduplication.
+4. `Scripts/04_build_wide_panel.py`: DuckDB-backed wide build with year-scoped execution, scalar/dimension lane split, anti-garbage gates, typed casting, discrete collapse, target lineage, and monitored phase logs.
+5. `Scripts/05_clean_panel.py`: PRCH parent/child cleaning that preserves all institution-year rows and nulls only the affected component families.
+6. `Scripts/06_build_custom_panel.py`: variable-select export from stitched wide or clean panels to parquet or CSV.
 
 ## Setup
 
@@ -39,6 +48,8 @@ This runs `Scripts/00_run_all.py` and produces:
 - `Panels/2004_2024_IPEDS_Raw_Panel_DS.parquet`
 - `Panels/2004_2024_IPEDS_PRCHclean_Panel_DS.parquet`
 - `Panels/2004_2024_IPEDS_clean_Panel_DS.parquet`
+
+That full-release path is the cleaned `2004:2024` product. The separate analysis-wide build below is an unbalanced research panel for `2004:2023` and is not PRCH-cleaned unless you explicitly run `Scripts/05_clean_panel.py` on it.
 
 ## Build Analysis-Wide Panel (Lane Split)
 
@@ -75,6 +86,16 @@ Analysis-wide schema notes:
 - If `--drop-globally-null-post` remains enabled, globally null compatibility columns are still removed from the stitched single-file output and listed in `Checks/wide_qc/qc_globally_null_columns_dropped.csv`.
 - Use `--no-legacy-analysis-schema` if you want the narrower semantic-window schema surface instead of the legacy-compatible schema contract.
 
+If you want a cleaned version of the stitched analysis panel, run:
+
+```bash
+python3 Scripts/05_clean_panel.py \
+  --input "$IPEDS_ROOT/Panels/panel_wide_analysis_2004_2023.parquet" \
+  --output "$IPEDS_ROOT/Panels/panel_clean_analysis_2004_2023.parquet" \
+  --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
+  --qc-dir "$IPEDS_ROOT/Checks/prch_qc"
+```
+
 ## Schema Audit And Monitoring
 
 Target-lineage audit without running the year loop:
@@ -102,6 +123,17 @@ python3 Scripts/QA_QC/03_monitored_analysis_build.py \
 ```
 
 The monitored runner writes `build.log`, `monitor.log`, `build_telemetry.json`, and `run_meta.json` under `Checks/real_parity_runs/<run_id>/`.
+It also prints a live terminal heartbeat with elapsed time, partition count, disk usage, and latest phase.
+
+Certification runner for a completed monitored analysis build:
+
+```bash
+python3 Scripts/QA_QC/04_certify_analysis_build.py \
+  --run-dir "Checks/real_parity_runs/<run_id>" \
+  --years "2004:2023"
+```
+
+This writes `certification_summary.csv` and `certification_summary.md` into the monitored run directory.
 
 Parity harness:
 
@@ -163,6 +195,8 @@ python3 Scripts/06_build_custom_panel.py \
 - `Checks/wide_qc/qc_seeded_legacy_columns.csv` legacy compatibility columns injected into analysis-wide targets
 - `Checks/wide_qc/qc_globally_null_columns_dropped.csv` globally null columns removed post-build
 - `Checks/prch_qc/` PRCH cleaning evidence
+- `Checks/real_parity_runs/<run_id>/build.log`, `monitor.log`, `build_telemetry.json`, and `run_meta.json` for monitored analysis builds
+- `Checks/real_parity_runs/<run_id>/certification_summary.csv` and `.md` for post-run certification
 
 ## Troubleshooting
 

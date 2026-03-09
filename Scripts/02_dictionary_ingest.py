@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """
-Build a lean IPEDS dictionary lake (2004–2024) with core metadata only.
+Build the IPEDS dictionary artifacts used by harmonization and wide builds.
 
 Outputs:
-- dictionary_lake.parquet: year, varnumber, varname, varTitle, longDescription,
-  DataType, format, Fieldwidth, imputationvar
-- dictionary_codes.parquet/csv: value labels from Frequencies/FrequenciesRV/Imputation sheets
+- `dictionary_lake.parquet` / `.csv` with canonical metadata such as year,
+  varnumber, varname, source_file, labels, type hints, and imputation links
+- `dictionary_codes.parquet` / `.csv` with value labels from
+  Frequencies/FrequenciesRV/Imputation sheets
+
+The ingester also adds stable synthetic rows for imputation flag variables and
+controlled UNITID metadata rows so downstream panel stages can treat the key
+structure consistently across years.
 """
 
 from __future__ import annotations

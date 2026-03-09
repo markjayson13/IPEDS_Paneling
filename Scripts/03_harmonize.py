@@ -1,25 +1,12 @@
 #!/usr/bin/env python3
 """
-Harmonizer that builds a LONG panel with provenance-preserving grain:
-  canonical key = (UNITID, year, varnumber, source_file)
+Build the canonical long IPEDS panel with provenance-preserving grain.
 
-Inputs:
-  - root:   /path/to/Raw_Cross_Section_Data
-  - lake:   dictionary_lake.parquet from 01_ingest_dictionaries.py
-  - years:  "YYYY:YYYY" or comma list "2018,2019,2020"
-  - output: destination parquet (long format)
-
-Behavior:
-  - Scans all data files under root/<year> recursively (.csv/.tsv/.txt/.gz)
-  - Skips dictionary folders (name contains "_dict" case‑insensitive)
-  - Reads in chunks (low RAM), requires UNITID
-  - Melts to long, merges with dictionary on (year, varname)
-      NOTE: dictionary is reduced to a single preferred row per (year, varname) before merge
-            to prevent cartesian expansion.
-  - Drops rows with missing UNITID to avoid <NA> cross-product explosions.
-  - Writes a parquet with columns:
-      year, UNITID, varname, varnumber, value,
-      varTitle, longDescription, DataType, format, Fieldwidth, imputationvar, imputation_value, source_file
+Canonical row identity is `(UNITID, year, varnumber, source_file)`. The script
+scans raw cross-sections, performs low-RAM chunked melts, merges in dictionary
+metadata, applies release allowlist checks, drops invalid key rows, and writes a
+harmonized long parquet. Optional parts/stitch mode and final DuckDB-based
+deduplication keep the step reproducible on lower-memory machines.
 """
 import duckdb
 import argparse

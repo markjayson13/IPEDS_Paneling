@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """
-Dictionary QA/QC helper:
-- Builds a collapsed code-label table across years (varnumber + codevalue).
-- Writes source_file -> years coverage summary.
-- Prints key counts (unique varname/varnumber, blanks, source_file count).
+Dictionary QA/QC helper for the current dictionary ingestion workflow.
+
+This script summarizes `dictionary_lake.parquet` and `dictionary_codes.parquet`
+after ingestion, including collapsed code-label coverage, source-file year
+coverage, and varnumber-to-varname collision checks. It is useful for auditing
+the post-ingestion metadata surface, including synthetic imputation-variable
+rows and controlled UNITID metadata rows added by `02_dictionary_ingest.py`.
 """
 from __future__ import annotations
 

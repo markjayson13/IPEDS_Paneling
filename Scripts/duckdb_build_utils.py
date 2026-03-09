@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""
+Shared DuckDB helpers for the wide-build pipeline.
+
+This module centralizes connection/bootstrap logic, build-run metadata capture,
+and common SQL export helpers so the DuckDB-backed builder, monitoring tools,
+and certification scripts share the same runtime conventions.
+"""
 from __future__ import annotations
 
 import json

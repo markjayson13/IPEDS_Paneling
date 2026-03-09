@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""
+Fail if tracked repository files violate small-repo rules.
+
+This guard scans tracked files, reports the largest committed assets, blocks
+forbidden tracked basenames such as `.DS_Store`, and fails when any tracked
+file exceeds the configured size threshold.
+"""
 from __future__ import annotations
 
 import argparse

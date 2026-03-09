@@ -1,18 +1,11 @@
 #!/usr/bin/env python3
 """
-Compute reproducible validation metrics for the IPEDS panel paper.
+Compute reproducible validation metrics for the IPEDS paper and QC appendix.
 
-Outputs (CSV) in --out-dir:
-  - release_qc_summary.csv
-  - mapping_coverage.csv
-  - long_panel_integrity.csv
-  - disc_conflicts_summary.csv
-  - prch_clean_summary.csv (pass-through if exists)
-  - table3_validation_metrics_filled.csv (compact table for paper)
-
-Notes:
-  - Mapping coverage can optionally scan raw headers (slow) with --scan-raw.
-  - Long-panel metrics use DuckDB for out-of-core aggregation.
+Outputs (CSV) in `--out-dir` include release-stage summaries, mapping coverage,
+long-panel integrity metrics, discrete-conflict summaries, PRCH summaries, and
+a compact validation table for manuscript use. Long-panel and panel-level
+aggregations use DuckDB for out-of-core execution.
 """
 from __future__ import annotations
 

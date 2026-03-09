@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""
+Certify a completed monitored analysis-wide build against a trusted baseline.
+
+The certification pass checks run metadata, artifact completeness, whole-window
+row/spine parity, schema parity, QC artifacts, seeded-schema behavior, and
+content equality where contracts require exact matches.
+"""
 from __future__ import annotations
 
 import argparse

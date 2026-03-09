@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""
+Legacy pandas/PyArrow implementation of the wide-panel builder.
+
+This path is retained for parity testing against the DuckDB execution engine
+and should not be the default production build path going forward.
+"""
 from __future__ import annotations
 
 import os

@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""
+Shared parsing and planning helpers for the wide-panel builders.
+
+Both the DuckDB engine and the legacy parity engine use these utilities for
+year parsing, target ordering, numeric-target discovery, discrete-group
+planning, legacy-schema seeding, QC path defaults, and CLI normalization.
+"""
 from __future__ import annotations
 
 import argparse
