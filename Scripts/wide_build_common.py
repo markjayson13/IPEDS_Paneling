@@ -233,6 +233,7 @@ class WideBuildRuntime:
     scalar_conflicts_out: str | None
     anti_garbage_out: str | None
     cast_report_out: str | None
+    target_lineage_out: str | None
     dim_sources: set[str]
     dim_prefixes: tuple[str, ...]
     anti_garbage_ids: set[str]
@@ -277,6 +278,8 @@ def build_arg_parser(repo_root: pathlib.Path | None = None) -> argparse.Argument
     ap.add_argument("--qc-dir", default=None, help="Optional dir to write QC summary CSV")
     ap.add_argument("--scalar-conflicts-out", default=None, help="QC CSV path for scalar conflict keys")
     ap.add_argument("--cast-report-out", default=None, help="QC CSV path for typed-cast parse report")
+    ap.add_argument("--target-lineage-out", default=None, help="QC CSV path for target-lineage audit output")
+    ap.add_argument("--lineage-only", action="store_true", help="Stop after global target-lineage audit and skip year builds")
     ap.add_argument("--scan-batch-rows", type=int, default=200_000, help="Batch size for scanning long rows")
     ap.add_argument("--duckdb-path", default=str(build_root / "ipeds_build.duckdb"), help="Persistent DuckDB build path")
     ap.add_argument("--duckdb-temp-dir", default=str(build_root / "duckdb_tmp"), help="DuckDB temp directory for spills")
@@ -306,6 +309,7 @@ def prepare_runtime(args: argparse.Namespace) -> WideBuildRuntime:
     scalar_conflicts_out = args.scalar_conflicts_out or (os.path.join(args.qc_dir, "qc_scalar_conflicts.csv") if args.qc_dir else None)
     anti_garbage_out = args.anti_garbage_out or (os.path.join(args.qc_dir, "qc_anti_garbage_failures.csv") if args.qc_dir else None)
     cast_report_out = args.cast_report_out or (os.path.join(args.qc_dir, "qc_cast_report.csv") if args.qc_dir else None)
+    target_lineage_out = args.target_lineage_out or (os.path.join(args.qc_dir, "qc_target_lineage.csv") if args.qc_dir else None)
 
     return WideBuildRuntime(
         repo_root=repo_root,
@@ -313,6 +317,7 @@ def prepare_runtime(args: argparse.Namespace) -> WideBuildRuntime:
         scalar_conflicts_out=scalar_conflicts_out,
         anti_garbage_out=anti_garbage_out,
         cast_report_out=cast_report_out,
+        target_lineage_out=target_lineage_out,
         dim_sources=parse_upper_set(args.dim_sources),
         dim_prefixes=tuple([x.strip().upper() for x in str(args.dim_prefixes).split(",") if x.strip()]),
         anti_garbage_ids=parse_upper_set(args.anti_garbage_ids),

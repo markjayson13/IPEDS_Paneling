@@ -245,6 +245,81 @@ def register_df_as_table(con, table_name: str, df: pd.DataFrame) -> None:
     con.unregister(temp_name)
 
 
+def build_target_lineage_df(
+    *,
+    stage_df: pd.DataFrame,
+    scalar_df: pd.DataFrame,
+    exclude_vars: set[str],
+    targets_with_data: set[str],
+    component_vars: set[str],
+    var_to_group: dict[str, tuple[str, str]],
+    disc_name_map: dict[str, str],
+    anti_hits_initial: list[str],
+    anti_hits_final: list[str],
+    final_targets: list[str],
+    drop_empty_cols: bool,
+    drop_disc_components: bool,
+    drop_anti_garbage_cols: bool,
+) -> pd.DataFrame:
+    stage_stats = {
+        str(row["varname"]): {
+            "stage_rows": int(row["stage_rows"]),
+            "stage_non_empty_rows": int(row["stage_non_empty_rows"]),
+        }
+        for row in stage_df.to_dict("records")
+    }
+    scalar_stats = {
+        str(row["varname"]): {
+            "scalar_rows": int(row["scalar_rows"]),
+            "scalar_non_empty_rows": int(row["scalar_non_empty_rows"]),
+        }
+        for row in scalar_df.to_dict("records")
+    }
+    disc_output_lookup = {base: out for base, out in disc_name_map.items()}
+    output_names = set(disc_name_map.values())
+    anti_hits_initial_set = set(anti_hits_initial)
+    anti_hits_final_set = set(anti_hits_final)
+    final_rank = {name: idx + 1 for idx, name in enumerate(final_targets)}
+
+    all_names = set(stage_stats) | set(scalar_stats) | set(component_vars) | set(final_targets) | output_names | exclude_vars
+    for base, out_name in disc_name_map.items():
+        all_names.add(base)
+        all_names.add(out_name)
+
+    rows: list[dict] = []
+    for name in sorted(all_names):
+        stage_info = stage_stats.get(name, {})
+        scalar_info = scalar_stats.get(name, {})
+        base, suffix = var_to_group.get(name, ("", ""))
+        output_varname = disc_output_lookup.get(base, "") if base else ""
+        rows.append(
+            {
+                "varname": name,
+                "excluded_by_user": name in exclude_vars,
+                "present_in_stage_long_selected": name in stage_stats,
+                "stage_rows": int(stage_info.get("stage_rows", 0)),
+                "stage_non_empty_rows": int(stage_info.get("stage_non_empty_rows", 0)),
+                "present_after_lane_scalar_filter": name in scalar_stats,
+                "scalar_rows": int(scalar_info.get("scalar_rows", 0)),
+                "scalar_non_empty_rows": int(scalar_info.get("scalar_non_empty_rows", 0)),
+                "non_empty_after_scalar_filter": name in targets_with_data,
+                "dropped_as_globally_empty": bool(drop_empty_cols and name in scalar_stats and name not in targets_with_data),
+                "present_in_disc_group_map": name in var_to_group,
+                "disc_group_base": base,
+                "disc_group_suffix": suffix,
+                "disc_output_varname": output_varname,
+                "removed_as_disc_component": bool(drop_disc_components and name in component_vars and name not in final_rank),
+                "added_as_disc_output": name in output_names,
+                "anti_garbage_hit_initial": name in anti_hits_initial_set,
+                "removed_as_anti_garbage": bool(drop_anti_garbage_cols and name in anti_hits_initial_set and name not in final_rank),
+                "anti_garbage_hit_final": name in anti_hits_final_set,
+                "final_in_all_targets": name in final_rank,
+                "final_target_rank": final_rank.get(name),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def build_wide_query(targets: list[str], source_table: str, spine_table: str = "stage.spine") -> str:
     if not targets:
         return """
@@ -496,6 +571,17 @@ def run(args) -> None:
     create_empty_disc_conflicts(con)
 
     log_phase("discover targets start")
+    stage_target_df = con.execute(
+        """
+        SELECT
+            varname,
+            COUNT(*) AS stage_rows,
+            COUNT(*) FILTER (WHERE value_norm IS NOT NULL) AS stage_non_empty_rows
+        FROM stage.long_selected
+        GROUP BY 1
+        ORDER BY 1
+        """
+    ).fetchdf()
     log_phase("non-empty scan start")
     target_scan_clauses = list(year_base_clauses)
     if args.lane_split and dimension_expr:
@@ -504,6 +590,7 @@ def run(args) -> None:
         f"""
         SELECT
             varname,
+            COUNT(*) AS scalar_rows,
             COUNT(*) FILTER (WHERE value_norm IS NOT NULL) AS non_empty_rows
         FROM stage.long_selected
         {build_where_sql(target_scan_clauses)}
@@ -556,13 +643,14 @@ def run(args) -> None:
         if args.drop_disc_components:
             all_targets = [t for t in all_targets if t not in component_vars]
 
-    anti_hits = find_anti_garbage_hits(all_targets, runtime.anti_garbage_ids)
-    anti_df = pd.DataFrame({"blocked_identifier_column": anti_hits})
+    anti_hits_initial = find_anti_garbage_hits(all_targets, runtime.anti_garbage_ids)
+    anti_hits = list(anti_hits_initial)
+    anti_df = pd.DataFrame({"blocked_identifier_column": anti_hits_initial})
     register_df_as_table(con, "qa.anti_garbage_hits", anti_df)
-    if anti_hits and runtime.anti_garbage_out:
+    if anti_hits_initial and runtime.anti_garbage_out:
         anti_df.to_csv(runtime.anti_garbage_out, index=False)
         print(
-            f"[warn] anti-garbage hits written: {runtime.anti_garbage_out} (count={len(anti_hits)})",
+            f"[warn] anti-garbage hits written: {runtime.anti_garbage_out} (count={len(anti_hits_initial)})",
             flush=True,
         )
     if anti_hits and args.drop_anti_garbage_cols:
@@ -576,6 +664,32 @@ def run(args) -> None:
 
     print(f"[info] years: {years[0]}–{years[-1]} ({len(years)} total)", flush=True)
     print(f"[info] wide columns (varname): {len(all_targets)}", flush=True)
+
+    log_phase("target lineage build start")
+    scalar_lineage_df = target_df.rename(columns={"non_empty_rows": "scalar_non_empty_rows"})
+    lineage_df = build_target_lineage_df(
+        stage_df=stage_target_df,
+        scalar_df=scalar_lineage_df,
+        exclude_vars=runtime.exclude_vars,
+        targets_with_data=targets_with_data,
+        component_vars=component_vars,
+        var_to_group=var_to_group,
+        disc_name_map=disc_name_map,
+        anti_hits_initial=anti_hits_initial,
+        anti_hits_final=anti_hits,
+        final_targets=all_targets,
+        drop_empty_cols=args.drop_empty_cols,
+        drop_disc_components=args.drop_disc_components,
+        drop_anti_garbage_cols=args.drop_anti_garbage_cols,
+    )
+    register_df_as_table(con, "qa.target_lineage", lineage_df)
+    if runtime.target_lineage_out:
+        Path(runtime.target_lineage_out).parent.mkdir(parents=True, exist_ok=True)
+        lineage_df.to_csv(runtime.target_lineage_out, index=False)
+    log_phase("target lineage build end", rows=len(lineage_df), output=runtime.target_lineage_out or "")
+    if args.lineage_only:
+        log_phase("lineage-only exit")
+        return
 
     if args.collapse_disc and group_to_vars:
         disc_rows = [
