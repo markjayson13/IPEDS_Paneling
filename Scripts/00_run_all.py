@@ -155,6 +155,8 @@ def main() -> None:
     ap.add_argument("--dedupe-priority", default=None, help="Override source_file priority list for dedupe")
     ap.add_argument("--final-dedupe", action=argparse.BooleanOptionalAction, default=True, help="Run final DuckDB dedupe after write")
     ap.add_argument("--duckdb-temp-dir", default=None, help="Temp directory for DuckDB during dedupe")
+    ap.add_argument("--duckdb-path", default=None, help="Optional persistent DuckDB path for 04_build_wide_panel.py")
+    ap.add_argument("--persist-duckdb", action=argparse.BooleanOptionalAction, default=True, help="Persist DuckDB build state for 04_build_wide_panel.py")
     ap.add_argument("--log-dir", default=str(DEFAULT_LOG_DIR), help="Directory for per-step logs")
     ap.add_argument("--build-custom", action=argparse.BooleanOptionalAction, default=False, help="Build a custom wide panel from the cleaned panel")
     ap.add_argument("--custom-input", default=str(DEFAULT_CLEAN_PANEL), help="Input wide panel for custom extraction")
@@ -276,6 +278,11 @@ def main() -> None:
         cmd += ["--fail-on-anti-garbage" if args.fail_on_anti_garbage else "--no-fail-on-anti-garbage"]
         cmd += ["--fail-on-scalar-conflicts" if args.fail_on_scalar_conflicts else "--no-fail-on-scalar-conflicts"]
         cmd += ["--scan-batch-rows", str(args.scan_batch_rows)]
+        cmd += ["--persist-duckdb" if args.persist_duckdb else "--no-persist-duckdb"]
+        if args.duckdb_path:
+            cmd += ["--duckdb-path", args.duckdb_path]
+        if args.duckdb_temp_dir:
+            cmd += ["--duckdb-temp-dir", args.duckdb_temp_dir]
         if args.collapse_disc:
             cmd.append("--collapse-disc")
         if args.drop_disc_components:

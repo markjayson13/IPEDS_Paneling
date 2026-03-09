@@ -8,6 +8,7 @@ Supports parquet or CSV output (streamed).
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -15,6 +16,29 @@ import pyarrow as pa
 import pyarrow.csv as pcsv
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
+
+
+def setup_logging(log_path: str | None) -> None:
+    if not log_path:
+        return
+    log_file = Path(log_path)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    f = log_file.open("a", buffering=1)
+
+    class Tee:
+        def __init__(self, *streams):
+            self.streams = streams
+
+        def write(self, data):
+            for s in self.streams:
+                s.write(data)
+
+        def flush(self):
+            for s in self.streams:
+                s.flush()
+
+    sys.stdout = Tee(sys.stdout, f)
+    sys.stderr = Tee(sys.stderr, f)
 
 
 def parse_years(spec: str) -> list[int]:
@@ -59,7 +83,10 @@ def main() -> None:
     ap.add_argument("--format", choices=["parquet", "csv"], default="parquet", help="Output format")
     ap.add_argument("--batch-rows", type=int, default=100_000, help="Batch size for streaming output")
     ap.add_argument("--strict", action="store_true", help="Fail if any requested varname is missing")
+    repo_root = Path(os.environ.get("IPEDS_ROOT", Path(__file__).resolve().parents[1]))
+    ap.add_argument("--log-file", default=str(repo_root / "Checks" / "logs" / "06_build_custom_panel.log"), help="Optional log file path")
     args = ap.parse_args()
+    setup_logging(args.log_file)
 
     vars_requested = load_vars(args.vars, args.vars_file)
     if not vars_requested:
