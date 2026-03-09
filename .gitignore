@@ -20,3 +20,6 @@ Artifacts/Checks/dictionary_qc/
 *.parquet.tmp
 *.dedupe.tmp
 **/parts_*/
+build/
+*.duckdb
+*.duckdb.wal
