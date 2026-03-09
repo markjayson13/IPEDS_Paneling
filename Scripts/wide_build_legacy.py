@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+from pathlib import Path
 
 import pandas as pd
 import pyarrow as pa
@@ -18,8 +19,10 @@ from wide_build_common import (
     find_anti_garbage_hits,
     is_dimensioned_source_file,
     is_non_empty_value,
+    load_legacy_schema_seed_manifest,
     normalize_value_tokens,
     order_targets,
+    plan_legacy_schema_seeds,
     prepare_runtime,
     resolve_disc_names,
 )
@@ -116,6 +119,16 @@ def run(args) -> None:
             if non_empty.any():
                 targets_with_data.update(df.loc[non_empty, "varname"].unique().tolist())
 
+    legacy_seed_plan_df = pd.DataFrame(columns=["column_name", "seed_reason", "dtype", "source_contract", "present_in_target_universe", "seeded_for_compatibility"])
+    seeded_legacy_df = legacy_seed_plan_df.copy()
+    legacy_seed_columns: set[str] = set()
+    if args.lane_split and runtime.legacy_analysis_schema:
+        legacy_manifest_df = load_legacy_schema_seed_manifest(runtime.legacy_schema_seed_manifest)
+        legacy_seed_plan_df, seeded_legacy_df = plan_legacy_schema_seeds(legacy_manifest_df, targets)
+        legacy_seed_columns = set(legacy_seed_plan_df["column_name"].tolist())
+        if not seeded_legacy_df.empty:
+            targets.update(seeded_legacy_df["column_name"].tolist())
+
     all_targets = order_targets(targets)
     if runtime.exclude_vars:
         before = len(all_targets)
@@ -125,10 +138,15 @@ def run(args) -> None:
             print(f"[info] excluded {dropped} variables by --exclude-vars")
     if args.drop_empty_cols:
         before = len(all_targets)
-        all_targets = [t for t in all_targets if t in targets_with_data]
+        all_targets = [t for t in all_targets if t in targets_with_data or t in legacy_seed_columns]
         dropped = before - len(all_targets)
         if dropped > 0:
             print(f"[info] dropped {dropped} globally-empty variables (no non-empty values in selected years)")
+    if runtime.seeded_legacy_out:
+        Path(runtime.seeded_legacy_out).parent.mkdir(parents=True, exist_ok=True)
+        seeded_legacy_df.to_csv(runtime.seeded_legacy_out, index=False)
+    if not seeded_legacy_df.empty:
+        print(f"[info] seeded {len(seeded_legacy_df)} legacy compatibility columns into wide targets")
 
     numeric_targets = set()
     if args.typed_output:

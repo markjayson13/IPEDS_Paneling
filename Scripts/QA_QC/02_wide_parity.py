@@ -45,6 +45,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--drop-disc-components", action="store_true", help="Drop disc component vars after collapse")
     p.add_argument("--disc-exclude", default=None, help="Comma-separated base names to skip collapsing")
     p.add_argument("--disc-suffix", default="_CAT", help="Suffix used when base name collides with an existing variable")
+    p.add_argument("--parity-contract", choices=["legacy_schema", "semantic_window"], default="legacy_schema", help="Compare either the legacy-compatible schema surface or the semantic-year-window surface")
+    p.add_argument("--legacy-schema-seed-manifest", default=None, help="Optional override for the legacy compatibility seed manifest")
     p.add_argument("--scan-batch-rows", type=int, default=200_000, help="Batch size for scanning long rows")
     p.add_argument("--keep-work", action="store_true", help="Do not delete an existing work-dir before running")
     p.add_argument("--log-file", default=str(checks_root / "logs" / "02_wide_parity.log"), help="Optional harness log file")
@@ -98,6 +100,7 @@ def build_engine_args(base: argparse.Namespace, engine_dir: Path, *, persist_duc
     argv += ["--drop-anti-garbage-cols" if base.drop_anti_garbage_cols else "--no-drop-anti-garbage-cols"]
     argv += ["--fail-on-anti-garbage" if base.fail_on_anti_garbage else "--no-fail-on-anti-garbage"]
     argv += ["--fail-on-scalar-conflicts" if base.fail_on_scalar_conflicts else "--no-fail-on-scalar-conflicts"]
+    argv += ["--legacy-analysis-schema" if base.parity_contract == "legacy_schema" else "--no-legacy-analysis-schema"]
     argv += ["--persist-duckdb" if persist_duckdb else "--no-persist-duckdb"]
     if base.collapse_disc:
         argv.append("--collapse-disc")
@@ -107,6 +110,8 @@ def build_engine_args(base: argparse.Namespace, engine_dir: Path, *, persist_duc
         argv += ["--disc-exclude", base.disc_exclude]
     if base.disc_suffix:
         argv += ["--disc-suffix", base.disc_suffix]
+    if base.legacy_schema_seed_manifest:
+        argv += ["--legacy-schema-seed-manifest", base.legacy_schema_seed_manifest]
     return parser.parse_args(argv)
 
 
@@ -258,6 +263,10 @@ def main() -> None:
     legacy_nulls = csv_df(legacy_dir / "wide_qc" / "qc_globally_null_columns_dropped.csv", ["column"])
     duckdb_nulls = csv_df(duckdb_dir / "wide_qc" / "qc_globally_null_columns_dropped.csv", ["column"])
     add_check("globally_null_drop", legacy_nulls.to_json(orient="records"), duckdb_nulls.to_json(orient="records"), compare_df(legacy_nulls, duckdb_nulls, ["column"]) if not legacy_nulls.empty or not duckdb_nulls.empty else True)
+
+    legacy_seeded = csv_df(legacy_dir / "wide_qc" / "qc_seeded_legacy_columns.csv", ["column_name"])
+    duckdb_seeded = csv_df(duckdb_dir / "wide_qc" / "qc_seeded_legacy_columns.csv", ["column_name"])
+    add_check("seeded_legacy_columns", legacy_seeded.to_json(orient="records"), duckdb_seeded.to_json(orient="records"), compare_df(legacy_seeded, duckdb_seeded, ["column_name"]) if not legacy_seeded.empty or not duckdb_seeded.empty else True)
 
     legacy_qc = csv_df(legacy_dir / "wide_qc" / "wide_panel_qc_summary.csv", ["year"])
     duckdb_qc = csv_df(duckdb_dir / "wide_qc" / "wide_panel_qc_summary.csv", ["year"])

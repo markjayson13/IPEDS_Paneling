@@ -132,6 +132,8 @@ def main() -> None:
     ap.add_argument("--typed-output", action=argparse.BooleanOptionalAction, default=False, help="Coerce numeric variables using dictionary metadata")
     ap.add_argument("--drop-empty-cols", action=argparse.BooleanOptionalAction, default=False, help="Drop vars empty across selected years")
     ap.add_argument("--drop-globally-null-post", action=argparse.BooleanOptionalAction, default=True, help="Drop globally-null columns in final stitched output")
+    ap.add_argument("--legacy-analysis-schema", action=argparse.BooleanOptionalAction, default=True, help="Seed legacy-compatible analysis-wide placeholder columns")
+    ap.add_argument("--legacy-schema-seed-manifest", default=None, help="Optional override for the legacy compatibility seed manifest")
     ap.add_argument("--anti-garbage-ids", default="CIPCODE,LINE,FORMID,FUNCTCD,MAJORNUM", help="Dimension identifiers that should not survive as scalar columns")
     ap.add_argument("--drop-anti-garbage-cols", action=argparse.BooleanOptionalAction, default=True, help="Drop anti-garbage blocked identifier columns")
     ap.add_argument("--fail-on-anti-garbage", action=argparse.BooleanOptionalAction, default=True, help="Fail if anti-garbage identifiers remain in wide targets")
@@ -273,6 +275,9 @@ def main() -> None:
         cmd += ["--typed-output" if args.typed_output else "--no-typed-output"]
         cmd += ["--drop-empty-cols" if args.drop_empty_cols else "--no-drop-empty-cols"]
         cmd += ["--drop-globally-null-post" if args.drop_globally_null_post else "--no-drop-globally-null-post"]
+        cmd += ["--legacy-analysis-schema" if args.legacy_analysis_schema else "--no-legacy-analysis-schema"]
+        if args.legacy_schema_seed_manifest:
+            cmd += ["--legacy-schema-seed-manifest", args.legacy_schema_seed_manifest]
         cmd += ["--anti-garbage-ids", args.anti_garbage_ids]
         cmd += ["--drop-anti-garbage-cols" if args.drop_anti_garbage_cols else "--no-drop-anti-garbage-cols"]
         cmd += ["--fail-on-anti-garbage" if args.fail_on_anti_garbage else "--no-fail-on-anti-garbage"]

@@ -24,7 +24,9 @@ from wide_build_common import (
     build_disc_groups,
     build_numeric_targets,
     find_anti_garbage_hits,
+    load_legacy_schema_seed_manifest,
     order_targets,
+    plan_legacy_schema_seeds,
     pick_col,
     pick_optional_col,
     prepare_runtime,
@@ -249,6 +251,8 @@ def build_target_lineage_df(
     *,
     stage_df: pd.DataFrame,
     scalar_df: pd.DataFrame,
+    legacy_seed_plan_df: pd.DataFrame,
+    seeded_legacy_names: set[str],
     exclude_vars: set[str],
     targets_with_data: set[str],
     component_vars: set[str],
@@ -275,13 +279,21 @@ def build_target_lineage_df(
         }
         for row in scalar_df.to_dict("records")
     }
+    legacy_seed_meta = {
+        str(row["column_name"]): {
+            "seed_reason": str(row["seed_reason"]),
+            "dtype": str(row["dtype"]),
+            "source_contract": str(row["source_contract"]),
+        }
+        for row in legacy_seed_plan_df.to_dict("records")
+    }
     disc_output_lookup = {base: out for base, out in disc_name_map.items()}
     output_names = set(disc_name_map.values())
     anti_hits_initial_set = set(anti_hits_initial)
     anti_hits_final_set = set(anti_hits_final)
     final_rank = {name: idx + 1 for idx, name in enumerate(final_targets)}
 
-    all_names = set(stage_stats) | set(scalar_stats) | set(component_vars) | set(final_targets) | output_names | exclude_vars
+    all_names = set(stage_stats) | set(scalar_stats) | set(component_vars) | set(final_targets) | output_names | exclude_vars | set(legacy_seed_meta)
     for base, out_name in disc_name_map.items():
         all_names.add(base)
         all_names.add(out_name)
@@ -290,6 +302,7 @@ def build_target_lineage_df(
     for name in sorted(all_names):
         stage_info = stage_stats.get(name, {})
         scalar_info = scalar_stats.get(name, {})
+        seed_info = legacy_seed_meta.get(name, {})
         base, suffix = var_to_group.get(name, ("", ""))
         output_varname = disc_output_lookup.get(base, "") if base else ""
         rows.append(
@@ -308,6 +321,10 @@ def build_target_lineage_df(
                 "disc_group_base": base,
                 "disc_group_suffix": suffix,
                 "disc_output_varname": output_varname,
+                "legacy_seed_reason": seed_info.get("seed_reason", ""),
+                "legacy_seed_dtype": seed_info.get("dtype", ""),
+                "legacy_seed_source_contract": seed_info.get("source_contract", ""),
+                "seeded_for_legacy_schema": name in seeded_legacy_names,
                 "removed_as_disc_component": bool(drop_disc_components and name in component_vars and name not in final_rank),
                 "added_as_disc_output": name in output_names,
                 "anti_garbage_hit_initial": name in anti_hits_initial_set,
@@ -599,20 +616,38 @@ def run(args) -> None:
         """
     ).fetchdf()
     targets = target_df["varname"].tolist()
+    discovered_targets = len(targets)
     targets_with_data = set(target_df.loc[target_df["non_empty_rows"] > 0, "varname"].tolist())
+    legacy_seed_plan_df = pd.DataFrame(columns=["column_name", "seed_reason", "dtype", "source_contract", "present_in_target_universe", "seeded_for_compatibility"])
+    seeded_legacy_df = legacy_seed_plan_df.copy()
+    legacy_seed_columns: set[str] = set()
+    seeded_legacy_names: set[str] = set()
+    if args.lane_split and runtime.legacy_analysis_schema:
+        legacy_manifest_df = load_legacy_schema_seed_manifest(runtime.legacy_schema_seed_manifest)
+        legacy_seed_plan_df, seeded_legacy_df = plan_legacy_schema_seeds(legacy_manifest_df, targets)
+        legacy_seed_columns = set(legacy_seed_plan_df["column_name"].tolist())
+        seeded_legacy_names = set(seeded_legacy_df["column_name"].tolist())
+        if seeded_legacy_names:
+            targets.extend(sorted(seeded_legacy_names))
     log_phase("non-empty scan end", non_empty_targets=len(targets_with_data))
     all_targets = order_targets(targets)
-    log_phase("discover targets end", discovered_targets=len(targets), ordered_targets=len(all_targets))
+    log_phase("discover targets end", discovered_targets=discovered_targets, ordered_targets=len(all_targets))
 
     if args.drop_empty_cols:
         before = len(all_targets)
-        all_targets = [t for t in all_targets if t in targets_with_data]
+        all_targets = [t for t in all_targets if t in targets_with_data or t in legacy_seed_columns]
         dropped = before - len(all_targets)
         if dropped > 0:
             print(
                 f"[info] dropped {dropped} globally-empty variables (no non-empty values in selected years)",
                 flush=True,
             )
+    register_df_as_table(con, "qa.seeded_legacy_columns", seeded_legacy_df)
+    if runtime.seeded_legacy_out:
+        Path(runtime.seeded_legacy_out).parent.mkdir(parents=True, exist_ok=True)
+        seeded_legacy_df.to_csv(runtime.seeded_legacy_out, index=False)
+    if not seeded_legacy_df.empty:
+        print(f"[info] seeded {len(seeded_legacy_df)} legacy compatibility columns into wide targets", flush=True)
 
     numeric_targets = set()
     if args.typed_output:
@@ -670,6 +705,8 @@ def run(args) -> None:
     lineage_df = build_target_lineage_df(
         stage_df=stage_target_df,
         scalar_df=scalar_lineage_df,
+        legacy_seed_plan_df=legacy_seed_plan_df,
+        seeded_legacy_names=seeded_legacy_names,
         exclude_vars=runtime.exclude_vars,
         targets_with_data=targets_with_data,
         component_vars=component_vars,

@@ -165,6 +165,43 @@ def build_numeric_targets(dict_path: str | None, targets: Iterable[str]) -> set[
     return out
 
 
+def load_legacy_schema_seed_manifest(path: str | None) -> pd.DataFrame:
+    cols = ["column_name", "seed_reason", "dtype", "source_contract"]
+    if not path:
+        return pd.DataFrame(columns=cols)
+    fp = Path(path)
+    if not fp.exists():
+        return pd.DataFrame(columns=cols)
+    df = pd.read_csv(fp, dtype="string").fillna("")
+    if "column_name" not in df.columns:
+        raise ValueError(f"legacy schema seed manifest missing required column_name: {path}")
+    for col in cols:
+        if col not in df.columns:
+            df[col] = ""
+    df = df[cols].copy()
+    df["column_name"] = df["column_name"].astype(str).str.upper().str.strip()
+    df["seed_reason"] = df["seed_reason"].astype(str).str.strip()
+    df["dtype"] = df["dtype"].astype(str).str.lower().str.strip()
+    df["source_contract"] = df["source_contract"].astype(str).str.strip()
+    df = df[df["column_name"] != ""].drop_duplicates(subset=["column_name"], keep="first").reset_index(drop=True)
+    return df
+
+
+def plan_legacy_schema_seeds(
+    manifest_df: pd.DataFrame,
+    discovered_targets: Iterable[str],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    cols = ["column_name", "seed_reason", "dtype", "source_contract", "present_in_target_universe", "seeded_for_compatibility"]
+    if manifest_df.empty:
+        return pd.DataFrame(columns=cols), pd.DataFrame(columns=cols)
+    target_set = {str(t).upper().strip() for t in discovered_targets}
+    plan_df = manifest_df.copy()
+    plan_df["present_in_target_universe"] = plan_df["column_name"].isin(target_set)
+    plan_df["seeded_for_compatibility"] = ~plan_df["present_in_target_universe"]
+    seeded_df = plan_df[plan_df["seeded_for_compatibility"]].copy()
+    return plan_df, seeded_df
+
+
 def build_disc_groups(dict_path: str | None) -> tuple[dict[str, tuple[str, str]], dict[str, list[str]]]:
     if not dict_path:
         return {}, {}
@@ -234,10 +271,13 @@ class WideBuildRuntime:
     anti_garbage_out: str | None
     cast_report_out: str | None
     target_lineage_out: str | None
+    seeded_legacy_out: str | None
     dim_sources: set[str]
     dim_prefixes: tuple[str, ...]
     anti_garbage_ids: set[str]
     exclude_vars: set[str]
+    legacy_analysis_schema: bool
+    legacy_schema_seed_manifest: str | None
 
 
 def build_arg_parser(repo_root: pathlib.Path | None = None) -> argparse.ArgumentParser:
@@ -279,6 +319,9 @@ def build_arg_parser(repo_root: pathlib.Path | None = None) -> argparse.Argument
     ap.add_argument("--scalar-conflicts-out", default=None, help="QC CSV path for scalar conflict keys")
     ap.add_argument("--cast-report-out", default=None, help="QC CSV path for typed-cast parse report")
     ap.add_argument("--target-lineage-out", default=None, help="QC CSV path for target-lineage audit output")
+    ap.add_argument("--seeded-legacy-out", default=None, help="QC CSV path for legacy compatibility columns seeded into the wide schema")
+    ap.add_argument("--legacy-analysis-schema", action=argparse.BooleanOptionalAction, default=True, help="Seed legacy-compatible analysis-wide placeholder columns")
+    ap.add_argument("--legacy-schema-seed-manifest", default=str(repo_root / "Artifacts" / "legacy_analysis_schema_seed.csv"), help="CSV manifest for legacy compatibility seed columns")
     ap.add_argument("--lineage-only", action="store_true", help="Stop after global target-lineage audit and skip year builds")
     ap.add_argument("--scan-batch-rows", type=int, default=200_000, help="Batch size for scanning long rows")
     ap.add_argument("--duckdb-path", default=str(build_root / "ipeds_build.duckdb"), help="Persistent DuckDB build path")
@@ -310,6 +353,7 @@ def prepare_runtime(args: argparse.Namespace) -> WideBuildRuntime:
     anti_garbage_out = args.anti_garbage_out or (os.path.join(args.qc_dir, "qc_anti_garbage_failures.csv") if args.qc_dir else None)
     cast_report_out = args.cast_report_out or (os.path.join(args.qc_dir, "qc_cast_report.csv") if args.qc_dir else None)
     target_lineage_out = args.target_lineage_out or (os.path.join(args.qc_dir, "qc_target_lineage.csv") if args.qc_dir else None)
+    seeded_legacy_out = args.seeded_legacy_out or (os.path.join(args.qc_dir, "qc_seeded_legacy_columns.csv") if args.qc_dir else None)
 
     return WideBuildRuntime(
         repo_root=repo_root,
@@ -318,8 +362,11 @@ def prepare_runtime(args: argparse.Namespace) -> WideBuildRuntime:
         anti_garbage_out=anti_garbage_out,
         cast_report_out=cast_report_out,
         target_lineage_out=target_lineage_out,
+        seeded_legacy_out=seeded_legacy_out,
         dim_sources=parse_upper_set(args.dim_sources),
         dim_prefixes=tuple([x.strip().upper() for x in str(args.dim_prefixes).split(",") if x.strip()]),
         anti_garbage_ids=parse_upper_set(args.anti_garbage_ids),
         exclude_vars=parse_upper_set(args.exclude_vars),
+        legacy_analysis_schema=bool(args.legacy_analysis_schema),
+        legacy_schema_seed_manifest=args.legacy_schema_seed_manifest,
     )
