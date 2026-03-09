@@ -184,6 +184,64 @@ def append_query_to_parquet(
     return writer, schema, wrote_any
 
 
+def append_rowid_windowed_parquet(
+    con,
+    *,
+    source_table: str,
+    select_columns: list[str],
+    out_path: str,
+    writer: pq.ParquetWriter | None,
+    schema: pa.Schema | None,
+    rows_per_batch: int = 250_000,
+) -> tuple[pq.ParquetWriter | None, pa.Schema | None, bool]:
+    min_row_id, max_row_id = con.execute(
+        f"SELECT MIN(row_id), MAX(row_id) FROM {source_table}"
+    ).fetchone()
+    if min_row_id is None or max_row_id is None:
+        return writer, schema, False
+
+    wrote_any = False
+    select_sql = ", ".join(select_columns)
+    start = int(min_row_id)
+    stop = int(max_row_id)
+    while start <= stop:
+        end = start + rows_per_batch - 1
+        query = f"""
+            SELECT {select_sql}
+            FROM {source_table}
+            WHERE row_id BETWEEN {start} AND {end}
+        """
+        reader = con.execute(query).fetch_record_batch(rows_per_batch)
+        for batch in reader:
+            if batch.num_rows == 0:
+                continue
+            table = pa.Table.from_batches([batch])
+            if writer is None:
+                Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+                schema = table.schema
+                writer = pq.ParquetWriter(out_path, schema, compression="snappy")
+            elif schema is not None and table.schema != schema:
+                table = table.cast(schema, safe=False)
+            writer.write_table(table)
+            wrote_any = True
+        start = end + 1
+    return writer, schema, wrote_any
+
+
+def stitch_parquet_files(part_paths: list[str], out_path: str) -> None:
+    writer: pq.ParquetWriter | None = None
+    try:
+        for part_path in part_paths:
+            table = pq.ParquetFile(part_path).read()
+            if writer is None:
+                Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+                writer = pq.ParquetWriter(out_path, table.schema, compression="snappy")
+            writer.write_table(table)
+    finally:
+        if writer is not None:
+            writer.close()
+
+
 def create_empty_conflicts(con) -> None:
     con.execute(
         """
@@ -742,10 +800,10 @@ def run(args) -> None:
     cast_report_frames: list[pd.DataFrame] = []
     scalar_conflict_frames: list[pd.DataFrame] = []
     scalar_conflict_rows_written = 0
-    scalar_writer: pq.ParquetWriter | None = None
-    scalar_schema: pa.Schema | None = None
-    dim_writer: pq.ParquetWriter | None = None
-    dim_schema: pa.Schema | None = None
+    scalar_part_paths: list[str] = []
+    dim_part_paths: list[str] = []
+    scalar_parts_dir = f"{args.scalar_long_out}.parts" if args.scalar_long_out else None
+    dim_parts_dir = f"{args.dim_long_out}.parts" if args.dim_long_out else None
 
     for year in years:
         log_phase(f"year {year} start")
@@ -782,21 +840,21 @@ def run(args) -> None:
                 """
             )
             if args.scalar_long_out:
-                scalar_writer, scalar_schema, _ = append_query_to_parquet(
+                scalar_year_path = os.path.join(str(scalar_parts_dir), f"year={year}", "part.parquet")
+                copy_query_to_parquet(
                     con,
-                    "SELECT UNITID, year, varname, value, varnumber, source_file FROM year_scalar_long_raw ORDER BY row_id",
-                    args.scalar_long_out,
-                    scalar_writer,
-                    scalar_schema,
+                    "SELECT UNITID, year, varname, value, varnumber, source_file FROM year_scalar_long_raw",
+                    scalar_year_path,
                 )
+                scalar_part_paths.append(scalar_year_path)
             if args.dim_long_out:
-                dim_writer, dim_schema, _ = append_query_to_parquet(
+                dim_year_path = os.path.join(str(dim_parts_dir), f"year={year}", "part.parquet")
+                copy_query_to_parquet(
                     con,
-                    "SELECT UNITID, year, varname, value, varnumber, source_file FROM year_dim_long_raw ORDER BY row_id",
-                    args.dim_long_out,
-                    dim_writer,
-                    dim_schema,
+                    "SELECT UNITID, year, varname, value, varnumber, source_file FROM year_dim_long_raw",
+                    dim_year_path,
                 )
+                dim_part_paths.append(dim_year_path)
 
             log_phase(f"year {year} scalar conflict scan start")
             con.execute(
@@ -1118,11 +1176,11 @@ def run(args) -> None:
             }
         )
 
-    if scalar_writer is not None:
-        scalar_writer.close()
+    if scalar_part_paths and args.scalar_long_out:
+        stitch_parquet_files(scalar_part_paths, args.scalar_long_out)
         print(f"[info] wrote scalar long lane: {args.scalar_long_out}", flush=True)
-    if dim_writer is not None:
-        dim_writer.close()
+    if dim_part_paths and args.dim_long_out:
+        stitch_parquet_files(dim_part_paths, args.dim_long_out)
         print(f"[info] wrote dimensioned long lane: {args.dim_long_out}", flush=True)
 
     if scalar_conflict_frames:

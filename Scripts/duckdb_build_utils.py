@@ -21,7 +21,8 @@ def open_build_connection(duckdb_path: str, temp_dir: str | None, persist_duckdb
     if persist_duckdb:
         Path(duckdb_path).parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(effective_path)
-    con.execute("PRAGMA threads=4;")
+    con.execute("PRAGMA threads=2;")
+    con.execute("SET preserve_insertion_order=false;")
     if temp_dir:
         temp_path = Path(temp_dir)
         temp_path.mkdir(parents=True, exist_ok=True)
