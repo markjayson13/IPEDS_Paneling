@@ -324,15 +324,23 @@ def build_arg_parser(repo_root: pathlib.Path | None = None) -> argparse.Argument
     ap.add_argument("--legacy-schema-seed-manifest", default=str(repo_root / "Artifacts" / "legacy_analysis_schema_seed.csv"), help="CSV manifest for legacy compatibility seed columns")
     ap.add_argument("--lineage-only", action="store_true", help="Stop after global target-lineage audit and skip year builds")
     ap.add_argument("--scan-batch-rows", type=int, default=200_000, help="Batch size for scanning long rows")
+    ap.add_argument("--scalar-conflict-buckets", type=int, default=16, help="Hash buckets for year-local scalar conflict detection")
+    ap.add_argument("--scalar-conflict-bucket-min-year", type=int, default=2008, help="Apply bucketed scalar conflict detection from this year onward")
     ap.add_argument("--duckdb-path", default=str(build_root / "ipeds_build.duckdb"), help="Persistent DuckDB build path")
     ap.add_argument("--duckdb-temp-dir", default=str(build_root / "duckdb_tmp"), help="DuckDB temp directory for spills")
+    ap.add_argument("--duckdb-memory-limit", default="8GB", help="DuckDB memory_limit setting for wide builds")
     ap.add_argument("--persist-duckdb", action=argparse.BooleanOptionalAction, default=True, help="Persist DuckDB build state to --duckdb-path")
+    ap.add_argument("--profile-year", type=int, default=None, help="Optional single year to save DuckDB EXPLAIN plans for")
+    ap.add_argument("--profile-dir", default=None, help="Optional directory to write focused SQL plan artifacts")
+    ap.add_argument("--profile-analyze", action=argparse.BooleanOptionalAction, default=False, help="Use EXPLAIN ANALYZE instead of EXPLAIN for focused profiling")
     ap.add_argument("--log-file", default=str(logs_root / "04_build_wide_panel.log"), help="Optional log file path")
     return ap
 
 
 def prepare_runtime(args: argparse.Namespace) -> WideBuildRuntime:
     repo_root = default_repo_root()
+    if int(args.scalar_conflict_buckets) < 1:
+        raise SystemExit("--scalar-conflict-buckets must be >= 1")
     os.makedirs(args.out_dir, exist_ok=True)
     years = parse_years(args.years)
     if args.wide_analysis_out and not args.write_single:
@@ -348,6 +356,8 @@ def prepare_runtime(args: argparse.Namespace) -> WideBuildRuntime:
         Path(args.dim_long_out).parent.mkdir(parents=True, exist_ok=True)
     if args.disc_qc_dir:
         Path(args.disc_qc_dir).mkdir(parents=True, exist_ok=True)
+    if args.profile_dir:
+        Path(args.profile_dir).mkdir(parents=True, exist_ok=True)
 
     scalar_conflicts_out = args.scalar_conflicts_out or (os.path.join(args.qc_dir, "qc_scalar_conflicts.csv") if args.qc_dir else None)
     anti_garbage_out = args.anti_garbage_out or (os.path.join(args.qc_dir, "qc_anti_garbage_failures.csv") if args.qc_dir else None)

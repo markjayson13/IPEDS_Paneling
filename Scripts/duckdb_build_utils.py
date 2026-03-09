@@ -16,13 +16,23 @@ def quote_ident(name: str) -> str:
     return '"' + str(name).replace('"', '""') + '"'
 
 
-def open_build_connection(duckdb_path: str, temp_dir: str | None, persist_duckdb: bool) -> tuple[duckdb.DuckDBPyConnection, str]:
+def open_build_connection(
+    duckdb_path: str,
+    temp_dir: str | None,
+    persist_duckdb: bool,
+    *,
+    memory_limit: str | None = "8GB",
+    threads: int = 2,
+    preserve_insertion_order: bool = False,
+) -> tuple[duckdb.DuckDBPyConnection, str]:
     effective_path = duckdb_path if persist_duckdb else ":memory:"
     if persist_duckdb:
         Path(duckdb_path).parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(effective_path)
-    con.execute("PRAGMA threads=2;")
-    con.execute("SET preserve_insertion_order=false;")
+    con.execute(f"PRAGMA threads={int(threads)};")
+    con.execute(f"SET preserve_insertion_order={'true' if preserve_insertion_order else 'false'};")
+    if memory_limit:
+        con.execute(f"SET memory_limit={sql_quote(str(memory_limit))}")
     if temp_dir:
         temp_path = Path(temp_dir)
         temp_path.mkdir(parents=True, exist_ok=True)

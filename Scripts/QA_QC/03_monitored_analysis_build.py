@@ -29,6 +29,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--dim-sources", default="C_A,C_B,C_C,CDEP,EAP,IC_CAMPUSES,IC_PCCAMPUSES,F_FA_F,F_FA_G")
     p.add_argument("--dim-prefixes", default="C_,EF,GR,GR200,SAL,S_,OM,DRV")
     p.add_argument("--exclude-vars", default="SPORT1,SPORT2,SPORT3,SPORT4")
+    p.add_argument("--scalar-conflict-buckets", type=int, default=16)
+    p.add_argument("--scalar-conflict-bucket-min-year", type=int, default=2008)
+    p.add_argument("--duckdb-memory-limit", default="8GB")
     p.add_argument("--poll-seconds", type=float, default=1.0)
     p.add_argument("--log-interval-seconds", type=int, default=60)
     p.add_argument("--timeout-seconds", type=int, default=900)
@@ -136,6 +139,12 @@ def main() -> None:
         str(out_root / "build" / "ipeds_build.duckdb"),
         "--duckdb-temp-dir",
         str(out_root / "duckdb_tmp"),
+        "--duckdb-memory-limit",
+        args.duckdb_memory_limit,
+        "--scalar-conflict-buckets",
+        str(args.scalar_conflict_buckets),
+        "--scalar-conflict-bucket-min-year",
+        str(args.scalar_conflict_bucket_min_year),
         "--persist-duckdb",
     ]
     meta = {

@@ -33,6 +33,8 @@ from wide_build_common import (
     resolve_disc_names,
 )
 
+SCALAR_CONFLICT_KEY_COLS = ("UNITID", "year", "varnumber", "source_file")
+
 
 def sql_upper_in(values: set[str]) -> str:
     return ", ".join(sql_quote(v) for v in sorted(values))
@@ -226,6 +228,172 @@ def append_rowid_windowed_parquet(
             wrote_any = True
         start = end + 1
     return writer, schema, wrote_any
+
+
+def build_hash_bucket_expr(
+    key_cols: tuple[str, ...] | list[str],
+    bucket_count: int,
+    table_alias: str | None = None,
+) -> str:
+    if int(bucket_count) < 1:
+        raise ValueError("bucket_count must be >= 1")
+    prefix = f"{table_alias}." if table_alias else ""
+    key_exprs: list[str] = []
+    for col in key_cols:
+        col_name = f"{prefix}{col}"
+        if col in {"UNITID", "year"}:
+            key_exprs.append(f"COALESCE(CAST({col_name} AS BIGINT), -1)")
+        else:
+            key_exprs.append(f"COALESCE(CAST({col_name} AS VARCHAR), '')")
+    return f"CAST(HASH({', '.join(key_exprs)}) % {int(bucket_count)} AS BIGINT)"
+
+
+def build_scalar_conflict_bucket_expr(bucket_count: int, table_alias: str | None = None) -> str:
+    return build_hash_bucket_expr(SCALAR_CONFLICT_KEY_COLS, bucket_count, table_alias=table_alias)
+
+
+def create_empty_year_scalar_conflict_keys(con) -> None:
+    con.execute(
+        """
+        CREATE OR REPLACE TEMP TABLE year_scalar_conflict_keys AS
+        SELECT
+            CAST(NULL AS BIGINT) AS UNITID,
+            CAST(NULL AS INTEGER) AS year,
+            CAST(NULL AS VARCHAR) AS varnumber,
+            CAST(NULL AS VARCHAR) AS source_file,
+            CAST(NULL AS BIGINT) AS distinct_values
+        WHERE 1 = 0
+        """
+    )
+
+
+def build_year_scalar_conflict_bucket_insert_sql(
+    *,
+    source_table: str,
+    bucket_expr: str,
+    bucket_id: int,
+) -> str:
+    return f"""
+        INSERT INTO year_scalar_conflict_keys
+        SELECT
+            UNITID,
+            year,
+            varnumber,
+            source_file,
+            CAST(COUNT(DISTINCT value_norm) AS BIGINT) AS distinct_values
+        FROM {source_table}
+        WHERE value_norm IS NOT NULL
+          AND ({bucket_expr}) = {int(bucket_id)}
+        GROUP BY 1, 2, 3, 4
+        HAVING COUNT(DISTINCT value_norm) > 1
+    """
+
+
+def resolve_profile_dir(args, runtime: WideBuildRuntime) -> Path | None:
+    if args.profile_year is None:
+        return None
+    if args.profile_dir:
+        path = Path(args.profile_dir)
+    elif args.qc_dir:
+        path = Path(args.qc_dir) / "sql_profiles"
+    else:
+        path = runtime.repo_root / "Checks" / "wide_qc" / "sql_profiles"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def write_explain_artifact(
+    con,
+    *,
+    profile_dir: Path | None,
+    year: int,
+    label: str,
+    query: str,
+    analyze: bool,
+) -> None:
+    if profile_dir is None:
+        return
+    explain_prefix = "EXPLAIN ANALYZE" if analyze else "EXPLAIN"
+    plan_df = con.execute(f"{explain_prefix} {query}").fetchdf()
+    out_path = profile_dir / f"year_{year}_{label}_{'analyze' if analyze else 'plan'}.txt"
+    with out_path.open("w", encoding="utf-8") as fh:
+        fh.write("-- QUERY\n")
+        fh.write(query.strip())
+        fh.write("\n\n")
+        fh.write(f"-- {explain_prefix}\n")
+        if "explain_value" in plan_df.columns:
+            for row in plan_df.to_dict("records"):
+                explain_key = str(row.get("explain_key", "") or "").strip()
+                explain_value = str(row.get("explain_value", "") or "").strip()
+                if explain_key:
+                    fh.write(explain_key)
+                    fh.write("\n")
+                if explain_value:
+                    fh.write(explain_value)
+                    fh.write("\n")
+        else:
+            fh.write(plan_df.to_string(index=False))
+            fh.write("\n")
+
+
+def compute_year_scalar_conflict_keys_bucketed(
+    con,
+    *,
+    year: int,
+    source_table: str,
+    bucket_count: int,
+    log_phase_fn,
+    profile_dir: Path | None,
+    profile_analyze: bool,
+) -> int:
+    create_empty_year_scalar_conflict_keys(con)
+    bucket_expr = build_scalar_conflict_bucket_expr(bucket_count)
+    for bucket_id in range(int(bucket_count)):
+        bucket_started = time.monotonic()
+        bucket_rows = scalar_int(
+            con,
+            f"""
+            SELECT COUNT(*)
+            FROM {source_table}
+            WHERE value_norm IS NOT NULL
+              AND ({bucket_expr}) = {bucket_id}
+            """,
+        )
+        log_phase_fn(
+            f"year {year} scalar conflict bucket {bucket_id + 1}/{bucket_count} start",
+            bucket_rows=bucket_rows,
+        )
+        if bucket_rows:
+            insert_sql = build_year_scalar_conflict_bucket_insert_sql(
+                source_table=source_table,
+                bucket_expr=bucket_expr,
+                bucket_id=bucket_id,
+            )
+            if bucket_id == 0:
+                conflict_select_sql = insert_sql.split("INSERT INTO year_scalar_conflict_keys", 1)[1].strip()
+                write_explain_artifact(
+                    con,
+                    profile_dir=profile_dir,
+                    year=year,
+                    label="scalar_conflict_bucket_0",
+                    query=conflict_select_sql,
+                    analyze=profile_analyze,
+                )
+            before_count = scalar_int(con, "SELECT COUNT(*) FROM year_scalar_conflict_keys")
+            con.execute(insert_sql)
+            after_count = scalar_int(con, "SELECT COUNT(*) FROM year_scalar_conflict_keys")
+            bucket_conflict_keys = after_count - before_count
+        else:
+            bucket_conflict_keys = 0
+            after_count = scalar_int(con, "SELECT COUNT(*) FROM year_scalar_conflict_keys")
+        log_phase_fn(
+            f"year {year} scalar conflict bucket {bucket_id + 1}/{bucket_count} end",
+            bucket_rows=bucket_rows,
+            bucket_conflict_keys=bucket_conflict_keys,
+            accumulator_conflict_keys=after_count,
+            elapsed_seconds=f"{time.monotonic() - bucket_started:.3f}",
+        )
+    return scalar_int(con, "SELECT COUNT(*) FROM year_scalar_conflict_keys")
 
 
 def stitch_parquet_files(part_paths: list[str], out_path: str) -> None:
@@ -486,6 +654,7 @@ def scalar_int(con, query: str) -> int:
 def run(args) -> None:
     runtime: WideBuildRuntime = prepare_runtime(args)
     years = runtime.years
+    profile_dir = resolve_profile_dir(args, runtime)
     if max(years) >= 2024:
         print(
             "[warn] 2024 is treated as provisional/schema-transition; prefer 2004:2023 for analysis releases.",
@@ -504,7 +673,14 @@ def run(args) -> None:
     if args.lane_split and (source_col is None or varnumber_col is None):
         raise SystemExit("lane-split requires source_file and varnumber columns in long input.")
 
-    con, effective_db_path = open_build_connection(args.duckdb_path, args.duckdb_temp_dir, args.persist_duckdb)
+    con, effective_db_path = open_build_connection(
+        args.duckdb_path,
+        args.duckdb_temp_dir,
+        args.persist_duckdb,
+        memory_limit=args.duckdb_memory_limit,
+        threads=2,
+        preserve_insertion_order=False,
+    )
     bootstrap_build_db(con)
     print(f"[info] DuckDB build state: {effective_db_path}", flush=True)
 
@@ -521,7 +697,10 @@ def run(args) -> None:
         "fail_on_anti_garbage": args.fail_on_anti_garbage,
         "fail_on_scalar_conflicts": args.fail_on_scalar_conflicts,
         "lane_split": args.lane_split,
+        "duckdb_memory_limit": args.duckdb_memory_limit,
         "typed_output": args.typed_output,
+        "scalar_conflict_buckets": args.scalar_conflict_buckets,
+        "scalar_conflict_bucket_min_year": args.scalar_conflict_bucket_min_year,
     }
     record_build_run(
         con,
@@ -811,66 +990,96 @@ def run(args) -> None:
         spine_rows = scalar_int(con, "SELECT COUNT(*) FROM year_spine")
         log_phase(f"year {year} spine done", rows=spine_rows)
 
-        con.execute(
-            f"""
-            CREATE OR REPLACE TEMP VIEW year_long_base AS
-            {build_year_base_query(
-                year=year,
-                extra_clauses=year_base_clauses,
-                partition_sql=partition_sql,
-                dedupe_order_sql=dedupe_order_sql,
-            )}
-            """
+        log_phase(f"year {year} base query start")
+        year_base_query = build_year_base_query(
+            year=year,
+            extra_clauses=year_base_clauses,
+            partition_sql=partition_sql,
+            dedupe_order_sql=dedupe_order_sql,
         )
+        if args.profile_year == year:
+            write_explain_artifact(
+                con,
+                profile_dir=profile_dir,
+                year=year,
+                label="year_long_base",
+                query=year_base_query,
+                analyze=args.profile_analyze,
+            )
+        con.execute(f"CREATE OR REPLACE TEMP VIEW year_long_base AS {year_base_query}")
+        log_phase(f"year {year} base query end", materialized_object="view")
 
         year_source_table = "year_long_base"
+        dim_export_clauses: list[str] | None = None
         if args.lane_split and dimension_expr:
+            scalar_lane_query = build_year_base_query(
+                year=year,
+                extra_clauses=year_base_clauses + [f"NOT ({dimension_expr})"],
+                partition_sql=partition_sql,
+                dedupe_order_sql=dedupe_order_sql,
+            )
+            if args.profile_year == year:
+                write_explain_artifact(
+                    con,
+                    profile_dir=profile_dir,
+                    year=year,
+                    label="scalar_lane_materialization",
+                    query=scalar_lane_query,
+                    analyze=args.profile_analyze,
+                )
+            log_phase(f"year {year} scalar lane materialization start")
             con.execute(
                 f"""
-                CREATE OR REPLACE TEMP VIEW year_scalar_long_raw AS
-                SELECT * FROM year_long_base
-                WHERE NOT ({dimension_expr})
+                CREATE OR REPLACE TEMP TABLE year_scalar_long_raw AS
+                {scalar_lane_query}
                 """
             )
-            con.execute(
-                f"""
-                CREATE OR REPLACE TEMP VIEW year_dim_long_raw AS
-                SELECT * FROM year_long_base
-                WHERE {dimension_expr}
-                """
-            )
-            if args.scalar_long_out:
-                scalar_year_path = os.path.join(str(scalar_parts_dir), f"year={year}", "part.parquet")
-                copy_query_to_parquet(
-                    con,
-                    "SELECT UNITID, year, varname, value, varnumber, source_file FROM year_scalar_long_raw",
-                    scalar_year_path,
-                )
-                scalar_part_paths.append(scalar_year_path)
-            if args.dim_long_out:
-                dim_year_path = os.path.join(str(dim_parts_dir), f"year={year}", "part.parquet")
-                copy_query_to_parquet(
-                    con,
-                    "SELECT UNITID, year, varname, value, varnumber, source_file FROM year_dim_long_raw",
-                    dim_year_path,
-                )
-                dim_part_paths.append(dim_year_path)
+            scalar_raw_rows = scalar_int(con, "SELECT COUNT(*) FROM year_scalar_long_raw")
+            log_phase(f"year {year} scalar lane materialization end", rows=scalar_raw_rows)
 
-            log_phase(f"year {year} scalar conflict scan start")
-            con.execute(
-                """
-                CREATE OR REPLACE TEMP TABLE year_scalar_conflict_keys AS
-                SELECT
-                    UNITID,
-                    year,
-                    varnumber,
-                    source_file,
-                    COUNT(DISTINCT value_norm) AS distinct_values
-                FROM year_scalar_long_raw
-                GROUP BY 1, 2, 3, 4
-                HAVING COUNT(DISTINCT value_norm) > 1
-                """
+            if args.dim_long_out:
+                dim_export_clauses = [f"year = {int(year)}", *year_base_clauses, f"({dimension_expr})"]
+
+            use_bucketed_conflicts = int(args.scalar_conflict_buckets) > 1 and int(year) >= int(args.scalar_conflict_bucket_min_year)
+            log_phase(
+                f"year {year} scalar conflict scan start",
+                strategy="bucketed" if use_bucketed_conflicts else "monolithic",
+                buckets=int(args.scalar_conflict_buckets) if use_bucketed_conflicts else 1,
             )
+            if use_bucketed_conflicts:
+                conflict_key_count = compute_year_scalar_conflict_keys_bucketed(
+                    con,
+                    year=year,
+                    source_table="year_scalar_long_raw",
+                    bucket_count=int(args.scalar_conflict_buckets),
+                    log_phase_fn=log_phase,
+                    profile_dir=profile_dir if args.profile_year == year else None,
+                    profile_analyze=bool(args.profile_analyze),
+                )
+            else:
+                monolithic_conflict_sql = """
+                    SELECT
+                        UNITID,
+                        year,
+                        varnumber,
+                        source_file,
+                        CAST(COUNT(DISTINCT value_norm) AS BIGINT) AS distinct_values
+                    FROM year_scalar_long_raw
+                    GROUP BY 1, 2, 3, 4
+                    HAVING COUNT(DISTINCT value_norm) > 1
+                """
+                if args.profile_year == year:
+                    write_explain_artifact(
+                        con,
+                        profile_dir=profile_dir,
+                        year=year,
+                        label="scalar_conflict_monolithic",
+                        query=monolithic_conflict_sql,
+                        analyze=args.profile_analyze,
+                    )
+                create_empty_year_scalar_conflict_keys(con)
+                con.execute(f"INSERT INTO year_scalar_conflict_keys {monolithic_conflict_sql}")
+                conflict_key_count = scalar_int(con, "SELECT COUNT(*) FROM year_scalar_conflict_keys")
             conflict_key_count = scalar_int(con, "SELECT COUNT(*) FROM year_scalar_conflict_keys")
             log_phase(f"year {year} scalar conflict scan end", conflict_keys=conflict_key_count)
             if conflict_key_count:
@@ -899,58 +1108,59 @@ def run(args) -> None:
                     if not conflict_df.empty:
                         scalar_conflict_frames.append(conflict_df)
                         scalar_conflict_rows_written += len(conflict_df)
-                con.execute(
-                    """
-                    CREATE OR REPLACE TEMP VIEW year_analysis_source AS
-                    WITH marked AS (
-                        SELECT
-                            s.*,
-                            CASE WHEN k.UNITID IS NULL THEN FALSE ELSE TRUE END AS is_conflict,
-                            ROW_NUMBER() OVER (
-                                PARTITION BY s.UNITID, s.year, s.varnumber, s.source_file, s.value_norm
-                                ORDER BY s.row_id
-                            ) AS _rn
-                        FROM year_scalar_long_raw s
-                        LEFT JOIN year_scalar_conflict_keys k
-                          ON s.UNITID = k.UNITID
-                         AND s.year = k.year
-                         AND s.varnumber = k.varnumber
-                         AND s.source_file = k.source_file
-                    )
-                    SELECT row_id, UNITID, year, varname, value, value_norm, source_file, varnumber
-                    FROM marked
-                    WHERE _rn = 1
-                      AND NOT is_conflict
-                    """
+            con.execute(
+                """
+                CREATE OR REPLACE TEMP TABLE year_scalar_long_clean AS
+                SELECT
+                    s.row_id,
+                    s.UNITID,
+                    s.year,
+                    s.varname,
+                    s.value,
+                    s.value_norm,
+                    s.source_file,
+                    s.varnumber
+                FROM year_scalar_long_raw s
+                LEFT JOIN year_scalar_conflict_keys k
+                  ON s.UNITID = k.UNITID
+                 AND s.year = k.year
+                 AND s.varnumber = k.varnumber
+                 AND s.source_file = k.source_file
+                WHERE k.UNITID IS NULL
+                """
+            )
+            con.execute(
+                """
+                CREATE OR REPLACE TEMP TABLE year_analysis_source AS
+                SELECT row_id, UNITID, year, varname, value, value_norm, source_file, varnumber
+                FROM year_scalar_long_clean
+                """
+            )
+            if args.scalar_long_out:
+                scalar_year_path = os.path.join(str(scalar_parts_dir), f"year={year}", "part.parquet")
+                _, _, wrote_scalar = append_rowid_windowed_parquet(
+                    con,
+                    source_table="year_scalar_long_clean",
+                    select_columns=["UNITID", "year", "varname", "value", "varnumber", "source_file"],
+                    out_path=scalar_year_path,
+                    writer=None,
+                    schema=None,
+                    rows_per_batch=int(args.scan_batch_rows),
                 )
-                if args.fail_on_scalar_conflicts:
-                    if runtime.scalar_conflicts_out and scalar_conflict_frames:
-                        out_df = pd.concat(scalar_conflict_frames, ignore_index=True)
-                        Path(runtime.scalar_conflicts_out).parent.mkdir(parents=True, exist_ok=True)
-                        out_df.to_csv(runtime.scalar_conflicts_out, index=False)
-                        register_df_as_table(con, "qa.scalar_conflicts", out_df)
-                    raise SystemExit(f"scalar conflict gate failed for year={year}: conflict_keys={conflict_key_count}")
-            else:
-                con.execute(
-                    """
-                    CREATE OR REPLACE TEMP VIEW year_analysis_source AS
-                    SELECT
-                        row_id,
-                        UNITID,
-                        year,
-                        varname,
-                        value,
-                        value_norm,
-                        source_file,
-                        varnumber
-                    FROM year_scalar_long_raw
-                    """
-                )
+                if wrote_scalar:
+                    scalar_part_paths.append(scalar_year_path)
+            if conflict_key_count and args.fail_on_scalar_conflicts:
+                if runtime.scalar_conflicts_out and scalar_conflict_frames:
+                    out_df = pd.concat(scalar_conflict_frames, ignore_index=True)
+                    Path(runtime.scalar_conflicts_out).parent.mkdir(parents=True, exist_ok=True)
+                    out_df.to_csv(runtime.scalar_conflicts_out, index=False)
+                    register_df_as_table(con, "qa.scalar_conflicts", out_df)
+                raise SystemExit(f"scalar conflict gate failed for year={year}: conflict_keys={conflict_key_count}")
             year_source_table = "year_analysis_source"
         else:
             con.execute(
                 """
-                CREATE OR REPLACE TEMP VIEW year_analysis_source AS
+                CREATE OR REPLACE TEMP TABLE year_analysis_source AS
                 SELECT row_id, UNITID, year, varname, value, value_norm, source_file, varnumber
                 FROM year_long_base
                 """
@@ -1148,6 +1358,76 @@ def run(args) -> None:
         year_part_paths.append(out_path)
         print(f"[info] wrote {out_path}", flush=True)
         log_phase(f"year {year} write complete", path=out_path, rows=wide_rows)
+
+        if args.dim_long_out and dim_export_clauses:
+            dim_bucket_count = int(args.scalar_conflict_buckets) if int(args.scalar_conflict_buckets) > 1 and int(year) >= int(args.scalar_conflict_bucket_min_year) else 1
+            log_phase(
+                f"year {year} dim export start",
+                strategy="bucketed" if dim_bucket_count > 1 else "monolithic",
+                buckets=dim_bucket_count,
+            )
+            dim_year_path = os.path.join(str(dim_parts_dir), f"year={year}", "part.parquet")
+            dim_writer = None
+            dim_schema = None
+            wrote_dim = False
+            try:
+                if dim_bucket_count > 1:
+                    dim_bucket_expr = build_hash_bucket_expr(tuple(dedupe_partition), dim_bucket_count)
+                    for bucket_id in range(dim_bucket_count):
+                        bucket_query = f"""
+                            SELECT UNITID, year, varname, value, varnumber, source_file
+                            FROM (
+                                SELECT DISTINCT
+                                    UNITID,
+                                    year,
+                                    varname,
+                                    value,
+                                    value_norm,
+                                    varnumber,
+                                    source_file
+                                FROM stage.long_selected
+                                {build_where_sql(dim_export_clauses + [f"({dim_bucket_expr}) = {bucket_id}"])}
+                            ) q
+                        """
+                        dim_writer, dim_schema, wrote_bucket = append_query_to_parquet(
+                            con,
+                            bucket_query,
+                            dim_year_path,
+                            writer=dim_writer,
+                            schema=dim_schema,
+                            rows_per_batch=int(args.scan_batch_rows),
+                        )
+                        wrote_dim = wrote_dim or wrote_bucket
+                else:
+                    dim_query = f"""
+                        SELECT UNITID, year, varname, value, varnumber, source_file
+                        FROM (
+                            SELECT DISTINCT
+                                UNITID,
+                                year,
+                                varname,
+                                value,
+                                value_norm,
+                                varnumber,
+                                source_file
+                            FROM stage.long_selected
+                            {build_where_sql(dim_export_clauses)}
+                        ) q
+                    """
+                    dim_writer, dim_schema, wrote_dim = append_query_to_parquet(
+                        con,
+                        dim_query,
+                        dim_year_path,
+                        writer=None,
+                        schema=None,
+                        rows_per_batch=int(args.scan_batch_rows),
+                    )
+            finally:
+                if dim_writer is not None:
+                    dim_writer.close()
+            if wrote_dim:
+                dim_part_paths.append(dim_year_path)
+            log_phase(f"year {year} dim export end", wrote_part=bool(wrote_dim), path=dim_year_path if wrote_dim else "")
 
         if args.typed_output:
             numeric_target_list = [t for t in all_targets if t in numeric_targets]
