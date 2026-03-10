@@ -37,16 +37,18 @@
   <text x="274" y="185" class="tiny">and schema-transition for analysis-wide builds.</text>
 
   <!-- Color legend -->
-  <rect x="910" y="142" width="18" height="18" class="core"/>
-  <text x="936" y="156" class="tiny">Shared stages</text>
-  <rect x="910" y="164" width="18" height="18" class="build"/>
-  <text x="936" y="178" class="tiny">DuckDB wide-build engine</text>
-  <rect x="1090" y="142" width="18" height="18" class="full"/>
-  <text x="1116" y="156" class="tiny">Full-release outputs</text>
-  <rect x="1090" y="164" width="18" height="18" class="analysis"/>
-  <text x="1116" y="178" class="tiny">Analysis outputs</text>
-  <rect x="1090" y="186" width="18" height="18" class="qc"/>
-  <text x="1116" y="200" class="tiny">QC and monitoring</text>
+  <rect x="900" y="132" width="324" height="86" class="note"/>
+  <text x="922" y="154" class="tiny">Color Key</text>
+  <rect x="922" y="166" width="16" height="16" class="core"/>
+  <text x="946" y="179" class="tiny">Shared stages</text>
+  <rect x="922" y="188" width="16" height="16" class="build"/>
+  <text x="946" y="201" class="tiny">DuckDB wide-build engine</text>
+  <rect x="1092" y="166" width="16" height="16" class="full"/>
+  <text x="1116" y="179" class="tiny">Full-release outputs</text>
+  <rect x="1092" y="188" width="16" height="16" class="analysis"/>
+  <text x="1116" y="201" class="tiny">Analysis outputs</text>
+  <rect x="1092" y="210" width="16" height="16" class="qc"/>
+  <text x="1116" y="223" class="tiny">QC and monitoring</text>
 
   <!-- Shared upstream flow -->
   <rect x="56" y="230" width="600" height="92" class="core"/>
@@ -63,7 +65,7 @@
   <text x="80" y="565" class="small">Chunked melts, release allowlist checks, deterministic dedupe</text>
   <text x="80" y="590" class="small">Canonical grain: UNITID, year, varnumber, source_file</text>
 
-  <rect x="56" y="676" width="600" height="152" class="build"/>
+  <rect x="56" y="676" width="600" height="176" class="build"/>
   <text x="80" y="710" class="label">04 Build Wide Panels</text>
   <text x="80" y="734" class="small">(DuckDB execution layer)</text>
   <text x="80" y="764" class="small">Year-scoped wide build, scalar/dimension lane split, typed coercion,</text>
