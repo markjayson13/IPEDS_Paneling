@@ -37,18 +37,18 @@
   <text x="274" y="185" class="tiny">and schema-transition for analysis-wide builds.</text>
 
   <!-- Color legend -->
-  <rect x="900" y="132" width="324" height="86" class="note"/>
+  <rect x="900" y="132" width="324" height="132" class="note"/>
   <text x="922" y="154" class="tiny">Color Key</text>
   <rect x="922" y="166" width="16" height="16" class="core"/>
   <text x="946" y="179" class="tiny">Shared stages</text>
   <rect x="922" y="188" width="16" height="16" class="build"/>
-  <text x="946" y="201" class="tiny">DuckDB wide-build engine</text>
-  <rect x="1092" y="166" width="16" height="16" class="full"/>
-  <text x="1116" y="179" class="tiny">Full-release outputs</text>
-  <rect x="1092" y="188" width="16" height="16" class="analysis"/>
-  <text x="1116" y="201" class="tiny">Analysis outputs</text>
-  <rect x="1092" y="210" width="16" height="16" class="qc"/>
-  <text x="1116" y="223" class="tiny">QC and monitoring</text>
+  <text x="946" y="201" class="tiny">DuckDB wide build</text>
+  <rect x="922" y="210" width="16" height="16" class="full"/>
+  <text x="946" y="223" class="tiny">Full-release outputs</text>
+  <rect x="922" y="232" width="16" height="16" class="analysis"/>
+  <text x="946" y="245" class="tiny">Analysis outputs</text>
+  <rect x="922" y="254" width="16" height="16" class="qc"/>
+  <text x="946" y="267" class="tiny">QC and monitoring</text>
 
   <!-- Shared upstream flow -->
   <rect x="56" y="230" width="600" height="92" class="core"/>
