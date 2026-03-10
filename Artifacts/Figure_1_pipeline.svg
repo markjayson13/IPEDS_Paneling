@@ -15,6 +15,7 @@
       .label { font: 18px "Helvetica Neue", Arial, sans-serif; fill: #111827; font-weight: 700; }
       .small { font: 14px "Helvetica Neue", Arial, sans-serif; fill: #334155; }
       .tiny { font: 13px "Helvetica Neue", Arial, sans-serif; fill: #475569; }
+      .mono { font: 12px "SFMono-Regular", Menlo, Consolas, monospace; fill: #334155; }
       .arrow { stroke: #22313f; stroke-width: 2.2; fill: none; marker-end: url(#arrowhead); }
       .soft-arrow { stroke: #5c6773; stroke-width: 1.8; fill: none; marker-end: url(#arrowhead-soft); }
     ]]></style>
@@ -59,35 +60,40 @@
   <text x="80" y="842" class="small">and legacy-schema seeding for analysis releases</text>
 
   <!-- Release products -->
-  <rect x="56" y="936" width="250" height="110" class="full"/>
+  <rect x="56" y="936" width="270" height="132" class="full"/>
   <text x="80" y="970" class="label">Full Raw Wide Release</text>
   <text x="80" y="994" class="small">(2004-2024)</text>
-  <text x="80" y="1020" class="small">`2004_2024_IPEDS_Raw_Panel_DS.parquet`</text>
+  <text x="80" y="1020" class="mono">2004_2024_IPEDS_</text>
+  <text x="80" y="1040" class="mono">Raw_Panel_DS.parquet</text>
 
-  <rect x="366" y="936" width="250" height="124" class="analysis"/>
-  <text x="390" y="970" class="label">Analysis-Wide Release</text>
-  <text x="390" y="994" class="small">(2004-2023)</text>
-  <text x="390" y="1020" class="small">`panel_wide_analysis_2004_2023.parquet`</text>
-  <text x="390" y="1044" class="small">Plus scalar and dimension long lanes</text>
+  <rect x="346" y="936" width="270" height="144" class="analysis"/>
+  <text x="370" y="970" class="label">Analysis-Wide Release</text>
+  <text x="370" y="994" class="small">(2004-2023)</text>
+  <text x="370" y="1020" class="mono">panel_wide_analysis_</text>
+  <text x="370" y="1040" class="mono">2004_2023.parquet</text>
+  <text x="370" y="1064" class="small">Plus scalar and dimension long lanes</text>
 
-  <rect x="56" y="1104" width="250" height="100" class="full"/>
+  <rect x="56" y="1126" width="270" height="112" class="full"/>
   <text x="80" y="1138" class="label">05 PRCH Clean (full release)</text>
-  <text x="80" y="1165" class="small">`2004_2024_IPEDS_PRCHclean_Panel_DS.parquet`</text>
+  <text x="80" y="1170" class="mono">2004_2024_IPEDS_</text>
+  <text x="80" y="1190" class="mono">PRCHclean_Panel_DS.parquet</text>
 
-  <rect x="366" y="1104" width="250" height="100" class="analysis"/>
-  <text x="390" y="1138" class="label">Optional 05 PRCH Clean</text>
-  <text x="390" y="1161" class="small">(analysis)</text>
-  <text x="390" y="1185" class="small">`panel_clean_analysis_2004_2023.parquet`</text>
+  <rect x="346" y="1126" width="270" height="112" class="analysis"/>
+  <text x="370" y="1160" class="label">Optional 05 PRCH Clean</text>
+  <text x="370" y="1183" class="small">(analysis)</text>
+  <text x="370" y="1207" class="mono">panel_clean_analysis_</text>
+  <text x="370" y="1227" class="mono">2004_2023.parquet</text>
 
-  <rect x="56" y="1262" width="250" height="112" class="full"/>
-  <text x="80" y="1296" class="label">Research-Ready Clean Panel</text>
-  <text x="80" y="1320" class="small">`2004_2024_IPEDS_clean_Panel_DS.parquet`</text>
-  <text x="80" y="1346" class="small">plus optional X* drop</text>
+  <rect x="56" y="1298" width="270" height="124" class="full"/>
+  <text x="80" y="1332" class="label">Research-Ready Clean Panel</text>
+  <text x="80" y="1358" class="mono">2004_2024_IPEDS_</text>
+  <text x="80" y="1378" class="mono">clean_Panel_DS.parquet</text>
+  <text x="80" y="1402" class="small">plus optional X* drop</text>
 
-  <rect x="56" y="1440" width="560" height="112" class="custom"/>
-  <text x="80" y="1474" class="label">06 Custom Panel Builder</text>
-  <text x="80" y="1500" class="small">Select variables and years from full-clean, analysis-wide,</text>
-  <text x="80" y="1522" class="small">or analysis-clean outputs for Parquet or CSV export</text>
+  <rect x="56" y="1490" width="560" height="118" class="custom"/>
+  <text x="80" y="1524" class="label">06 Custom Panel Builder</text>
+  <text x="80" y="1550" class="small">Select variables and years from full-clean, analysis-wide,</text>
+  <text x="80" y="1572" class="small">or analysis-clean outputs for Parquet or CSV export</text>
 
   <!-- QC rail -->
   <rect x="700" y="230" width="520" height="96" class="qc"/>
@@ -127,23 +133,23 @@
   <polyline points="336,646 336,702" class="arrow"/>
 
   <!-- Branch arrows -->
-  <polyline points="220,856 220,900 181,900 181,936" class="arrow"/>
-  <polyline points="452,856 452,900 491,900 491,936" class="arrow"/>
-  <polyline points="181,1046 181,1104" class="arrow"/>
-  <polyline points="491,1060 491,1104" class="arrow"/>
-  <polyline points="181,1204 181,1262" class="arrow"/>
+  <polyline points="220,856 220,900 191,900 191,936" class="arrow"/>
+  <polyline points="452,856 452,900 481,900 481,936" class="arrow"/>
+  <polyline points="191,1068 191,1126" class="arrow"/>
+  <polyline points="481,1080 481,1126" class="arrow"/>
+  <polyline points="191,1238 191,1298" class="arrow"/>
 
   <!-- Custom builder arrows -->
-  <polyline points="181,1374 181,1440" class="soft-arrow"/>
-  <polyline points="491,1204 491,1440" class="soft-arrow"/>
-  <polyline points="491,1060 650,1060 650,1408 520,1408 520,1440" class="soft-arrow"/>
+  <polyline points="191,1422 191,1490" class="soft-arrow"/>
+  <polyline points="481,1238 481,1490" class="soft-arrow"/>
+  <polyline points="481,1080 650,1080 650,1458 520,1458 520,1490" class="soft-arrow"/>
 
   <!-- QC connectors -->
   <polyline points="616,278 700,278" class="soft-arrow"/>
-  <polyline points="616,425 700,420" class="soft-arrow"/>
-  <polyline points="616,585 700,568" class="soft-arrow"/>
-  <polyline points="616,779 700,745" class="soft-arrow"/>
+  <polyline points="616,425 664,425 664,420 700,420" class="soft-arrow"/>
+  <polyline points="616,585 664,585 664,568 700,568" class="soft-arrow"/>
+  <polyline points="616,779 664,779 664,745 700,745" class="soft-arrow"/>
   <polyline points="616,818 664,818 664,920 700,920" class="soft-arrow"/>
-  <polyline points="616,1154 664,1154 664,1084 700,1084" class="soft-arrow"/>
-  <polyline points="306,1318 664,1318 664,1096 700,1096" class="soft-arrow"/>
+  <polyline points="616,1182 664,1182 664,1084 700,1084" class="soft-arrow"/>
+  <polyline points="326,1368 664,1368 664,1096 700,1096" class="soft-arrow"/>
 </svg>
