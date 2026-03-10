@@ -1,22 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1600 1120">
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1560" viewBox="0 0 1180 1560">
   <defs>
     <style type="text/css"><![CDATA[
       .bg { fill: #f7f7f2; }
-      .core { fill: #fffef8; stroke: #22313f; stroke-width: 2.2; rx: 12; ry: 12; }
-      .build { fill: #eef7f3; stroke: #1f5f4a; stroke-width: 2.4; rx: 12; ry: 12; }
-      .full { fill: #fff4df; stroke: #8b5e34; stroke-width: 2.2; rx: 12; ry: 12; }
-      .analysis { fill: #edf5ff; stroke: #335c85; stroke-width: 2.2; rx: 12; ry: 12; }
-      .custom { fill: #f6efe3; stroke: #6b5a45; stroke-width: 2.0; rx: 12; ry: 12; }
-      .qc { fill: #f4f5f7; stroke: #5c6773; stroke-width: 1.7; rx: 12; ry: 12; }
-      .note { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.4; rx: 10; ry: 10; }
-      .title { font: 24px "Helvetica Neue", Arial, sans-serif; fill: #111827; font-weight: 700; }
-      .subtitle { font: 14px "Helvetica Neue", Arial, sans-serif; fill: #334155; }
-      .label { font: 16px "Helvetica Neue", Arial, sans-serif; fill: #111827; font-weight: 700; }
-      .small { font: 13px "Helvetica Neue", Arial, sans-serif; fill: #334155; }
-      .tiny { font: 12px "Helvetica Neue", Arial, sans-serif; fill: #475569; }
-      .arrow { stroke: #22313f; stroke-width: 2.1; fill: none; marker-end: url(#arrowhead); }
-      .soft-arrow { stroke: #5c6773; stroke-width: 1.7; fill: none; marker-end: url(#arrowhead-soft); }
+      .core { fill: #fffef8; stroke: #22313f; stroke-width: 2.2; rx: 14; ry: 14; }
+      .build { fill: #eef7f3; stroke: #1f5f4a; stroke-width: 2.6; rx: 14; ry: 14; }
+      .full { fill: #fff4df; stroke: #8b5e34; stroke-width: 2.2; rx: 14; ry: 14; }
+      .analysis { fill: #edf5ff; stroke: #335c85; stroke-width: 2.2; rx: 14; ry: 14; }
+      .custom { fill: #f6efe3; stroke: #6b5a45; stroke-width: 2.0; rx: 14; ry: 14; }
+      .qc { fill: #f4f5f7; stroke: #5c6773; stroke-width: 1.8; rx: 14; ry: 14; }
+      .note { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.5; rx: 12; ry: 12; }
+      .title { font: 30px "Helvetica Neue", Arial, sans-serif; fill: #111827; font-weight: 700; }
+      .subtitle { font: 17px "Helvetica Neue", Arial, sans-serif; fill: #334155; }
+      .label { font: 18px "Helvetica Neue", Arial, sans-serif; fill: #111827; font-weight: 700; }
+      .small { font: 14px "Helvetica Neue", Arial, sans-serif; fill: #334155; }
+      .tiny { font: 13px "Helvetica Neue", Arial, sans-serif; fill: #475569; }
+      .arrow { stroke: #22313f; stroke-width: 2.2; fill: none; marker-end: url(#arrowhead); }
+      .soft-arrow { stroke: #5c6773; stroke-width: 1.8; fill: none; marker-end: url(#arrowhead-soft); }
     ]]></style>
     <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="8.8" refY="3.5" orient="auto">
       <polygon points="0 0, 10 3.5, 0 7" fill="#22313f"/>
@@ -26,110 +26,124 @@
     </marker>
   </defs>
 
-  <rect x="0" y="0" width="1600" height="1120" class="bg"/>
+  <rect x="0" y="0" width="1180" height="1560" class="bg"/>
 
-  <text x="60" y="55" class="title">Figure 1. IPEDS Panel Construction Pipeline</text>
-  <text x="60" y="82" class="subtitle">Shared upstream stages feed two release products: the full cleaned panel (2004-2024) and the DuckDB-backed analysis-wide panel (2004-2023).</text>
+  <text x="56" y="58" class="title">Figure 1. IPEDS Panel Construction Pipeline</text>
+  <text x="56" y="90" class="subtitle">Shared upstream stages feed two release products: the full cleaned panel (2004-2024)</text>
+  <text x="56" y="114" class="subtitle">and the DuckDB-backed analysis-wide panel (2004-2023).</text>
 
-  <rect x="520" y="102" width="560" height="42" class="note"/>
-  <text x="540" y="128" class="tiny">Analysis note: 2024 remains in the full release but is treated as provisional/schema-transition for analysis-wide builds.</text>
+  <rect x="250" y="140" width="540" height="56" class="note"/>
+  <text x="272" y="165" class="tiny">Analysis note: 2024 remains in the full release but is treated as provisional</text>
+  <text x="272" y="184" class="tiny">and schema-transition for analysis-wide builds.</text>
 
   <!-- Shared upstream flow -->
-  <rect x="90" y="170" width="420" height="92" class="core"/>
-  <text x="112" y="202" class="label">01 Download IPEDS</text>
-  <text x="112" y="226" class="small">Raw cross-sections, dictionaries, manifests, revised/final prioritization</text>
+  <rect x="56" y="228" width="600" height="92" class="core"/>
+  <text x="80" y="260" class="label">01 Download IPEDS</text>
+  <text x="80" y="284" class="small">Raw cross-sections, dictionaries, manifests, revised/final prioritization</text>
 
-  <rect x="90" y="308" width="420" height="92" class="core"/>
-  <text x="112" y="340" class="label">02 Dictionary Lake + Codes</text>
-  <text x="112" y="364" class="small">Canonical varname/varnumber, source_file, labels, imputation links, UNITID metadata</text>
+  <rect x="56" y="362" width="600" height="102" class="core"/>
+  <text x="80" y="394" class="label">02 Dictionary Lake + Codes</text>
+  <text x="80" y="418" class="small">Canonical varname/varnumber, source_file, labels, imputation links,</text>
+  <text x="80" y="438" class="small">and UNITID metadata</text>
 
-  <rect x="90" y="446" width="420" height="106" class="core"/>
-  <text x="112" y="478" class="label">03 Harmonize Long Panel</text>
-  <text x="112" y="502" class="small">Chunked melts, release allowlist checks, deterministic dedupe</text>
-  <text x="112" y="525" class="small">Authoritative canonical grain: (UNITID, year, varnumber, source_file)</text>
+  <rect x="56" y="506" width="600" height="120" class="core"/>
+  <text x="80" y="538" class="label">03 Harmonize Long Panel</text>
+  <text x="80" y="562" class="small">Chunked melts, release allowlist checks, deterministic dedupe</text>
+  <text x="80" y="586" class="small">Canonical grain: (UNITID, year, varnumber, source_file)</text>
 
   <!-- Wide build engine -->
-  <rect x="320" y="618" width="620" height="122" class="build"/>
-  <text x="344" y="652" class="label">04 Build Wide Panels (DuckDB execution layer)</text>
-  <text x="344" y="678" class="small">Year-scoped wide build, scalar/dimension lane split, typed coercion, discrete collapse</text>
-  <text x="344" y="702" class="small">QC gates: scalar conflicts, anti-garbage identifiers, target lineage, legacy-schema seeding</text>
+  <rect x="56" y="678" width="600" height="138" class="build"/>
+  <text x="80" y="714" class="label">04 Build Wide Panels (DuckDB execution layer)</text>
+  <text x="80" y="740" class="small">Year-scoped wide build, scalar/dimension lane split, typed coercion,</text>
+  <text x="80" y="761" class="small">discrete collapse, and schema-aware wide export</text>
+  <text x="80" y="787" class="small">QC gates: scalar conflicts, anti-garbage identifiers, target lineage,</text>
+  <text x="80" y="808" class="small">and legacy-schema seeding for analysis releases</text>
 
-  <!-- Full release branch -->
-  <rect x="70" y="805" width="430" height="92" class="full"/>
-  <text x="92" y="837" class="label">Full Raw Wide Release (2004-2024)</text>
-  <text x="92" y="861" class="small">`2004_2024_IPEDS_Raw_Panel_DS.parquet`</text>
+  <!-- Release branches -->
+  <rect x="56" y="882" width="280" height="104" class="full"/>
+  <text x="78" y="915" class="label">Full Raw Wide Release</text>
+  <text x="78" y="938" class="small">(2004-2024)</text>
+  <text x="78" y="964" class="small">`2004_2024_IPEDS_Raw_Panel_DS.parquet`</text>
 
-  <rect x="70" y="930" width="430" height="84" class="full"/>
-  <text x="92" y="962" class="label">05 PRCH Clean (full release)</text>
-  <text x="92" y="986" class="small">`2004_2024_IPEDS_PRCHclean_Panel_DS.parquet`</text>
+  <rect x="376" y="882" width="280" height="118" class="analysis"/>
+  <text x="398" y="915" class="label">Analysis-Wide Release</text>
+  <text x="398" y="938" class="small">(2004-2023)</text>
+  <text x="398" y="964" class="small">`panel_wide_analysis_2004_2023.parquet`</text>
+  <text x="398" y="988" class="small">Plus scalar and dimension long lanes</text>
 
-  <rect x="70" y="1044" width="430" height="84" class="full"/>
-  <text x="92" y="1076" class="label">Research-Ready Clean Panel</text>
-  <text x="92" y="1100" class="small">`2004_2024_IPEDS_clean_Panel_DS.parquet` + optional X* drop</text>
+  <rect x="56" y="1034" width="280" height="100" class="full"/>
+  <text x="78" y="1067" class="label">05 PRCH Clean (full release)</text>
+  <text x="78" y="1093" class="small">`2004_2024_IPEDS_PRCHclean_Panel_DS.parquet`</text>
 
-  <!-- Analysis branch -->
-  <rect x="560" y="805" width="430" height="108" class="analysis"/>
-  <text x="582" y="837" class="label">Analysis-Wide Release (2004-2023)</text>
-  <text x="582" y="861" class="small">`panel_wide_analysis_2004_2023.parquet`</text>
-  <text x="582" y="884" class="small">Plus scalar and dimension long lanes for auditable analysis builds</text>
+  <rect x="376" y="1048" width="280" height="100" class="analysis"/>
+  <text x="398" y="1081" class="label">Optional 05 PRCH Clean</text>
+  <text x="398" y="1104" class="small">(analysis)</text>
+  <text x="398" y="1128" class="small">`panel_clean_analysis_2004_2023.parquet`</text>
 
-  <rect x="560" y="950" width="430" height="84" class="analysis"/>
-  <text x="582" y="982" class="label">Optional 05 PRCH Clean (analysis)</text>
-  <text x="582" y="1006" class="small">`panel_clean_analysis_2004_2023.parquet` when a cleaned analysis panel is needed</text>
+  <rect x="56" y="1182" width="280" height="112" class="full"/>
+  <text x="78" y="1215" class="label">Research-Ready Clean Panel</text>
+  <text x="78" y="1239" class="small">`2004_2024_IPEDS_clean_Panel_DS.parquet`</text>
+  <text x="78" y="1263" class="small">plus optional X* drop</text>
 
-  <!-- Custom builder -->
-  <rect x="1060" y="950" width="430" height="84" class="custom"/>
-  <text x="1082" y="982" class="label">06 Custom Panel Builder</text>
-  <text x="1082" y="1006" class="small">Select variables/years from full clean, analysis-wide, or analysis-clean outputs</text>
+  <rect x="168" y="1350" width="376" height="102" class="custom"/>
+  <text x="190" y="1383" class="label">06 Custom Panel Builder</text>
+  <text x="190" y="1408" class="small">Select variables and years from full-clean, analysis-wide,</text>
+  <text x="190" y="1430" class="small">or analysis-clean outputs for Parquet or CSV export</text>
 
-  <!-- QC / observability column -->
-  <rect x="1110" y="170" width="410" height="84" class="qc"/>
-  <text x="1132" y="202" class="label">Release QC + Manifests</text>
-  <text x="1132" y="226" class="small">Selected-file evidence, revised/final enforcement, missing component checks</text>
+  <!-- QC and observability rail -->
+  <rect x="720" y="228" width="404" height="96" class="qc"/>
+  <text x="744" y="260" class="label">Release QC + Manifests</text>
+  <text x="744" y="284" class="small">Selected-file evidence, revised/final enforcement,</text>
+  <text x="744" y="306" class="small">and missing component checks</text>
 
-  <rect x="1110" y="286" width="410" height="92" class="qc"/>
-  <text x="1132" y="318" class="label">Dictionary QA</text>
-  <text x="1132" y="342" class="small">Code-label coverage, source-year coverage, varnumber collisions</text>
+  <rect x="720" y="362" width="404" height="96" class="qc"/>
+  <text x="744" y="394" class="label">Dictionary QA</text>
+  <text x="744" y="418" class="small">Code-label coverage, source-year coverage,</text>
+  <text x="744" y="440" class="small">and varnumber collisions</text>
 
-  <rect x="1110" y="410" width="410" height="92" class="qc"/>
-  <text x="1132" y="442" class="label">Harmonization QC</text>
-  <text x="1132" y="466" class="small">UNITID guards, chunked processing evidence, dedupe/release summaries</text>
+  <rect x="720" y="496" width="404" height="96" class="qc"/>
+  <text x="744" y="528" class="label">Harmonization QC</text>
+  <text x="744" y="552" class="small">UNITID guards, chunked processing evidence,</text>
+  <text x="744" y="574" class="small">and dedupe/release summaries</text>
 
-  <rect x="1110" y="548" width="410" height="122" class="qc"/>
-  <text x="1132" y="580" class="label">Wide-Build QC</text>
-  <text x="1132" y="604" class="small">Scalar conflicts, anti-garbage hits, cast report, discrete conflicts</text>
-  <text x="1132" y="627" class="small">Target lineage, seeded legacy columns, globally-null drop report</text>
+  <rect x="720" y="636" width="404" height="128" class="qc"/>
+  <text x="744" y="668" class="label">Wide-Build QC</text>
+  <text x="744" y="692" class="small">Scalar conflicts, anti-garbage hits, cast report,</text>
+  <text x="744" y="714" class="small">discrete conflicts, target lineage, seeded legacy</text>
+  <text x="744" y="736" class="small">columns, and globally-null drop reports</text>
 
-  <rect x="1110" y="708" width="410" height="92" class="qc"/>
-  <text x="1132" y="740" class="label">Monitoring + Certification</text>
-  <text x="1132" y="764" class="small">build.log, monitor.log, telemetry, run metadata, certification summaries</text>
+  <rect x="720" y="822" width="404" height="96" class="qc"/>
+  <text x="744" y="854" class="label">Monitoring + Certification</text>
+  <text x="744" y="878" class="small">build.log, monitor.log, telemetry, run metadata,</text>
+  <text x="744" y="900" class="small">and certification summaries</text>
 
-  <rect x="1110" y="836" width="410" height="92" class="qc"/>
-  <text x="1132" y="868" class="label">PRCH + Panel QA</text>
-  <text x="1132" y="892" class="small">Child-row summaries, cleaned columns, raw vs PRCH vs clean comparisons</text>
+  <rect x="720" y="976" width="404" height="104" class="qc"/>
+  <text x="744" y="1008" class="label">PRCH + Panel QA</text>
+  <text x="744" y="1032" class="small">Child-row summaries, cleaned columns,</text>
+  <text x="744" y="1054" class="small">and raw vs PRCH vs clean comparisons</text>
 
-  <!-- Main arrows -->
-  <line x1="300" y1="262" x2="300" y2="308" class="arrow"/>
-  <line x1="300" y1="400" x2="300" y2="446" class="arrow"/>
-  <line x1="300" y1="552" x2="300" y2="618" class="arrow"/>
+  <!-- Main flow arrows -->
+  <line x1="356" y1="320" x2="356" y2="362" class="arrow"/>
+  <line x1="356" y1="464" x2="356" y2="506" class="arrow"/>
+  <line x1="356" y1="626" x2="356" y2="678" class="arrow"/>
 
   <!-- Branch arrows -->
-  <line x1="500" y1="740" x2="285" y2="805" class="arrow"/>
-  <line x1="760" y1="740" x2="775" y2="805" class="arrow"/>
-  <line x1="285" y1="897" x2="285" y2="930" class="arrow"/>
-  <line x1="285" y1="1014" x2="285" y2="1044" class="arrow"/>
-  <line x1="775" y1="913" x2="775" y2="950" class="arrow"/>
+  <line x1="246" y1="816" x2="196" y2="882" class="arrow"/>
+  <line x1="466" y1="816" x2="516" y2="882" class="arrow"/>
+  <line x1="196" y1="986" x2="196" y2="1034" class="arrow"/>
+  <line x1="516" y1="1000" x2="516" y2="1048" class="arrow"/>
+  <line x1="196" y1="1134" x2="196" y2="1182" class="arrow"/>
 
   <!-- Custom builder arrows -->
-  <line x1="500" y1="1086" x2="1060" y2="992" class="soft-arrow"/>
-  <line x1="990" y1="992" x2="1060" y2="992" class="soft-arrow"/>
-  <line x1="775" y1="913" x2="1060" y2="992" class="soft-arrow"/>
+  <line x1="196" y1="1294" x2="296" y2="1350" class="soft-arrow"/>
+  <line x1="516" y1="1148" x2="392" y2="1350" class="soft-arrow"/>
+  <line x1="516" y1="1000" x2="544" y2="1402" class="soft-arrow"/>
 
   <!-- QC connectors -->
-  <line x1="510" y1="216" x2="1110" y2="212" class="soft-arrow"/>
-  <line x1="510" y1="354" x2="1110" y2="332" class="soft-arrow"/>
-  <line x1="510" y1="498" x2="1110" y2="456" class="soft-arrow"/>
-  <line x1="940" y1="670" x2="1110" y2="608" class="soft-arrow"/>
-  <line x1="990" y1="859" x2="1110" y2="754" class="soft-arrow"/>
-  <line x1="500" y1="972" x2="1110" y2="882" class="soft-arrow"/>
+  <line x1="656" y1="274" x2="720" y2="274" class="soft-arrow"/>
+  <line x1="656" y1="418" x2="720" y2="410" class="soft-arrow"/>
+  <line x1="656" y1="566" x2="720" y2="544" class="soft-arrow"/>
+  <line x1="656" y1="744" x2="720" y2="700" class="soft-arrow"/>
+  <line x1="656" y1="940" x2="720" y2="870" class="soft-arrow"/>
+  <line x1="656" y1="1098" x2="720" y2="1028" class="soft-arrow"/>
 </svg>
