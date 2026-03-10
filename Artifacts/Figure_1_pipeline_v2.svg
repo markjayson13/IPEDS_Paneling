@@ -36,20 +36,6 @@
   <text x="274" y="166" class="tiny">Analysis note: 2024 remains in the full release but is treated as provisional</text>
   <text x="274" y="185" class="tiny">and schema-transition for analysis-wide builds.</text>
 
-  <!-- Color legend -->
-  <rect x="900" y="132" width="324" height="132" class="note"/>
-  <text x="922" y="154" class="tiny">Color Key</text>
-  <rect x="922" y="166" width="16" height="16" class="core"/>
-  <text x="946" y="179" class="tiny">Shared stages</text>
-  <rect x="922" y="188" width="16" height="16" class="build"/>
-  <text x="946" y="201" class="tiny">DuckDB wide build</text>
-  <rect x="922" y="210" width="16" height="16" class="full"/>
-  <text x="946" y="223" class="tiny">Full-release outputs</text>
-  <rect x="922" y="232" width="16" height="16" class="analysis"/>
-  <text x="946" y="245" class="tiny">Analysis outputs</text>
-  <rect x="922" y="254" width="16" height="16" class="qc"/>
-  <text x="946" y="267" class="tiny">QC and monitoring</text>
-
   <!-- Shared upstream flow -->
   <rect x="56" y="230" width="600" height="92" class="core"/>
   <text x="80" y="262" class="label">01 Download IPEDS</text>
@@ -135,6 +121,20 @@
   <text x="724" y="1053" class="small">Child-row summaries, cleaned columns,</text>
   <text x="724" y="1074" class="small">and raw vs PRCH vs clean comparisons</text>
 
+  <!-- Color legend -->
+  <rect x="860" y="1250" width="300" height="144" class="note"/>
+  <text x="884" y="1274" class="tiny">Color Key</text>
+  <rect x="884" y="1288" width="16" height="16" class="core"/>
+  <text x="908" y="1301" class="tiny">Shared stages</text>
+  <rect x="884" y="1312" width="16" height="16" class="build"/>
+  <text x="908" y="1325" class="tiny">DuckDB wide build</text>
+  <rect x="884" y="1336" width="16" height="16" class="full"/>
+  <text x="908" y="1349" class="tiny">Full-release outputs</text>
+  <rect x="884" y="1360" width="16" height="16" class="analysis"/>
+  <text x="908" y="1373" class="tiny">Analysis outputs</text>
+  <rect x="884" y="1384" width="16" height="16" class="qc"/>
+  <text x="908" y="1397" class="tiny">QC and monitoring</text>
+
   <!-- Main arrows -->
   <polyline points="356,322 356,364" class="arrow"/>
   <polyline points="356,466 356,508" class="arrow"/>
@@ -150,7 +150,7 @@
   <!-- Custom builder arrows -->
   <polyline points="201,1346 201,1420" class="soft-arrow"/>
   <polyline points="511,1172 511,1420" class="soft-arrow"/>
-  <polyline points="511,1026 670,1026 670,1388 540,1388 540,1420" class="soft-arrow"/>
+  <polyline points="511,1026 620,1026 620,1388 540,1388 540,1420" class="soft-arrow"/>
 
   <!-- QC connectors -->
   <polyline points="656,276 700,276" class="soft-arrow"/>
@@ -158,6 +158,6 @@
   <polyline points="656,576 680,576 680,550 700,550" class="soft-arrow"/>
   <polyline points="656,752 680,752 680,720 700,720" class="soft-arrow"/>
   <polyline points="656,792 680,792 680,890 700,890" class="soft-arrow"/>
-  <polyline points="656,1121 680,1121 680,1048 700,1048" class="soft-arrow"/>
-  <polyline points="346,1288 680,1288 680,1060 700,1060" class="soft-arrow"/>
+  <polyline points="656,1121 690,1121 690,1048 700,1048" class="soft-arrow"/>
+  <polyline points="346,1288 670,1288 670,1080 700,1080" class="soft-arrow"/>
 </svg>
