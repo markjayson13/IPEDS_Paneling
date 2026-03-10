@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(git rev-parse --show-toplevel)
+
+python3 "$ROOT/Scripts/QA_QC/06_staged_repo_guard.py" --repo-root "$ROOT"
+python3 "$ROOT/Scripts/QA_QC/05_repo_size_guard.py" --repo-root "$ROOT" --max-file-size-mb 5 --top-n 25

@@ -1,0 +1,35 @@
+name: Repo Size Guard
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: repo-size-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  size-guard:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Enforce tracked file size policy
+        run: |
+          python3 Scripts/QA_QC/05_repo_size_guard.py \
+            --max-file-size-mb 5 \
+            --top-n 25
