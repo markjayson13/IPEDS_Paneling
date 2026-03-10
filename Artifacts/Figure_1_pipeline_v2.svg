@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1700" viewBox="0 0 1280 1700">
+  <defs>
+    <style type="text/css"><![CDATA[
+      .bg { fill: #f7f7f2; }
+      .core { fill: #fffef8; stroke: #22313f; stroke-width: 2.2; rx: 14; ry: 14; }
+      .build { fill: #eef7f3; stroke: #1f5f4a; stroke-width: 2.6; rx: 14; ry: 14; }
+      .full { fill: #fff4df; stroke: #8b5e34; stroke-width: 2.2; rx: 14; ry: 14; }
+      .analysis { fill: #edf5ff; stroke: #335c85; stroke-width: 2.2; rx: 14; ry: 14; }
+      .custom { fill: #f6efe3; stroke: #6b5a45; stroke-width: 2.0; rx: 14; ry: 14; }
+      .qc { fill: #f4f5f7; stroke: #5c6773; stroke-width: 1.8; rx: 14; ry: 14; }
+      .note { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.5; rx: 12; ry: 12; }
+      .title { font: 30px "Helvetica Neue", Arial, sans-serif; fill: #111827; font-weight: 700; }
+      .subtitle { font: 17px "Helvetica Neue", Arial, sans-serif; fill: #334155; }
+      .label { font: 18px "Helvetica Neue", Arial, sans-serif; fill: #111827; font-weight: 700; }
+      .small { font: 14px "Helvetica Neue", Arial, sans-serif; fill: #334155; }
+      .tiny { font: 13px "Helvetica Neue", Arial, sans-serif; fill: #475569; }
+      .mono { font: 12px "SFMono-Regular", Menlo, Consolas, monospace; fill: #334155; }
+      .arrow { stroke: #22313f; stroke-width: 2.2; fill: none; marker-end: url(#arrowhead); }
+      .soft-arrow { stroke: #5c6773; stroke-width: 1.8; fill: none; marker-end: url(#arrowhead-soft); }
+    ]]></style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="8.8" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#22313f"/>
+    </marker>
+    <marker id="arrowhead-soft" markerWidth="10" markerHeight="7" refX="8.8" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#5c6773"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1280" height="1700" class="bg"/>
+
+  <text x="56" y="58" class="title">Figure 1. IPEDS Panel Construction Pipeline</text>
+  <text x="56" y="90" class="subtitle">Shared upstream stages feed two release products: the full cleaned panel (2004-2024)</text>
+  <text x="56" y="114" class="subtitle">and the DuckDB-backed analysis-wide panel (2004-2023).</text>
+
+  <rect x="250" y="142" width="620" height="56" class="note"/>
+  <text x="274" y="166" class="tiny">Analysis note: 2024 remains in the full release but is treated as provisional</text>
+  <text x="274" y="185" class="tiny">and schema-transition for analysis-wide builds.</text>
+
+  <!-- Shared upstream flow -->
+  <rect x="56" y="230" width="560" height="96" class="core"/>
+  <text x="80" y="263" class="label">01 Download IPEDS</text>
+  <text x="80" y="289" class="small">Raw cross-sections, dictionaries, manifests, revised/final prioritization</text>
+
+  <rect x="56" y="372" width="560" height="106" class="core"/>
+  <text x="80" y="405" class="label">02 Dictionary Lake + Codes</text>
+  <text x="80" y="431" class="small">Canonical varname/varnumber, source_file, labels, imputation links,</text>
+  <text x="80" y="452" class="small">and UNITID metadata</text>
+
+  <rect x="56" y="524" width="560" height="122" class="core"/>
+  <text x="80" y="557" class="label">03 Harmonize Long Panel</text>
+  <text x="80" y="583" class="small">Chunked melts, release allowlist checks, deterministic dedupe</text>
+  <text x="80" y="607" class="small">Canonical grain: (UNITID, year, varnumber, source_file)</text>
+
+  <rect x="56" y="702" width="560" height="154" class="build"/>
+  <text x="80" y="739" class="label">04 Build Wide Panels (DuckDB execution layer)</text>
+  <text x="80" y="767" class="small">Year-scoped wide build, scalar/dimension lane split, typed coercion,</text>
+  <text x="80" y="790" class="small">discrete collapse, and schema-aware wide export</text>
+  <text x="80" y="819" class="small">QC gates: scalar conflicts, anti-garbage identifiers, target lineage,</text>
+  <text x="80" y="842" class="small">and legacy-schema seeding for analysis releases</text>
+
+  <!-- Release products -->
+  <rect x="56" y="936" width="270" height="132" class="full"/>
+  <text x="80" y="970" class="label">Full Raw Wide Release</text>
+  <text x="80" y="994" class="small">(2004-2024)</text>
+  <text x="80" y="1020" class="mono">2004_2024_IPEDS_</text>
+  <text x="80" y="1040" class="mono">Raw_Panel_DS.parquet</text>
+
+  <rect x="346" y="936" width="270" height="144" class="analysis"/>
+  <text x="370" y="970" class="label">Analysis-Wide Release</text>
+  <text x="370" y="994" class="small">(2004-2023)</text>
+  <text x="370" y="1020" class="mono">panel_wide_analysis_</text>
+  <text x="370" y="1040" class="mono">2004_2023.parquet</text>
+  <text x="370" y="1064" class="small">Plus scalar and dimension long lanes</text>
+
+  <rect x="56" y="1126" width="270" height="112" class="full"/>
+  <text x="80" y="1138" class="label">05 PRCH Clean (full release)</text>
+  <text x="80" y="1170" class="mono">2004_2024_IPEDS_</text>
+  <text x="80" y="1190" class="mono">PRCHclean_Panel_DS.parquet</text>
+
+  <rect x="346" y="1126" width="270" height="112" class="analysis"/>
+  <text x="370" y="1160" class="label">Optional 05 PRCH Clean</text>
+  <text x="370" y="1183" class="small">(analysis)</text>
+  <text x="370" y="1207" class="mono">panel_clean_analysis_</text>
+  <text x="370" y="1227" class="mono">2004_2023.parquet</text>
+
+  <rect x="56" y="1298" width="270" height="124" class="full"/>
+  <text x="80" y="1332" class="label">Research-Ready Clean Panel</text>
+  <text x="80" y="1358" class="mono">2004_2024_IPEDS_</text>
+  <text x="80" y="1378" class="mono">clean_Panel_DS.parquet</text>
+  <text x="80" y="1402" class="small">plus optional X* drop</text>
+
+  <rect x="56" y="1490" width="560" height="118" class="custom"/>
+  <text x="80" y="1524" class="label">06 Custom Panel Builder</text>
+  <text x="80" y="1550" class="small">Select variables and years from full-clean, analysis-wide,</text>
+  <text x="80" y="1572" class="small">or analysis-clean outputs for Parquet or CSV export</text>
+
+  <!-- QC rail -->
+  <rect x="700" y="230" width="520" height="96" class="qc"/>
+  <text x="724" y="263" class="label">Release QC + Manifests</text>
+  <text x="724" y="289" class="small">Selected-file evidence, revised/final enforcement,</text>
+  <text x="724" y="311" class="small">and missing component checks</text>
+
+  <rect x="700" y="372" width="520" height="96" class="qc"/>
+  <text x="724" y="405" class="label">Dictionary QA</text>
+  <text x="724" y="431" class="small">Code-label coverage, source-year coverage,</text>
+  <text x="724" y="453" class="small">and varnumber collisions</text>
+
+  <rect x="700" y="514" width="520" height="110" class="qc"/>
+  <text x="724" y="547" class="label">Harmonization QC</text>
+  <text x="724" y="573" class="small">UNITID guards, chunked processing evidence,</text>
+  <text x="724" y="595" class="small">and dedupe/release summaries</text>
+
+  <rect x="700" y="680" width="520" height="130" class="qc"/>
+  <text x="724" y="713" class="label">Wide-Build QC</text>
+  <text x="724" y="739" class="small">Scalar conflicts, anti-garbage hits, cast report, discrete conflicts,</text>
+  <text x="724" y="761" class="small">target lineage, seeded legacy columns,</text>
+  <text x="724" y="783" class="small">and globally-null drop reports</text>
+
+  <rect x="700" y="870" width="520" height="100" class="qc"/>
+  <text x="724" y="903" class="label">Monitoring + Certification</text>
+  <text x="724" y="929" class="small">build.log, monitor.log, telemetry, run metadata,</text>
+  <text x="724" y="951" class="small">and certification summaries</text>
+
+  <rect x="700" y="1030" width="520" height="108" class="qc"/>
+  <text x="724" y="1063" class="label">PRCH + Panel QA</text>
+  <text x="724" y="1089" class="small">Child-row summaries, cleaned columns,</text>
+  <text x="724" y="1111" class="small">and raw vs PRCH vs clean comparisons</text>
+
+  <!-- Main arrows -->
+  <polyline points="336,326 336,372" class="arrow"/>
+  <polyline points="336,478 336,524" class="arrow"/>
+  <polyline points="336,646 336,702" class="arrow"/>
+
+  <!-- Branch arrows -->
+  <polyline points="220,856 220,900 191,900 191,936" class="arrow"/>
+  <polyline points="452,856 452,900 481,900 481,936" class="arrow"/>
+  <polyline points="191,1068 191,1126" class="arrow"/>
+  <polyline points="481,1080 481,1126" class="arrow"/>
+  <polyline points="191,1238 191,1298" class="arrow"/>
+
+  <!-- Custom builder arrows -->
+  <polyline points="191,1422 191,1490" class="soft-arrow"/>
+  <polyline points="481,1238 481,1490" class="soft-arrow"/>
+  <polyline points="481,1080 650,1080 650,1458 520,1458 520,1490" class="soft-arrow"/>
+
+  <!-- QC connectors -->
+  <polyline points="616,278 700,278" class="soft-arrow"/>
+  <polyline points="616,425 664,425 664,420 700,420" class="soft-arrow"/>
+  <polyline points="616,585 664,585 664,568 700,568" class="soft-arrow"/>
+  <polyline points="616,779 664,779 664,745 700,745" class="soft-arrow"/>
+  <polyline points="616,818 664,818 664,920 700,920" class="soft-arrow"/>
+  <polyline points="616,1182 664,1182 664,1084 700,1084" class="soft-arrow"/>
+  <polyline points="326,1368 664,1368 664,1096 700,1096" class="soft-arrow"/>
+</svg>
