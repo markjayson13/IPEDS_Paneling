@@ -183,6 +183,25 @@ python3 Scripts/06_build_custom_panel.py \
   --output "$IPEDS_ROOT/Panels/custom_panel_2004_2023.csv"
 ```
 
+## Panel Dictionary
+
+Build a panel-specific variable dictionary from the actual stitched wide schema:
+
+```bash
+python3 Scripts/07_build_panel_dictionary.py \
+  --input "$IPEDS_ROOT/Panels/panel_clean_analysis_2004_2023.parquet" \
+  --dictionary "$IPEDS_ROOT/Dictionary/dictionary_lake.parquet" \
+  --output "Artifacts/panel_clean_analysis_2004_2023_dictionary.csv"
+```
+
+The output includes:
+
+- `varname`
+- `varTitle`
+- `longDescription`
+- `panelDataType` (actual parquet type in the panel)
+- `dictionaryDataType` (metadata type from `dictionary_lake.parquet`)
+
 ## QA/QC Outputs
 
 - `Checks/release_qc/` release-manifest validation and selected-file evidence
