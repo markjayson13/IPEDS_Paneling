@@ -1,3 +1,5 @@
+> **This repository is archived and superseded by [IPEDSDB_Panel](https://github.com/markjayson13/IPEDSDB_Panel)**, the maintained IPEDS research panel. This repo is kept for reference only.
+
 # IPEDS Paneling
 
 Build reproducible IPEDS institution-year panels from NCES IPEDS cross-sections with strict release checks, provenance-preserving harmonization, DuckDB-backed wide builds, and auditable QC artifacts.
